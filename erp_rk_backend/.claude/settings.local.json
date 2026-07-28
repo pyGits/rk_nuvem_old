@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(npx ts-node:*)",
+      "Bash(npx knex:*)",
+      "Bash(npx tsc:*)"
+    ]
+  }
+}

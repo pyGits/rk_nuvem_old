@@ -1,0 +1,65 @@
+name: rk-nuvem
+
+services:
+  backend:
+    image: ${IMAGE_PREFIX:?defina IMAGE_PREFIX no .env}-backend:${IMAGE_TAG:-latest}
+    container_name: rk-backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      SERVER_PORT: "3000"
+      XMLLINT_PATH: /usr/bin/xmllint
+    # Permite alcançar o PostgreSQL instalado no host com DB_HOST=host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Logos enviadas pelos tenants (multer grava em images/logo/<tenant_id>)
+      - backend_images:/app/erp_rk_backend/images
+      # XMLs de NF-e de entrada, guardados por tenant e referenciados na tabela
+      # nota_fiscal_entrada_diretorio — não podem sumir a cada deploy.
+      - backend_uploads:/app/erp_rk_backend/uploads
+    expose:
+      - "3000"
+    networks:
+      - rk
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  web:
+    image: ${IMAGE_PREFIX:?defina IMAGE_PREFIX no .env}-front:${IMAGE_TAG:-latest}
+    container_name: rk-web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    environment:
+      DOMAIN: ${DOMAIN:?defina DOMAIN no .env}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+      - /var/www/certbot:/var/www/certbot:ro
+    # Evita que o SELinux do CentOS bloqueie a leitura de /etc/letsencrypt sem
+    # precisar relabelar arquivos do host (o que quebraria o certbot).
+    security_opt:
+      - label=disable
+    networks:
+      - rk
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+volumes:
+  backend_images:
+  backend_uploads:
+
+networks:
+  rk:
+    driver: bridge

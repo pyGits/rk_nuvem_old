@@ -1,0 +1,17 @@
+# Override para buildar as imagens localmente em vez de puxar do GHCR.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml build
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d
+#
+# Útil para validar o build antes de fazer push na main.
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: erp_rk_backend/Dockerfile
+
+  web:
+    build:
+      context: .
+      dockerfile: erp_rk_front/Dockerfile

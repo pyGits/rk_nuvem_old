@@ -1,0 +1,46 @@
+import ExpressAdapter from "./src/infra/server/httpServer";
+import V2CompraRoutes from "./src/routes/v2/v2.compra";
+import V2FornecedorRoutes from "./src/routes/v2/v2.fornecedor";
+import V2ProdutoRoutes from "./src/routes/v2/v2.produto";
+import V2SecaoRoutes from "./src/routes/v2/v2.secao";
+import V2GrupoRoutes from "./src/routes/v2/v2.grupo";
+import v2Tributacao from "./src/routes/v2/v2.tributacao";
+import V2ImpostosFederais from "./src/routes/v2/v2.impostosFederais";
+import v2Associacao from "./src/routes/v2/v2.associacao";
+import v2Lojas from "./src/routes/v2/v2.lojas";
+import v2Contapagar from "./src/routes/v2/v2.contaPagar";
+import v2CategoriaFinanceira from "./src/routes/v2/v2.categoriaFinanceira";
+import v2SubCategoriaFinanceira from "./src/routes/v2/v2.subCategoriaFinanceira";
+import v2FormaPagamento from "./src/routes/v2/v2.formaPagamento";
+import v2ContaPagarTitulo from "./src/routes/v2/v2.contaPagarTitulo";
+import v3Produto from "./src/routes/v3/v3.produto";
+import v3NCM from "./src/routes/v3/v3.ncm";
+import v3CEST from "./src/routes/v3/v3.cest";
+import MigrateFromRKUseCase from "./src/infra/usecase/MigrateFromRKUseCase";
+import MigrateFromSyspdvUseCase from "./src/infra/usecase/MigrateFromSyspdvUseCase";
+import SefazScheduler from "./src/infra/service/sefaz/SefazScheduler";
+ExpressAdapter.listen();
+V2FornecedorRoutes.register();
+V2CompraRoutes.register();
+V2ProdutoRoutes.register();
+V2SecaoRoutes.register();
+V2GrupoRoutes.register();
+v2Tributacao.register();
+V2ImpostosFederais.register();
+v2Associacao.register();
+v2Lojas.register();
+v2Contapagar.register();
+v2CategoriaFinanceira.register();
+v2SubCategoriaFinanceira.register();
+v2FormaPagamento.register();
+v2ContaPagarTitulo.register();
+
+v3Produto.register();
+v3NCM.register();
+v3CEST.register();
+
+// Sincronização automática das notas de entrada na SEFAZ (a cada 1h, lojas com certificado válido).
+SefazScheduler.start();
+// MigrateFromSyspdvUseCase.execute(32);
+// MigrateFromSyspdvUseCase.migrateCodigosAuxiliares(32);
+// MigrateFromRKUseCase.execute(32);

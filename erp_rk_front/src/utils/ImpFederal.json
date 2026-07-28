@@ -1,0 +1,129 @@
+{
+  "saida": [
+    {
+      "codigo": "01",
+      "texto": "01 - Operação Tributável com Alíquota Básica"
+    },
+    {
+      "codigo": "02",
+      "texto": "02 - Operação Tributável com Alíquota Diferenciada"
+    },
+    {
+      "codigo": "03",
+      "texto": "03 - Operação Tributável com Alíquota por Unidade de Medida de Produto"
+    },
+    {
+      "codigo": "04",
+      "texto": "04 - Operação Tributável Monofásica – Revenda a Alíquota Zero"
+    },
+    {
+      "codigo": "05",
+      "texto": "05 - Operação Tributável por Substituição Tributária"
+    },
+    { "codigo": "06", "texto": "06 - Operação Tributável a Alíquota Zero" },
+    { "codigo": "07", "texto": "07 - Operação Isenta da Contribuição" },
+    {
+      "codigo": "08",
+      "texto": "08 - Operação sem Incidência da Contribuição"
+    },
+    {
+      "codigo": "09",
+      "texto": "09 - Operação com Suspensão da Contribuição"
+    },
+    { "codigo": "49", "texto": "49 - Outras Operações de Saída" }
+  ],
+  "entrada": [
+    {
+      "codigo": "50",
+      "texto": "50-Operação com Direito a Crédito - Vinculada Exclusivamente a Receita Tributada no Mercado Interno"
+    },
+    {
+      "codigo": "51",
+      "texto": "51-Operação com Direito a Crédito - Vinculada Exclusivamente a Receita Não Tributada no Mercado Interno"
+    },
+    {
+      "codigo": "52",
+      "texto": "52-Operação com Direito a Crédito - Vinculada Exclusivamente a Receita de Exportação"
+    },
+    {
+      "codigo": "53",
+      "texto": "53-Operação com Direito a Crédito - Vinculada a Receitas Tributadas e Não Tributadas no Mercado Interno"
+    },
+    {
+      "codigo": "54",
+      "texto": "54-Operação com Direito a Crédito - Vinculada a Receitas Tributadas no Mercado Interno e de Exportação"
+    },
+    {
+      "codigo": "55",
+      "texto": "55-Operação com Direito a Crédito - Vinculada a Receitas Não-Tributadas no Mercado Interno e de Exportação"
+    },
+    {
+      "codigo": "56",
+      "texto": "56-Operação com Direito a Crédito - Vinculada a Receitas Tributadas e Não Tributadas no Mercado Interno, e de Exportação"
+    },
+    {
+      "codigo": "60",
+      "texto": "60-Crédito Presumido - Operação de Aquisição Vinculada Exclusivamente a Receita Tributada no Mercado Interno"
+    },
+    {
+      "codigo": "61",
+      "texto": "61-Crédito Presumido - Operação de Aquisição Vinculada Exclusivamente a Receita Não-Tributada no Mercado Interno"
+    },
+    {
+      "codigo": "62",
+      "texto": "62-Crédito Presumido - Operação de Aquisição Vinculada Exclusivamente a Receita de Exportação"
+    },
+    {
+      "codigo": "63",
+      "texto": "63-Crédito Presumido - Operação de Aquisição Vinculada a Receitas Tributadas e Não-Tributadas no Mercado Interno"
+    },
+    {
+      "codigo": "64",
+      "texto": "64-Crédito Presumido - Operação de Aquisição Vinculada a Receitas Tributadas no Mercado Interno e de Exportação"
+    },
+    {
+      "codigo": "65",
+      "texto": "65-Crédito Presumido - Operação de Aquisição Vinculada a Receitas Não-Tributadas no Mercado Interno e de Exportação"
+    },
+    {
+      "codigo": "66",
+      "texto": "66-Crédito Presumido - Operação de Aquisição Vinculada a Receitas Tributadas e Não-Tributadas no Mercado Interno e de Exportação"
+    },
+    {
+      "codigo": "67",
+      "texto": "67-Crédito Presumido - Outras Operações"
+    },
+    {
+      "codigo": "70",
+      "texto": "70-Operação de Aquisição sem Direito a Crédito"
+    },
+    {
+      "codigo": "71",
+      "texto": "71-Operação de Aquisição com Isenção"
+    },
+    {
+      "codigo": "72",
+      "texto": "72-Operação de Aquisição com Suspensão"
+    },
+    {
+      "codigo": "73",
+      "texto": "73-Operação de Aquisição a Alíquota Zero"
+    },
+    {
+      "codigo": "74",
+      "texto": "74-Operação de Aquisição sem Incidência da Contribuição"
+    },
+    {
+      "codigo": "75",
+      "texto": "75-Operação de Aquisição por Substituição Tributária"
+    },
+    {
+      "codigo": "98",
+      "texto": "98-Outras Operações de Entrada"
+    },
+    {
+      "codigo": "99",
+      "texto": "99-Outras Operações"
+    }
+  ]
+}

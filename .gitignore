@@ -1,0 +1,27 @@
+node_modules/
+dist/
+.DS_Store
+
+# Ambiente: o .env real (com senha do banco) fica só na VPS
+.env
+.env.local
+.env.*.local
+.env.production
+.env.homolog
+
+# Dados de runtime: logos dos tenants e XMLs de NF-e recebidos
+erp_rk_backend/images/
+erp_rk_backend/uploads/
+erp_rk_backend/src/uploads/
+
+# Certificados digitais e XMLs de NF-e nunca devem ir para o repositório
+*.pfx
+*.p12
+erp_rk_front/public/*.xml
+
+npm-debug.log*
+.idea/
+*.swp
+
+# Configuração local do Claude Code
+.claude/settings.local.json

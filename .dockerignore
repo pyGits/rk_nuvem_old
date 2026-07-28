@@ -1,0 +1,15 @@
+**/node_modules
+**/dist
+**/.git
+**/.github
+**/.vscode
+**/.claude
+**/coverage
+**/.env
+**/.env.*
+**/npm-debug.log*
+**/*.md
+**/images/logo
+erp_rk_backend/uploads
+erp_rk_backend/src/uploads
+erp_rk_backend/vercel.json

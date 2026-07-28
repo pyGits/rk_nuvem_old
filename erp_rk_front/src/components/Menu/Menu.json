@@ -1,0 +1,130 @@
+[
+  {
+    "icon": "mdi-view-dashboard",
+    "text": "Cadastro",
+    "subItems": [
+      {
+        "name": "Produto",
+        "to": "/cadastro/produto",
+        "icon": "mdi-chart-bar"
+      },
+      {
+        "name": "Loja",
+        "to": "/cadastro/loja"
+      },
+      {
+        "name": "Mercadológico",
+        "to": "/cadastro/secoes"
+      },
+      {
+        "name": "Cliente",
+        "to": "/cadastro/cliente"
+      },
+      {
+        "name": "Fornecedor",
+        "to": "/cadastro/fornecedor"
+      },
+      {
+        "name": "Finalizadora - PDV",
+        "to": "/cadastro/finalizadora"
+      }
+    ]
+  },
+  {
+    "icon": "mdi-chart-bar",
+    "text": "Relatórios",
+    "subItems": [
+      {
+        "name": "Caixa",
+        "subSubItems": [
+          { "name": "Painel de Vendas", "to": "/relatorio/caixa/painel" },
+          { "name": "Controle De Caixa", "to": "/relatorio/caixa/controle" }
+        ]
+      },
+      {
+        "name": "Estoque",
+        "subSubItems": [{ "name": "Painel de Estoque", "to": "/relatorio/estoque/painel" }]
+      },
+      {
+        "name": "Financeiro",
+        "subSubItems": [{ "name": "Balancete", "to": "/relatorio/financeiro/balancete" }]
+      }
+    ]
+  },
+  {
+    "icon": "mdi-credit-card",
+    "text": "Financeiro",
+    "subItems": [
+      {
+        "name": "Contas a Pagar",
+        "to": "/financeiro/contas-a-pagar"
+      },
+      {
+        "name": "Categoria Financeira",
+        "to": "/financeiro/categoria"
+      },
+      {
+        "name": "Formas de Pagamento",
+        "to": "/financeiro/forma-pagamento"
+      }
+    ]
+  },
+  {
+    "icon": "mdi-cart",
+    "text": "Compra",
+    "subItems": [
+      {
+        "name": "Nota Fiscal - Entrada",
+        "to": "/compra/recebimento"
+      }
+    ]
+  },
+  {
+    "icon": "mdi-account",
+    "text": "Usuários",
+    "subItems": [
+      {
+        "name": "Usuários WEB",
+        "to": "/usuarios/usuariosweb"
+      },
+      {
+        "name": "Funcionários",
+        "to": "/usuarios/funcionario"
+      }
+    ]
+  },
+  {
+    "icon": "mdi-sync",
+    "text": "Carga",
+    "subItems": [
+      {
+        "name": "Loja",
+        "to": "/carga/loja"
+      }
+    ]
+  },
+  {
+    "icon": "mdi-cash-multiple",
+    "text": "Fiscal",
+    "subItems": [
+      {
+        "name": "Tributação",
+        "to": "/fiscal/tributacao"
+      },
+      {
+        "name": "Impostos Federais",
+        "to": "/fiscal/impfederal"
+      }
+    ]
+  },
+  {
+    "icon": "mdi-download",
+    "text": "Downloads",
+    "subItems": [
+      {
+        "name": "Downloads",
+        "to": "/downloads"
+      }
+    ]
+  }
+]

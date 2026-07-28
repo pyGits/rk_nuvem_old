@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "es6",
+    "module": "commonjs",
+    "outDir": "dist",
+
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+
+    "noEmitOnError": false,
+    "baseUrl": ".",
+    "paths": {
+      "@erp_rk_shared/*": ["../erp_rk_shared/*"]
+    }
+  },
+  "include": ["./**/*.ts", "../erp_rk_shared/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}

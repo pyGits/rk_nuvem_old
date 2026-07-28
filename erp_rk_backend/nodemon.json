@@ -1,0 +1,6 @@
+{
+  "watch": ["src", "../erp_rk_shared"],
+  "ext": "ts,js,json",
+  "ignore": ["dist", "node_modules"],
+  "exec": "ts-node index.ts"
+}

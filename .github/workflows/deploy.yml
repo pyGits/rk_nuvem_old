@@ -1,0 +1,122 @@
+name: Deploy para a VPS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-producao
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    name: Build e push das imagens
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        include:
+          - name: backend
+            dockerfile: erp_rk_backend/Dockerfile
+          - name: front
+            dockerfile: erp_rk_front/Dockerfile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # O GHCR só aceita nomes de imagem em minúsculas.
+      - name: Definir prefixo das imagens
+        id: meta
+        run: echo "image_prefix=${REGISTRY}/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build e push (${{ matrix.name }})
+        uses: docker/build-push-action@v6
+        with:
+          # Contexto é a raiz do monorepo: o backend precisa de erp_rk_shared.
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image_prefix }}-${{ matrix.name }}:latest
+            ${{ steps.meta.outputs.image_prefix }}-${{ matrix.name }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.name }}
+          cache-to: type=gha,scope=${{ matrix.name }},mode=max
+
+  deploy:
+    name: Publicar na VPS
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    environment: producao
+
+    env:
+      VPS_PATH: ${{ vars.VPS_PATH || '/opt/rk_nuvem' }}
+      SSH_PORT: ${{ secrets.VPS_PORT || '22' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configurar chave SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -p "$SSH_PORT" -H "${{ secrets.VPS_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Enviar docker-compose.yml
+        run: |
+          scp -i ~/.ssh/id_deploy -P "$SSH_PORT" \
+            docker-compose.yml \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}:$VPS_PATH/docker-compose.yml"
+
+      - name: Atualizar containers
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "$SSH_PORT" \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "IMAGE_TAG='${{ github.sha }}' GHCR_USER='${{ github.actor }}' GHCR_TOKEN='${{ secrets.GITHUB_TOKEN }}' VPS_PATH='$VPS_PATH' bash -s" <<'EOF'
+          set -euo pipefail
+          cd "$VPS_PATH"
+
+          echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin
+
+          # Fixa a tag desta release no .env, para que um restart do host suba
+          # exatamente a mesma versão e o rollback seja só editar esta linha.
+          if grep -q '^IMAGE_TAG=' .env; then
+            sed -i "s|^IMAGE_TAG=.*|IMAGE_TAG=$IMAGE_TAG|" .env
+          else
+            echo "IMAGE_TAG=$IMAGE_TAG" >> .env
+          fi
+
+          docker compose pull
+          docker compose up -d --remove-orphans
+          docker image prune -f
+          docker compose ps
+          EOF
+
+      - name: Rodar migrations do knex
+        if: vars.RUN_MIGRATIONS == 'true'
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "$SSH_PORT" \
+            "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \
+            "cd $VPS_PATH && docker compose exec -T backend npx knex migrate:latest --knexfile knexfile.ts"
+
+      - name: Limpar chave
+        if: always()
+        run: rm -f ~/.ssh/id_deploy
