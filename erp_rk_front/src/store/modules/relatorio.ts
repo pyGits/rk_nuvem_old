@@ -3,10 +3,13 @@ import { getCurrentDate } from "@/utils/date";
 interface Relatorio {
   dtInicio: string;
   dtFim: string;
+  // 0 = todas as lojas
+  loja: number;
 }
 const initialRelatorio: Relatorio = {
   dtInicio: getCurrentDate(),
   dtFim: getCurrentDate(),
+  loja: 0,
 };
 
 export default {
@@ -36,6 +39,9 @@ export default {
     },
     setRelatorioDtFim(state: any, payload: any) {
       state.filtro.dtFim = payload;
+    },
+    setRelatorioLoja(state: any, payload: any) {
+      state.filtro.loja = payload;
     },
     setRelatorioPainelVendasLojas(state: any, payload: any) {
       state.relatorioPainelVendasLojas = payload;
@@ -75,6 +81,7 @@ export default {
           params: {
             dtInicio: state.filtro.dtInicio,
             dtFim: state.filtro.dtFim,
+            loja: state.filtro.loja,
           },
         })
         .then((res: any) => {
@@ -87,6 +94,7 @@ export default {
           params: {
             dtInicio: state.filtro.dtInicio,
             dtFim: state.filtro.dtFim,
+            loja: state.filtro.loja,
           },
         })
         .then((res: any) => {
@@ -99,6 +107,7 @@ export default {
           params: {
             dtInicio: state.filtro.dtInicio,
             dtFim: state.filtro.dtFim,
+            loja: state.filtro.loja,
           },
         })
         .then((res: any) => {
@@ -111,6 +120,7 @@ export default {
           params: {
             dtInicio: state.filtro.dtInicio,
             dtFim: state.filtro.dtFim,
+            loja: state.filtro.loja,
           },
         })
         .then((res: any) => {
@@ -123,6 +133,7 @@ export default {
           params: {
             dtInicio: state.filtro.dtInicio,
             dtFim: state.filtro.dtFim,
+            loja: state.filtro.loja,
           },
         })
         .then((res: any) => {
@@ -136,6 +147,7 @@ export default {
           params: {
             dtInicio: state.filtro.dtInicio,
             dtFim: state.filtro.dtFim,
+            loja: state.filtro.loja,
           },
         })
         .then((res: any) => {

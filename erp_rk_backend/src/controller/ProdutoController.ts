@@ -1,7 +1,7 @@
 import Produto from "../models/Produto";
 import ProdutoCodigoBarras from "../models/ProdutoCodigoBarras";
 import db from "../database/config";
-import { getNextSequencial } from "./UtilsController";
+import { getNextCodigoProduto } from "./UtilsController";
 import { ProdutoRepositoryPG } from "../infra/repository/ProdutoRepository";
 
 // ✅ função fora (resolve o erro do this)
@@ -148,7 +148,7 @@ export default {
     const codigo = req.params.codigo;
     try {
       if (codigo === "novo") {
-        const novoCodigo = await getNextSequencial("produtos", "codigo", tenant_id);
+        const novoCodigo = await getNextCodigoProduto(tenant_id);
         const produto = { codigo: novoCodigo, codigo_barras: novoCodigo, codigos_barras_auxiliares: [] };
         res.status(200).json(produto);
       } else {

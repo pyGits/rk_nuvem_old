@@ -2,10 +2,23 @@ import sequelize from "../database/config";
 import { QueryTypes, Sequelize } from "sequelize";
 import Loja from "../models/Loja";
 
+/**
+ * Lê o filtro de loja da query string do painel de vendas.
+ * Vazio, 0 ou ausente significam "todas as lojas".
+ * Retorna número para poder ser interpolado sem risco de injeção.
+ */
+function lojaFiltro(query: any): number | null {
+  const loja = Number(query.loja);
+  return Number.isInteger(loja) && loja > 0 ? loja : null;
+}
+
 export default {
   async relPainelLoja(req: any, res: any) {
     const { tenant_id } = req;
-    const lojas = await Loja.findAll({ where: { tenant_id: tenant_id } });
+    const loja = lojaFiltro(req.query);
+    const lojas = await Loja.findAll({
+      where: loja ? { tenant_id, codigo: loja } : { tenant_id },
+    });
     const dtInicio = req.query.dtInicio;
     const dtFim = req.query.dtFim;
 
@@ -59,8 +72,10 @@ export default {
 
     const dtInicio = req.query.dtInicio;
     const dtFim = req.query.dtFim;
+    const loja = lojaFiltro(req.query);
+    const filtroLoja = loja ? `AND v.loja = ${loja}` : "";
 
-    const result = await sequelize.query(`SELECT 
+    const result = await sequelize.query(`SELECT
     p.descricao AS nome_produto,
     p.codigo_barras AS barras_produto,
     SUM(v.qtde) AS qtde,
@@ -77,8 +92,9 @@ export default {
     WHERE v.cancelado = 0
     AND v.tenant_id = ${tenant_id}
     AND p.tenant_id = ${tenant_id}
-    AND data >= '${dtInicio}' 
+    AND data >= '${dtInicio}'
     AND data <= '${dtFim}'
+    ${filtroLoja}
 
 GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
 
@@ -91,6 +107,8 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
 
     const dtInicio = req.query.dtInicio;
     const dtFim = req.query.dtFim;
+    const loja = lojaFiltro(req.query);
+    const filtroLoja = loja ? `AND v.loja = ${loja}` : "";
 
     const result = await sequelize.query(`
     SELECT l.codigo,l.nome AS nome_loja, v.caixa, 
@@ -101,8 +119,9 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
     FROM vendas v
     JOIN lojas l ON v.loja = cast(l.codigo as integer)
     where l.tenant_id=${tenant_id} and v.tenant_id=${tenant_id} and v.cancelado=0
-    AND v.data >= '${dtInicio}' 
+    AND v.data >= '${dtInicio}'
     AND v.data <= '${dtFim}'
+    ${filtroLoja}
     GROUP BY l.codigo,l.nome, v.caixa;
 
     `);
@@ -114,6 +133,8 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
 
     const dtInicio = req.query.dtInicio;
     const dtFim = req.query.dtFim;
+    const loja = lojaFiltro(req.query);
+    const filtroLoja = loja ? `AND v.loja = ${loja}` : "";
 
     const result = await sequelize.query(`
     select 
@@ -130,9 +151,10 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
     left join finalizadoras f on f.codigo = v.finalizadora
 
     where l.tenant_id = ${tenant_id} and f.tenant_id = ${tenant_id} and v.tenant_id=${tenant_id}
-    AND v.data >= '${dtInicio}' 
+    AND v.data >= '${dtInicio}'
     AND v.data <= '${dtFim}'
     and cancelado = 0
+    ${filtroLoja}
 
     group by (f.codigo,f.nome,l.codigo,
     l.nome)
@@ -148,6 +170,8 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
 
     const dtInicio = req.query.dtInicio;
     const dtFim = req.query.dtFim;
+    const loja = lojaFiltro(req.query);
+    const filtroLoja = loja ? `AND v.loja = ${loja}` : "";
 
     const result = await sequelize.query(`
   SELECT
@@ -168,8 +192,9 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
     AND p.tenant_id = ${tenant_id}
     AND v.tenant_id = ${tenant_id}
     AND v.cancelado = 0
-    AND v.data >= '${dtInicio}' 
+    AND v.data >= '${dtInicio}'
     AND v.data <= '${dtFim}'
+    ${filtroLoja}
     GROUP BY s.codigo, s.nome;
 
 
@@ -182,11 +207,14 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
     const { tenant_id } = req;
     const dtInicio = req.query.dtInicio;
     const dtFim = req.query.dtFim;
+    const loja = lojaFiltro(req.query);
+    const filtroLoja = loja ? `and v.loja = ${loja}` : "";
 
-    const result = await sequelize.query(`select * from vendas v 
+    const result = await sequelize.query(`select * from vendas v
     where v.tenant_id = ${tenant_id}
     and v.data >= '${dtInicio}'
-    and v.data <= '${dtFim}'    
+    and v.data <= '${dtFim}'
+    ${filtroLoja}
     `);
     res.status(200).json(result[0]);
   },
