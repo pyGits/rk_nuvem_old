@@ -1,0 +1,61 @@
+unit uDmClientePDV;
+
+interface
+
+uses
+  System.SysUtils, System.Classes,ConexaoPDV, FireDAC.Stan.Intf,
+  FireDAC.Stan.Option, FireDAC.Stan.Param, FireDAC.Stan.Error, FireDAC.DatS,
+  FireDAC.Phys.Intf, FireDAC.DApt.Intf, FireDAC.Stan.Async, FireDAC.DApt,
+  Data.DB, FireDAC.Comp.DataSet, FireDAC.Comp.Client,System.Generics.Collections,Cliente;
+
+type
+  TdmClientePDV = class(TDataModule)
+    qrClientePDV: TFDQuery;
+  private
+    { Private declarations }
+  public
+    function InsertClientePDV(oClienteList:TObjectList<TCliente>):boolean;
+  end;
+
+var
+  dmClientePDV: TdmClientePDV;
+
+implementation
+
+{%CLASSGROUP 'Vcl.Controls.TControl'}
+
+{$R *.dfm}
+
+{ TdmClientePDV }
+
+function TdmClientePDV.InsertClientePDV(
+  oClienteList: TObjectList<TCliente>): boolean;
+  var
+    cliente:TCliente;
+begin
+  qrClientePDV.Close;
+  qrClientePDV.SQL.Clear;
+  qrClientePDV.SQL.Add('INSERT INTO CLIENTE (CODIGO,NOME,CPF,PERC_DESCONTO,ENDERECO,COMPLEMENTO,BAIRRO,CIDADE,UF,CEP,OBS)');
+  qrClientePDV.SQL.Add('VALUES (:CODIGO,:NOME,:CPF,:PERC_DESCONTO,:ENDERECO,:COMPLEMENTO,:BAIRRO,:CIDADE,:UF,:CEP,:OBS)');
+  for cliente in oClienteList do
+    begin
+ENDERECO,COMPLEMENTO,BAIRRO,CIDADE,UF,CEP,OBS
+    qrClientePDV.ParamByName('CODIGO').AsInteger := StrToInt(cliente.codigo);
+    qrClientePDV.ParamByName('NOME').asstring := cliente.nome;
+    qrClientePDV.ParamByName('CPF').asstring := cliente.cnpjcpf;
+    qrClientePDV.ParamByName('PERC_DESCONTO').asfloat := cliente.Perc_Desconto;
+
+    qrClientePDV.ParamByName('CPF').asstring := cliente.cnpjcpf;
+    qrClientePDV.ParamByName('CPF').asstring := cliente.cnpjcpf;
+    qrClientePDV.ParamByName('CPF').asstring := cliente.cnpjcpf;
+    qrClientePDV.ParamByName('CPF').asstring := cliente.cnpjcpf;
+    qrClientePDV.ParamByName('CPF').asstring := cliente.cnpjcpf;
+    qrClientePDV.ParamByName('CPF').asstring := cliente.cnpjcpf;
+    qrClientePDV.ParamByName('CPF').asstring := cliente.cnpjcpf;
+    qrClientePDV.ExecSQL;
+
+
+    end;
+end;
+
+end.

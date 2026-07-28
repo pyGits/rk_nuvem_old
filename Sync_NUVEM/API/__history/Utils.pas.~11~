@@ -1,0 +1,99 @@
+unit Utils;
+
+interface
+
+uses
+  System.IniFiles, System.SysUtils, Vcl.Forms, IdSSLOpenSSL, IdGlobal;
+
+function ReadIniString(Section, Ident, Default: string): string;
+procedure WriteIniString(Section, Ident, Value: string);
+
+implementation
+
+function EncryptString(const AKey, AValue: string): string;
+var
+  SSL: TIdSSLIOHandlerSocketOpenSSL;
+  Key: TBytes;
+begin
+  SSL := TIdSSLIOHandlerSocketOpenSSL.Create(nil);
+  try
+    SSL.SSLOptions.Method := sslvTLSv1_2;
+    SSL.SSLOptions.Mode := sslmClient;
+
+    // Converte a chave para um array de bytes
+    SetLength(Key, Length(AKey));
+    Move(AKey[1], Key[0], Length(AKey));
+
+    SSL.PassThrough := False;
+    SSL.OnGetPassword := function: string
+      begin
+        Result := AKey;
+      end;
+    SSL.SetPasswordBuffer(Pointer(Key), Length(Key));
+    Result := SSL.EncryptString(AValue);
+  finally
+    SSL.Free;
+  end;
+end;
+
+function DecryptString(const AKey, AValue: string): string;
+var
+  SSL: TIdSSLIOHandlerSocketOpenSSL;
+  Key: TBytes;
+begin
+  SSL := TIdSSLIOHandlerSocketOpenSSL.Create(nil);
+  try
+    SSL.SSLOptions.Method := sslvTLSv1_2;
+    SSL.SSLOptions.Mode := sslmClient;
+
+    // Converte a chave para um array de bytes
+    SetLength(Key, Length(AKey));
+    Move(AKey[1], Key[0], Length(AKey));
+
+    SSL.PassThrough := False;
+    SSL.OnGetPassword := function: string
+      begin
+        Result := AKey;
+      end;
+    SSL.SetPasswordBuffer(Pointer(Key), Length(Key));
+    Result := SSL.DecryptString(AValue);
+  finally
+    SSL.Free;
+  end;
+end;
+
+function ReadIniString(Section, Ident, Default: string): string;
+var
+  IniFile: TIniFile;
+  FileName, EncryptedValue: string;
+begin
+  FileName := ExtractFilePath(Application.ExeName) + '/config.ini';
+  IniFile := TIniFile.Create(FileName);
+  try
+    EncryptedValue := IniFile.ReadString(Section, Ident, '');
+    if EncryptedValue <> '' then
+      Result := DecryptString('MySecretKey', EncryptedValue)
+    else
+      Result := Default;
+  finally
+    IniFile.Free;
+  end;
+end;
+
+procedure WriteIniString(Section, Ident, Value: string);
+var
+  IniFile: TIniFile;
+  FileName, EncryptedValue: string;
+begin
+  FileName := ExtractFilePath(Application.ExeName) + '/config.ini';
+  IniFile := TIniFile.Create(FileName);
+  try
+    EncryptedValue := EncryptString('MySecretKey', Value);
+    IniFile.WriteString(Section, Ident, EncryptedValue);
+  finally
+    IniFile.Free;
+  end;
+end;
+
+end.
+

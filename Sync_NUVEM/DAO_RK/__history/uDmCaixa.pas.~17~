@@ -1,0 +1,55 @@
+unit uDmCaixa;
+
+interface
+
+uses
+  System.SysUtils, System.Classes, Data.DB, MemDS, DBAccess, Uni,Conexao;
+
+type
+  TdmCaixa = class(TDataModule)
+    qrCarregarCaixa: TUniQuery;
+  private
+    { Private declarations }
+  public
+    function retornaIPCaixas(oCaixaList:TStringList):Boolean;
+  end;
+
+var
+  dmCaixa: TdmCaixa;
+
+implementation
+
+{%CLASSGROUP 'Vcl.Controls.TControl'}
+
+{$R *.dfm}
+
+{ TdmCaixa }
+
+function TdmCaixa.retornaIPCaixas(oCaixaList: TStringList): TStringList;
+begin
+  oCaixaList := TStringList.Create;
+  with qrCarregarCaixa do
+  begin
+    Close;
+    SQL.Clear;
+    SQL.Add('SELECT * FROM CAIXA');
+    try
+    Open;
+
+      while not qrCarregarCaixa.Eof do
+      begin
+        oCaixaList.Add(qrCarregarCaixa.FieldByName('IP').AsString);
+        qrCarregarCaixa.Next;
+      end;
+
+    except
+    on E:Exception do
+    begin
+      raise Exception.Create('Erro ao carregar lista de caixas');
+    end;
+
+    end;
+  end;
+end;
+
+end.

@@ -1,0 +1,36 @@
+unit APIConnectionConfig;
+
+interface
+
+uses
+  System.SysUtils, System.Classes, System.Net.HttpClient;
+
+type
+  TAPIConnectionConfig = class
+  private
+    FHTTP: THTTPClient;
+  public
+    constructor Create(const ABaseURL: string);
+    destructor Destroy; override;
+
+    property HTTP: THTTPClient read FHTTP;
+  end;
+
+implementation
+
+constructor TAPIConnectionConfig.Create(const ABaseURL: string);
+begin
+  FHTTP := THTTPClient.Create;
+  FHTTP.BaseURL := ABaseURL;
+  FHTTP.ContentType := 'application/json';
+  FHTTP.AcceptCharset := 'UTF-8';
+end;
+
+destructor TAPIConnectionConfig.Destroy;
+begin
+  FHTTP.Free;
+  inherited;
+end;
+
+end.
+

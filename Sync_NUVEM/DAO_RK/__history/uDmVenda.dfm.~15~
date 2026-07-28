@@ -1,0 +1,35 @@
+object dmVenda: TdmVenda
+  OldCreateOrder = False
+  Height = 342
+  Width = 447
+  object qrCupomSincroniza: TUniQuery
+    Connection = dmConexao.ConexaoServer
+    Left = 208
+    Top = 152
+  end
+  object qrCupomUpdate: TUniQuery
+    Connection = dmConexao.ConexaoServer
+    Left = 280
+    Top = 80
+  end
+  object qrCupomItemUpdate: TUniQuery
+    Connection = dmConexao.ConexaoServer
+    Left = 312
+    Top = 168
+  end
+  object qrCupomFormaUpdate: TUniQuery
+    Connection = dmConexao.ConexaoServer
+    Left = 120
+    Top = 216
+  end
+  object qrNaoFiscalSincroniza: TUniQuery
+    Connection = dmConexao.ConexaoServer
+    Left = 240
+    Top = 280
+  end
+  object qrNaoFiscalUpdate: TUniQuery
+    Connection = dmConexao.ConexaoServer
+    Left = 320
+    Top = 272
+  end
+end

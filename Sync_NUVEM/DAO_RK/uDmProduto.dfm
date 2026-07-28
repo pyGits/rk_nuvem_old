@@ -1,0 +1,422 @@
+object dmProduto: TdmProduto
+  OldCreateOrder = False
+  Height = 360
+  Width = 564
+  object UniQuery1: TUniQuery
+    SmartFetch.Enabled = True
+    Connection = dmConexao.ConexaoServer
+    SQL.Strings = (
+      
+        'update or insert into PRODUTO (CODIGO, CODIGO_BARRAS, DESCRICAO,' +
+        ' GRUPO, SUBGRUPO, FORNECEDOR, TRIBUTACAO, NCM, CEST, VALIDADE,'
+      
+        '                     BALANCA, FRACIONADO, CUSTO, PRECO, MARGEM, ' +
+        'ESTOQUE, UNIDADE, INATIVO, DIVERSOS, DATA_CADASTRO,'
+      
+        '                     DATA_ALTERADO, PENDENTE,ESTOQUE_MINIMO,ESTO' +
+        'QUE_MAXIMO)'
+      
+        'values (:CODIGO, :CODIGO_BARRAS, :DESCRICAO, :GRUPO, :SUBGRUPO, ' +
+        ':FORNECEDOR, :TRIBUTACAO, :NCM, :CEST, :VALIDADE,'
+      
+        '        :BALANCA, :FRACIONADO, :CUSTO, :PRECO, :MARGEM, :ESTOQUE' +
+        ', :UNIDADE, :INATIVO, :DIVERSOS, :DATA_CADASTRO,'
+      
+        '        :DATA_ALTERADO, :PENDENTE,:ESTOQUE_MINIMO,:ESTOQUE_MAXIM' +
+        'O)  ')
+    UniDirectional = True
+    Left = 264
+    Top = 168
+    ParamData = <
+      item
+        DataType = ftUnknown
+        Name = 'CODIGO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'CODIGO_BARRAS'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'DESCRICAO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'GRUPO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'SUBGRUPO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'FORNECEDOR'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'TRIBUTACAO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'NCM'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'CEST'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'VALIDADE'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'BALANCA'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'FRACIONADO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'CUSTO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'PRECO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'MARGEM'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'ESTOQUE'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'UNIDADE'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'INATIVO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'DIVERSOS'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'DATA_CADASTRO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'DATA_ALTERADO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'PENDENTE'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'ESTOQUE_MINIMO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'ESTOQUE_MAXIMO'
+        Value = nil
+      end>
+  end
+  object qrProdutoInsertUpdate: TUniQuery
+    Connection = dmConexao.ConexaoServer
+    SQL.Strings = (
+      
+        'update or insert into PRODUTO (CODIGO, CODIGO_BARRAS, DESCRICAO,' +
+        ' GRUPO, SUBGRUPO, FORNECEDOR, TRIBUTACAO, NCM, CEST, VALIDADE,'
+      
+        '                     BALANCA, FRACIONADO, CUSTO, PRECO, MARGEM, ' +
+        'ESTOQUE, UNIDADE, INATIVO, DIVERSOS, DATA_CADASTRO,'
+      
+        '                     DATA_ALTERADO, PENDENTE,ESTOQUE_MINIMO,ESTO' +
+        'QUE_MAXIMO)'
+      
+        'values (:CODIGO, :CODIGO_BARRAS, :DESCRICAO, :GRUPO, :SUBGRUPO, ' +
+        ':FORNECEDOR, :TRIBUTACAO, :NCM, :CEST, :VALIDADE,'
+      
+        '        :BALANCA, :FRACIONADO, :CUSTO, :PRECO, :MARGEM, :ESTOQUE' +
+        ', :UNIDADE, :INATIVO, :DIVERSOS, :DATA_CADASTRO,'
+      
+        '        :DATA_ALTERADO, :PENDENTE,:ESTOQUE_MINIMO,:ESTOQUE_MAXIM' +
+        'O)  ')
+    Left = 88
+    Top = 72
+    ParamData = <
+      item
+        DataType = ftUnknown
+        Name = 'CODIGO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'CODIGO_BARRAS'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'DESCRICAO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'GRUPO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'SUBGRUPO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'FORNECEDOR'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'TRIBUTACAO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'NCM'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'CEST'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'VALIDADE'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'BALANCA'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'FRACIONADO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'CUSTO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'PRECO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'MARGEM'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'ESTOQUE'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'UNIDADE'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'INATIVO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'DIVERSOS'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'DATA_CADASTRO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'DATA_ALTERADO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'PENDENTE'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'ESTOQUE_MINIMO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'ESTOQUE_MAXIMO'
+        Value = nil
+      end>
+  end
+  object qrProduto: TFDQuery
+    Connection = dmConexao.FDConnection1
+    SQL.Strings = (
+      
+        'update or insert into PRODUTO (CODIGO, CODIGO_BARRAS, DESCRICAO,' +
+        ' GRUPO, SUBGRUPO, FORNECEDOR, TRIBUTACAO, NCM, CEST, VALIDADE,'
+      
+        '                     BALANCA, FRACIONADO, CUSTO, PRECO, MARGEM, ' +
+        'ESTOQUE, UNIDADE, INATIVO, DIVERSOS, DATA_CADASTRO,'
+      
+        '                     DATA_ALTERADO, PENDENTE,ESTOQUE_MINIMO,ESTO' +
+        'QUE_MAXIMO)'
+      
+        'values (:CODIGO, :CODIGO_BARRAS, :DESCRICAO, :GRUPO, :SUBGRUPO, ' +
+        ':FORNECEDOR, :TRIBUTACAO, :NCM, :CEST, :VALIDADE,'
+      
+        '        :BALANCA, :FRACIONADO, :CUSTO, :PRECO, :MARGEM, :ESTOQUE' +
+        ', :UNIDADE, :INATIVO, :DIVERSOS, :DATA_CADASTRO,'
+      
+        '        :DATA_ALTERADO, :PENDENTE,:ESTOQUE_MINIMO,:ESTOQUE_MAXIM' +
+        'O)  ')
+    Left = 136
+    Top = 200
+    ParamData = <
+      item
+        Name = 'CODIGO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'CODIGO_BARRAS'
+        ParamType = ptInput
+      end
+      item
+        Name = 'DESCRICAO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'GRUPO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'SUBGRUPO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'FORNECEDOR'
+        ParamType = ptInput
+      end
+      item
+        Name = 'TRIBUTACAO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'NCM'
+        ParamType = ptInput
+      end
+      item
+        Name = 'CEST'
+        ParamType = ptInput
+      end
+      item
+        Name = 'VALIDADE'
+        ParamType = ptInput
+      end
+      item
+        Name = 'BALANCA'
+        ParamType = ptInput
+      end
+      item
+        Name = 'FRACIONADO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'CUSTO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'PRECO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'MARGEM'
+        ParamType = ptInput
+      end
+      item
+        Name = 'ESTOQUE'
+        ParamType = ptInput
+      end
+      item
+        Name = 'UNIDADE'
+        ParamType = ptInput
+      end
+      item
+        Name = 'INATIVO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'DIVERSOS'
+        ParamType = ptInput
+      end
+      item
+        Name = 'DATA_CADASTRO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'DATA_ALTERADO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'PENDENTE'
+        ParamType = ptInput
+      end
+      item
+        Name = 'ESTOQUE_MINIMO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'ESTOQUE_MAXIMO'
+        ParamType = ptInput
+      end>
+  end
+  object FDPhysIBDriverLink1: TFDPhysIBDriverLink
+    Left = 312
+    Top = 168
+  end
+end

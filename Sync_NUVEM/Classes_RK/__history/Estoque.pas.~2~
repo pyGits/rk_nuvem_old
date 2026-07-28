@@ -1,0 +1,13 @@
+unit Estoque;
+
+interface
+
+type TEstoqueMovimentacao = class
+  private
+  public
+
+end;
+
+implementation
+
+end.

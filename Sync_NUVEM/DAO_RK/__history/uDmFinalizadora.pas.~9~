@@ -1,0 +1,52 @@
+unit uDmFinalizadora;
+
+interface
+
+uses
+  System.SysUtils, System.Classes,Conexao, Data.DB, MemDS, DBAccess, Uni,Finalizadora;
+
+type
+  TdmFinalizadora = class(TDataModule)
+    qrFinalizadoraInsertUpdate: TUniQuery;
+  private
+
+  public
+    function InsertFinalizadora(oFinalizadora:TFinalizadora):Boolean;
+  end;
+
+var
+  dmFinalizadora: TdmFinalizadora;
+
+implementation
+
+{%CLASSGROUP 'Vcl.Controls.TControl'}
+
+{$R *.dfm}
+
+{ TdmFinalizadora }
+
+function TdmFinalizadora.InsertFinalizadora(
+  oFinalizadora: TFinalizadora): Boolean;
+begin
+with qrFinalizadoraInsertUpdate,oFinalizadora do
+begin
+  Params.ParamByName('CODIGO').AsString := codigo;
+  Params.ParamByName('DESCRICAO').AsString := nome;
+  Params.ParamByName('ESPECIE').AsString := especie;
+  Params.ParamByName('TIPO').AsString := tipo;
+  Params.ParamByName('CODIGO99').AsFloat := codigo99;
+  try
+    ExecSQL;
+  except
+  on E:Exception do
+  begin
+    raise Exception.Create('Erro ao inserir tributação: '+ E.Message );
+  end;
+
+  end;
+
+
+end;
+end;
+
+end.

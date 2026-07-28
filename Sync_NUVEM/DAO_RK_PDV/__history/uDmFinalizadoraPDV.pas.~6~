@@ -1,0 +1,34 @@
+unit uDmFinalizadoraPDV;
+
+interface
+
+uses
+  System.SysUtils, System.Classes,ConexaoPDV, Data.DB, MemDS, DBAccess, Uni,Finalizadora;
+
+type
+  TDmFinalizadoraPDV = class(TDataModule)
+    qrInsertFinalizadoraPDV: TUniQuery;
+  private
+    { Private declarations }
+  public
+    function insertFinalizadoraPDV(oFinalizadora:TFinalizadora):Boolean;
+  end;
+
+var
+  DmFinalizadoraPDV: TDmFinalizadoraPDV;
+
+implementation
+
+{%CLASSGROUP 'Vcl.Controls.TControl'}
+
+{$R *.dfm}
+
+{ TDmFinalizadoraPDV }
+
+function TDmFinalizadoraPDV.insertFinalizadoraPDV(
+  oFinalizadora: TFinalizadora): Boolean;
+begin
+
+end;
+
+end.

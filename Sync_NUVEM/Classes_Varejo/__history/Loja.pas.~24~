@@ -1,0 +1,128 @@
+unit Loja;
+interface
+uses
+  System.JSON,System.SysUtils;
+
+type
+  TLoja = class
+  private
+    FId: Integer;
+    FCodigo: string;
+    FNome: string;
+    FFantasia: string;
+    FCnpjCpf: string;
+    FTelefone: string;
+    FCelular: string;
+    FEmail: string;
+    FIErg: string;
+    FLogradouro: string;
+    FCidade: string;
+    FUF: string;
+    FCEP: string;
+    FBairro: string;
+    FComplemento: string;
+    FStatus: Integer;
+    FToken: string;
+    FTenantId: Integer;
+    FCreatedAt: TDateTime;
+    FUpdatedAt: TDateTime;
+  public
+    constructor Create;
+    property Id: Integer read FId write FId;
+    property Codigo: string read FCodigo write FCodigo;
+    property Nome: string read FNome write FNome;
+    property Fantasia: string read FFantasia write FFantasia;
+    property CnpjCpf: string read FCnpjCpf write FCnpjCpf;
+    property Telefone: string read FTelefone write FTelefone;
+    property Celular: string read FCelular write FCelular;
+    property Email: string read FEmail write FEmail;
+    property IErg: string read FIErg write FIErg;
+    property Logradouro: string read FLogradouro write FLogradouro;
+    property Cidade: string read FCidade write FCidade;
+    property UF: string read FUF write FUF;
+    property CEP: string read FCEP write FCEP;
+    property Bairro: string read FBairro write FBairro;
+    property Complemento: string read FComplemento write FComplemento;
+    property Status: Integer read FStatus write FStatus;
+    property Token: string read FToken write FToken;
+    property TenantId: Integer read FTenantId write FTenantId;
+    property CreatedAt: TDateTime read FCreatedAt write FCreatedAt;
+    property UpdatedAt: TDateTime read FUpdatedAt write FUpdatedAt;
+
+    function JsonToLoja(const Json: string): TLoja;
+
+    function teste:TLoja;
+  end;
+  implementation
+
+{ TLoja }
+
+constructor TLoja.Create;
+begin
+  FId := 0;
+  FCodigo := '';
+  FNome := '';
+  FFantasia := '';
+  FCnpjCpf := '';
+  FTelefone := '';
+  FCelular := '';
+  FEmail := '';
+  FIErg := '';
+  FLogradouro := '';
+  FCidade := '';
+  FUF := '';
+  FCEP := '';
+  FBairro := '';
+  FComplemento := '';
+  FStatus := 0;
+  FToken := '';
+  FTenantId := 0;
+  FCreatedAt := 0;
+  FUpdatedAt := 0;
+end;
+
+function ISO8601ToDate(const DateTime: string): TDateTime;
+begin
+Result := StrToDateTime(DateTime, TFormatSettings.Create('en-US'));
+end;
+
+function TLoja.JsonToLoja(const Json: string): TLoja;
+var
+  JObject: TJSONObject;
+begin
+  Result := TLoja.Create;
+  try
+    JObject := TJSONObject.ParseJSONValue(Json) as TJSONObject;
+    try
+      Result.Id := StrToInt(JObject.GetValue('id').Value);
+      Result.Codigo := JObject.GetValue('codigo').Value;
+      Result.Nome := JObject.GetValue('nome').Value;
+      Result.Fantasia := JObject.GetValue('fantasia').Value;
+      Result.CnpjCpf := JObject.GetValue('cnpjcpf').Value;
+      Result.Telefone  := JObject.GetValue('telefone').Value;
+      Result.Celular := JObject.GetValue('celular').Value;
+      Result.Email := JObject.GetValue('email').Value;
+      Result.IErg := JObject.GetValue('ierg').Value;
+      Result.Logradouro := JObject.GetValue('logradouro').Value;
+      Result.Cidade := JObject.GetValue('cidade').Value;
+      Result.UF := JObject.GetValue('uf').Value;
+      Result.CEP := JObject.GetValue('cep').Value;
+      Result.Bairro := JObject.GetValue('bairro').Value;
+      Result.Complemento := JObject.GetValue('complemento').Value;
+      Result.Status := JObject.GetValue('status').Value.ToInteger;
+      Result.Token := JObject.GetValue('token').Value;
+      Result.TenantId := JObject.GetValue('tenant_id').Value.ToInteger;
+      Result.CreatedAt := ISO8601ToDate(JObject.GetValue('createdAt').Value);
+      Result.UpdatedAt := ISO8601ToDate(JObject.GetValue('updatedAt').Value);
+finally
+  JObject.Free;
+end;
+
+except
+Result.Free;
+raise;
+end;
+end;
+
+
+end.

@@ -1,0 +1,52 @@
+unit Login;
+
+interface
+
+uses
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,
+  System.JSON, IdHTTP, IdSSLOpenSSL,
+  Data.Bind.Components, Data.Bind.ObjectScope, REST.Client,uAPIRequest,uJsonUtils,UTILS;
+
+type
+  TfrmLogin = class(TForm)
+    btnLogin: TButton;
+    edtUser: TEdit;
+    edtPassword: TEdit;
+    Label1: TLabel;
+    Label2: TLabel;
+    RESTRequest1: TRESTRequest;
+    Button1: TButton;
+    procedure btnLoginClick(Sender: TObject);
+    procedure Button1Click(Sender: TObject);
+  private
+
+  end;
+
+var
+  frmLogin: TfrmLogin;
+
+implementation
+
+{$R *.dfm}
+
+{ TfrmLogin }
+
+procedure TfrmLogin.btnLoginClick(Sender: TObject);
+var
+  authLogin:Boolean;
+begin
+  USER := edtUser.Text;
+  PASS := edtPassword.Text;
+  Close;
+end;
+procedure TfrmLogin.Button1Click(Sender: TObject);
+var
+  ProcessHandle: THandle;
+begin
+  ProcessHandle := OpenProcess(PROCESS_TERMINATE, False, GetCurrentProcessId);
+  TerminateProcess(ProcessHandle, 0);
+  CloseHandle(ProcessHandle);
+end;
+
+end.

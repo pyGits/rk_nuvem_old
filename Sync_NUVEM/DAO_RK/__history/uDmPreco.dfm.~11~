@@ -1,0 +1,61 @@
+object dmPreco: TdmPreco
+  OldCreateOrder = False
+  Height = 291
+  Width = 483
+  object qrAtualizarPreco: TUniQuery
+    Connection = dmConexao.ConexaoServer
+    SQL.Strings = (
+      
+        'UPDATE PRODUTO SET PRECO = :PRECO,CUSTO=:CUSTO,MARGEM=:MARGEM WH' +
+        'ERE CODIGO = :CODIGO')
+    Left = 208
+    Top = 112
+    ParamData = <
+      item
+        DataType = ftUnknown
+        Name = 'PRECO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'CUSTO'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'MARGEM'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'CODIGO'
+        Value = nil
+      end>
+  end
+  object qrPreco: TFDQuery
+    Connection = dmConexao.FDConnection1
+    SQL.Strings = (
+      
+        'UPDATE PRODUTO SET PRECO = :PRECO,CUSTO=:CUSTO,MARGEM=:MARGEM WH' +
+        'ERE CODIGO = :CODIGO')
+    Left = 320
+    Top = 120
+    ParamData = <
+      item
+        Name = 'PRECO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'CUSTO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'MARGEM'
+        ParamType = ptInput
+      end
+      item
+        Name = 'CODIGO'
+        ParamType = ptInput
+      end>
+  end
+end

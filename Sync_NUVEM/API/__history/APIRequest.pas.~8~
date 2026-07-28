@@ -1,0 +1,51 @@
+unit APIRequest;
+
+interface
+
+uses
+  System.SysUtils, System.JSON, REST.Client, IdSSLOpenSSL, APIConnectionConfig, System.Classes,rest.types;
+
+type
+  TAPIRequest = class
+  private
+    FConnection: TAPIConnectionConfig;
+    FResponseBody: string;
+    FResponseCode: Integer;
+  public
+    constructor Create(const AConnection: TAPIConnectionConfig);
+    function GET(const AEndpoint: string): Boolean;
+    function POST(const AEndpoint: string; const ABody: TJSONObject): Boolean;
+    property ResponseBody: string read FResponseBody;
+    property ResponseCode: Integer read FResponseCode;
+  end;
+
+implementation
+
+constructor TAPIRequest.Create(const AConnection: TAPIConnectionConfig);
+begin
+  FConnection := AConnection;
+end;
+
+function TAPIRequest.GET(const AEndpoint: string): Boolean;
+begin
+  FConnection.Request.Method := TRESTRequestMethod.rmGET;
+  FConnection.Request.Resource := AEndpoint;
+  FConnection.Request.Execute;
+  FResponseBody := FConnection.Response.Content;
+  FResponseCode := FConnection.Response.StatusCode;
+  Result := (FResponseCode >= 200) and (FResponseCode < 300);
+end;
+
+function TAPIRequest.POST(const AEndpoint: string; const ABody: TJSONObject): Boolean;
+begin
+  FConnection.Request.Method := TRESTRequestMethod.rmPOST;
+  FConnection.Request.Resource := AEndpoint;
+  FConnection.Request.Body.Add(ABody);
+  FConnection.Request.Execute;
+  FResponseBody := FConnection.Response.Content;
+  FResponseCode := FConnection.Response.StatusCode;
+  Result := (FResponseCode >= 200) and (FResponseCode < 300);
+end;
+
+end.
+

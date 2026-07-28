@@ -1,0 +1,9 @@
+object dmClientePDV: TdmClientePDV
+  OldCreateOrder = False
+  Height = 321
+  Width = 470
+  object FDQuery1: TFDQuery
+    Left = 216
+    Top = 144
+  end
+end

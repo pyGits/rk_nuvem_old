@@ -1,0 +1,80 @@
+unit Tributacao;
+
+interface
+uses
+  system.SysUtils,Funcoes,system.JSON,rest.json;
+type TTributacao = class
+  private
+    Ficms: Currency;
+    Fcodigo: string;
+    Fcfop: string;
+    Fnome: string;
+    Fcst: string;
+    Fcsosn: string;
+    procedure Setcfop(const Value: string);
+    procedure Setcodigo(const Value: string);
+    procedure Setcsosn(const Value: string);
+    procedure Setcst(const Value: string);
+    procedure Seticms(const Value: Currency);
+    procedure Setnome(const Value: string);
+  public
+  property codigo:string read Fcodigo write Setcodigo;
+  property nome:string read Fnome write Setnome;
+  property cst:string read Fcst write Setcst;
+  property cfop:string read Fcfop write Setcfop;
+  property csosn:string read Fcsosn write Setcsosn;
+  property icms:Currency read Ficms write Seticms;
+
+  function JsonToTributacao(const AJson: string):boolean;
+end;
+
+implementation
+
+{ TTributacao }
+
+function TTributacao.JsonToTributacao(const AJson: string): boolean;
+var
+  LJsonObj: TJSONObject;
+  LTributacao: TTributacao;
+begin
+  LJsonObj := TJSONObject.ParseJSONValue(AJson) as TJSONObject;
+  try
+    LTributacao := TJson.JsonToObject<TTributacao>(AJson);
+    LTributacao.codigo := LJsonObj.GetValue('preco').Value;
+
+  finally
+
+  end;
+end;
+
+procedure TTributacao.Setcfop(const Value: string);
+begin
+  Fcfop := Value;
+end;
+
+procedure TTributacao.Setcodigo(const Value: string);
+begin
+  Fcodigo := Value;
+end;
+
+procedure TTributacao.Setcsosn(const Value: string);
+begin
+  Fcsosn := Value;
+end;
+
+procedure TTributacao.Setcst(const Value: string);
+begin
+  Fcst := Value;
+end;
+
+procedure TTributacao.Seticms(const Value: Currency);
+begin
+  Ficms := Value;
+end;
+
+procedure TTributacao.Setnome(const Value: string);
+begin
+  Fnome := Value;
+end;
+
+end.

@@ -1,0 +1,96 @@
+object frmLogin: TfrmLogin
+  Left = 0
+  Top = 0
+  Caption = 'RK - Nuvem Sincronizador'
+  ClientHeight = 279
+  ClientWidth = 314
+  Color = clBtnFace
+  Font.Charset = DEFAULT_CHARSET
+  Font.Color = clWindowText
+  Font.Height = -11
+  Font.Name = 'Tahoma'
+  Font.Style = []
+  OldCreateOrder = False
+  Position = poScreenCenter
+  PixelsPerInch = 96
+  TextHeight = 13
+  object Label1: TLabel
+    Left = 56
+    Top = 16
+    Width = 54
+    Height = 19
+    Caption = 'Usu'#225'rio'
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -16
+    Font.Name = 'Tahoma'
+    Font.Style = []
+    ParentFont = False
+  end
+  object Label2: TLabel
+    Left = 56
+    Top = 88
+    Width = 43
+    Height = 19
+    Caption = 'Senha'
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -16
+    Font.Name = 'Tahoma'
+    Font.Style = []
+    ParentFont = False
+  end
+  object btnLogin: TButton
+    Left = 56
+    Top = 200
+    Width = 97
+    Height = 25
+    Caption = 'Login'
+    TabOrder = 2
+    OnClick = btnLoginClick
+  end
+  object edtUser: TEdit
+    Left = 56
+    Top = 48
+    Width = 209
+    Height = 26
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -15
+    Font.Name = 'Tahoma'
+    Font.Style = []
+    ParentFont = False
+    TabOrder = 0
+    Text = '123'
+  end
+  object edtPassword: TEdit
+    Left = 56
+    Top = 121
+    Width = 209
+    Height = 26
+    Font.Charset = DEFAULT_CHARSET
+    Font.Color = clWindowText
+    Font.Height = -15
+    Font.Name = 'Tahoma'
+    Font.Style = []
+    ParentFont = False
+    PasswordChar = '#'
+    TabOrder = 1
+    Text = '123456'
+  end
+  object Button1: TButton
+    Left = 168
+    Top = 200
+    Width = 97
+    Height = 25
+    Caption = 'Sair'
+    TabOrder = 3
+    OnClick = Button1Click
+  end
+  object RESTRequest1: TRESTRequest
+    Params = <>
+    SynchronizedEvents = False
+    Left = 248
+    Top = 65520
+  end
+end

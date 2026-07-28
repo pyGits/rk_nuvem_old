@@ -1,0 +1,61 @@
+unit uDmFuncionarioPDV;
+
+interface
+
+uses
+  System.SysUtils, System.Classes,ConexaoPDV, Data.DB, MemDS, DBAccess, Uni,Funcionario;
+
+type
+  TdmFuncionarioPDV = class(TDataModule)
+    qrInserirFuncionarioPDV: TUniQuery;
+    qrDeleteFuncionarioPDV: TUniQuery;
+  private
+    { Private declarations }
+  public
+      function insertFuncionarioPDV(oFuncionario:TFuncionario):boolean;
+  end;
+
+var
+  dmFuncionarioPDV: TdmFuncionarioPDV;
+
+implementation
+
+{%CLASSGROUP 'Vcl.Controls.TControl'}
+
+{$R *.dfm}
+
+{ TdmFuncionarioPDV }
+
+function TdmFuncionarioPDV.insertFuncionarioPDV(
+  oFuncionario: TFuncionario): boolean;
+begin
+with qrDeleteFuncionarioPDV ,oFuncionario do
+begin
+  ParamByName('CODIGO').AsString := codigo;
+  ExecSQL;
+
+
+end;
+with qrInserirFuncionarioPDV,oFuncionario do
+begin
+try
+  Close;
+  SQL.Clear;
+  SQl.Add('INSERT INTO ADM (CODIGO,INFO1,INFO2,FUNCNIV)');
+  SQl.Add('VALUES (:CODIGO,:INFO1,:INFO2,:FUNCNIV)');
+  ParamByName('CODIGO').AsString := codigo;
+  ParamByName('INFO1').AsString := NOME;
+  ParamByName('INFO2').AsString := SENHA;
+  ParamByName('FUNCNIV').AsInteger := CARGO;
+  ExecSQL;
+except
+on E:Exception do
+begin
+  raise Exception.Create('Erro ao inserir funcionario no PDV: '+ e.message );
+end;
+
+end;
+end;
+end;
+
+end.

@@ -1,0 +1,9 @@
+object DmPrecoPDV: TDmPrecoPDV
+  OldCreateOrder = False
+  Height = 297
+  Width = 526
+  object qrPrecoUpdate: TUniQuery
+    Left = 248
+    Top = 136
+  end
+end

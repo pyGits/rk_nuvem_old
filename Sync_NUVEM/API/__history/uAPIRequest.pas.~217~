@@ -1,0 +1,466 @@
+unit uAPIRequest;
+
+interface
+
+uses
+  System.SysUtils, System.Classes, IdHTTP, VCL.dialogs,uJsonUtils,utils,IdSSLOpenSSL,Cupom,Estoque,NaoFiscal,Fechamento;
+
+function APIGet(route:string): string;
+function APIPost(const route:string;const AJSON: string): string;
+
+function Login(user:string;password:string):Boolean;
+
+function verificaCargaPendente:string;
+function finalizaCargaPendente:boolean;
+
+function getLoja:TStringList;
+function getProdutos(alterados:boolean):TStringList;
+function getPrecos(alterados:boolean):TStringList;
+function getTributacoes(alterados:boolean):TStringList;
+function getFinalizadoras(alterados:boolean):TStringList;
+function getFuncionarios(alterados:Boolean):TStringList;
+function getClientes(alterados:boolean):TStringList;
+
+function postVenda(cupom:TCupom):Boolean;
+function postVendaItem(cupomItem:TCupomItem):Boolean;
+function postVendaForma(cupomForma:TCupomForma):Boolean;
+
+function postEstoqueMovimentacao(estoqueMovimentacao:TEstoqueMovimentacao):Boolean;
+function postNaoFiscal(naoFiscal:TNaoFiscal):Boolean;
+function postFechamento(fechamento:TFechamento):boolean;
+function postFechamentoForma(fechamentoForma:TFechamentoFin):boolean;
+
+const
+//  API_URL = 'http://localhost:3000/api';
+  API_URL = 'https://vps47862.publiccloud.com.br:3000/api';
+//  API_URL = 'https://rk-nuvem-back.vercel.app/api';
+var
+  TOKEN:string = '';
+  USER:string = '';
+  PASS:string = '';
+  codLoja:string = '';
+  nomeLoja:string = '';
+
+
+implementation
+
+function APIGet(route:string): string;
+var
+  IdHTTP: TIdHTTP;
+  IdSSL: TIdSSLIOHandlerSocketOpenSSL;
+begin
+  IdHTTP := TIdHTTP.Create(nil);
+
+  try
+    IdHTTP.Request.ContentType := 'application/json';
+    IdSSL := TIdSSLIOHandlerSocketOpenSSL.Create(IdHTTP);
+    IdSSL.SSLOptions.Method := sslvTLSv1_2; // configura para usar a versão 1.2 do protocolo TLS
+    IdHTTP.IOHandler := IdSSL; // atribui o handler SSL/TLS para o TIdHTTP
+
+    IdHTTP.Request.CustomHeaders.Add('x-access-token: '+TOKEN);
+    Result := IdHTTP.Get(API_URL+route);
+  finally
+    IdHTTP.Free;
+  end;
+end;
+
+function APIPost(const route:string;const AJSON: string): string;
+var
+  IdSSL: TIdSSLIOHandlerSocketOpenSSL;
+  IdHTTP: TIdHTTP;
+  RequestBody: TStringStream;
+begin
+  IdHTTP := TIdHTTP.Create(nil);
+  RequestBody := TStringStream.Create(AJSON, TEncoding.UTF8);
+  IdSSL := TIdSSLIOHandlerSocketOpenSSL.Create(IdHTTP);
+  try
+    IdHTTP.Request.ContentType := 'application/json';
+    IdSSL.SSLOptions.Method := sslvTLSv1_2; // configura para usar a versão 1.2 do protocolo TLS
+    IdHTTP.IOHandler := IdSSL; // atribui o handler SSL/TLS para o TIdHTTP
+    IdHTTP.Request.CustomHeaders.Add('x-access-token: '+TOKEN);
+    Result := IdHTTP.Post(API_URL+route, RequestBody);
+  except
+  on E:Exception do
+  begin
+    raise Exception.Create(e.Message);
+  end;
+//    IdSSL.Free; // libera o handler SSL/TLS após o uso
+  end;
+
+end;
+
+function Login(user:string;password:string):Boolean;
+var
+  jsonResponse:string;
+begin
+try
+  jsonResponse := APIPost('/loginCarga','{"user":"'+user+'", "password":"'+password+'"}');
+  TOKEN := GetJsonValue(jsonResponse,'tokenInfinity');
+  UTILS.WriteIniString('LOGIN','USER',USER);
+  UTILS.WriteIniString('LOGIN','PASS',PASS);
+  utils.WriteIniString('TOKEN','TOKEN',TOKEN);
+  result := true;
+except
+on E:Exception do
+begin
+  result := false;
+  ShowMessage('Usuário ou senha incorreto !' + E.Message);
+end;
+
+end;
+end;
+
+function getLoja:TStringList;
+var
+  jsonResponse:string;
+begin
+  try
+    jsonResponse := APIGet('/lojas');
+    result := ParseJsonArray(jsonResponse);
+  finally
+
+  end;
+end;
+
+
+function getProdutos(alterados:boolean):TStringList;
+var
+  jsonResponse:string;
+begin
+  try
+    if(alterados) then
+    begin
+    jsonResponse := APIGet('/produtos?alterados=true');
+    end
+    else
+    begin
+    jsonResponse := APIGet('/produtos');
+    end;
+
+    result := ParseJsonArray(jsonResponse);
+  finally
+
+  end;
+
+end;
+
+function getPrecos(alterados:boolean):TStringList;
+var
+  jsonResponse:string;
+begin
+  try
+    if(alterados) then
+    begin
+    jsonResponse := APIGet('/precos?alterados=true&loja='+codLoja);
+    end
+    else
+    begin
+    jsonResponse := APIGet('/precos?loja='+codLoja);
+    end;
+    result := ParseJsonArray(jsonResponse);
+  except
+  on E:Exception do
+  begin
+    raise Exception.Create('Erro'+e.message);
+  end;
+
+  end;
+
+end;
+function getFinalizadoras(alterados:boolean):TStringList;
+var
+  jsonResponse:string;
+begin
+  try
+    if(alterados) then
+    begin
+    jsonResponse := APIGet('/finalizadoras?alterados=true');
+    end
+    else
+    begin
+    jsonResponse := APIGet('/finalizadoras');
+    end;
+    result := ParseJsonArray(jsonResponse);
+  finally
+
+  end;
+
+end;
+function getTributacoes(alterados:boolean):TStringList;
+var
+  jsonResponse:string;
+begin
+  try
+    if(alterados) then
+    begin
+    jsonResponse := APIGet('/tributacao?alterados=true');
+    end
+    else
+    begin
+    jsonResponse := APIGet('/tributacao');
+    end;
+    result := ParseJsonArray(jsonResponse);
+  finally
+
+  end;
+
+end;
+function getFuncionarios(alterados:boolean):TStringList;
+var
+  jsonResponse:string;
+begin
+  try
+    if(alterados) then
+    begin
+    jsonResponse := APIGet('/funcionarios?alterados=true');
+    end
+    else
+    begin
+    jsonResponse := APIGet('/funcionarios');
+    end;
+    result := ParseJsonArray(jsonResponse);
+  finally
+
+  end;
+end;
+
+function getClientes(alterados:boolean):TStringList;
+var
+  jsonResponse:string;
+begin
+  try
+    if(alterados) then
+    begin
+    jsonResponse := APIGet('/clientes');
+    end
+    else
+    begin
+    jsonResponse := APIGet('/clientes');
+    end;
+    result := ParseJsonArray(jsonResponse);
+  finally
+
+  end;
+end;
+
+function verificaCargaPendente:string;
+var
+  jsonResponse:string;
+begin
+  try
+    jsonResponse := APIGet('/carga/'+codLoja);
+    jsonResponse := uJsonUtils.GetJsonValue(jsonResponse,'message');
+    result := jsonResponse;
+  except
+
+  end;
+end;
+function finalizaCargaPendente:boolean;
+var
+  jsonResponse:string;
+begin
+  try
+    result :=false;
+    jsonResponse := APIGet('/carga/finalizaCarga?loja='+codLoja);
+    result :=True;
+
+  except
+
+  end;
+end;
+
+function postVenda(cupom:TCupom):Boolean;
+var
+  venda:string;
+  jsonResponse:string;
+begin
+  try
+  cupom.loja := codLoja;
+  venda := uJsonUtils.DelphiObjectToJson(cupom);
+
+
+  jsonResponse := APIPost('/venda',venda);
+
+  if jsonResponse = '{"message":"SINCRONIZADO"}' then
+  begin
+  result := true;
+  end
+  else
+  begin
+    result := false;
+  end;
+  except
+  on E:Exception do
+  begin
+  result := false;
+  end;
+
+  end;
+end;
+
+function postVendaItem(cupomItem:TCupomItem):Boolean;
+var
+  venda:string;
+  jsonResponse:string;
+begin
+  try
+  cupomItem.loja := codLoja;
+  venda := uJsonUtils.DelphiObjectToJson(cupomItem);
+
+  jsonResponse := APIPost('/vendaItem',venda);
+
+  if jsonResponse = '{"message":"SINCRONIZADO"}' then
+  begin
+  result := true;
+  end
+  else
+  begin
+    result := false;
+  end;
+  except
+  on E:Exception do
+  begin
+  result := false;
+  end;
+
+  end;
+end;
+function postVendaForma(cupomForma:TCupomForma):Boolean;
+var
+  venda:string;
+  jsonResponse:string;
+begin
+  try
+  cupomForma.loja :=codLoja;
+  venda := uJsonUtils.DelphiObjectToJson(cupomForma);
+
+  jsonResponse := APIPost('/vendaForma',venda);
+
+  if jsonResponse = '{"message":"SINCRONIZADO"}' then
+  begin
+  result := true;
+  end
+  else
+  begin
+    result := false;
+  end;
+  except
+  on E:Exception do
+  begin
+  result := false;
+  end;
+
+  end;
+end;
+
+function postFechamento(fechamento: TFechamento): Boolean;
+var
+  venda: string;
+  jsonResponse: string;
+begin
+  try
+    fechamento.loja := codLoja;
+    venda := uJsonUtils.DelphiObjectToJson(fechamento);
+
+    jsonResponse := APIPost('/fechamento', venda);
+    if jsonResponse = '{"message":"SINCRONIZADO"}' then
+    begin
+      result := true;
+    end
+    else
+    begin
+      result := false;
+    end;
+    except
+    on E: Exception do
+    begin
+//      showmessage(e.Message);
+      result := false;
+    end;
+
+  end;
+end;
+function postFechamentoForma(fechamentoForma:TFechamentoFin):boolean;
+var
+  venda: string;
+  jsonResponse: string;
+begin
+  try
+    fechamentoForma.loja := codLoja;
+    venda := uJsonUtils.DelphiObjectToJson(fechamentoForma);
+
+    jsonResponse := APIPost('/fechamentoForma', venda);
+    if jsonResponse = '{"message":"SINCRONIZADO"}' then
+    begin
+      result := true;
+    end
+    else
+    begin
+      result := false;
+    end;
+    except
+    on E: Exception do
+    begin
+      result := false;
+    end;
+
+  end;
+end;
+
+function postNaoFiscal(naoFiscal:TNaoFiscal):Boolean;
+var
+  venda:string;
+  jsonResponse:string;
+begin
+  try
+    naoFiscal.loja := codLoja;
+    venda := uJsonUtils.DelphiObjectToJson(naoFiscal);
+
+    jsonResponse := APIPost('/naoFiscal',venda);
+
+    if jsonResponse = '{"message":"SINCRONIZADO"}' then
+    begin
+    result := true;
+    end
+    else
+    begin
+      result := false;
+    end;
+    except
+    on E:Exception do
+    begin
+    result := false;
+    end;
+
+  end;
+end;
+
+function postEstoqueMovimentacao(estoqueMovimentacao:TEstoqueMovimentacao):Boolean;
+var
+  venda:string;
+  jsonResponse:string;
+begin
+  try
+  estoqueMovimentacao.loja := codLoja;
+  venda := uJsonUtils.DelphiObjectToJson(estoqueMovimentacao);
+
+  jsonResponse := APIPost('/estoqueMovimentacao',venda);
+
+  if jsonResponse = '{"message":"SINCRONIZADO"}' then
+  begin
+  result := true;
+  end
+  else
+  begin
+    result := false;
+  end;
+  except
+  on E:Exception do
+  begin
+  result := false;
+  end;
+
+  end;
+end;
+end.
+

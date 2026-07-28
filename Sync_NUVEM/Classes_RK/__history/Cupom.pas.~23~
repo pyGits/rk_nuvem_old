@@ -1,0 +1,384 @@
+unit Cupom;
+
+interface
+uses Funcoes;
+
+type TCupom = class
+  private
+    Fxml_cancelamento: string;
+    Fnome_consumidor: string;
+    Fvalor_total: Real;
+    Fhora: TDateTime;
+    Fcodigo_cliente: string;
+    Fcancelado: integer;
+    Fcodigo: string;
+    Fvendedor: string;
+    Fcaixa: string;
+    Fnumero: string;
+    Fxml_venda: string;
+    Fcpf_consumidor: string;
+    Fqtde_item: integer;
+    Fvalor_acrescimo: Real;
+    Fvalor_desconto: Real;
+    Fdata: TDate;
+    Floja: string;
+    procedure Setcaixa(const Value: string);
+    procedure Setcancelado(const Value: integer);
+    procedure Setcodigo(const Value: string);
+    procedure Setcodigo_cliente(const Value: string);
+    procedure Setcpf_consumidor(const Value: string);
+    procedure Setdata(const Value: TDate);
+    procedure Sethora(const Value: TDateTime);
+    procedure Setnome_consumidor(const Value: string);
+    procedure Setnumero(const Value: string);
+    procedure Setqtde_item(const Value: integer);
+    procedure Setvalor_acrescimo(const Value: Real);
+    procedure Setvalor_desconto(const Value: Real);
+    procedure Setvalor_total(const Value: Real);
+    procedure Setvendedor(const Value: string);
+    procedure Setxml_cancelamento(const Value: string);
+    procedure Setxml_venda(const Value: string);
+    procedure Setloja(const Value: string);
+  public
+  property loja:string read Floja write Setloja;
+  property codigo:string read Fcodigo write Setcodigo;
+  property numero:string read Fnumero write Setnumero;
+  property data:TDate read Fdata write Setdata;
+  property hora:TDateTime read Fhora write Sethora;
+  property caixa:string read Fcaixa write Setcaixa;
+  property qtde_item:integer read Fqtde_item write Setqtde_item;
+  property valor_desconto:Real read Fvalor_desconto write Setvalor_desconto;
+  property valor_acrescimo:Real read Fvalor_acrescimo write Setvalor_acrescimo;
+  property valor_total:Real read Fvalor_total write Setvalor_total;
+  property codigo_cliente:string read Fcodigo_cliente write Setcodigo_cliente;
+  property cancelado:integer read Fcancelado write Setcancelado;
+  property cpf_consumidor:string read Fcpf_consumidor write Setcpf_consumidor;
+  property nome_consumidor:string read Fnome_consumidor write Setnome_consumidor;
+  property vendedor:string read Fvendedor write Setvendedor;
+  property xml_venda:string read Fxml_venda write Setxml_venda;
+  property xml_cancelamento:string read Fxml_cancelamento write Setxml_cancelamento;
+end;
+
+
+type TCupomItem = class
+  private
+    Fvalor_unitario: real;
+    Fvalor_total: real;
+    Fcancelado: integer;
+    Fcodigo: string;
+    Fcaixa: string;
+    Fnumero: string;
+    Fqtde: Real;
+    Fitem: integer;
+    Funidade: string;
+    Fvalor_custo: real;
+    Fvalor_custo_total: Real;
+    Fvalor_acrescimo: real;
+    Fvalor_desconto: real;
+    Fdata: TDate;
+    Fcodigo_cupom: string;
+    Fcodigo_produto: string;
+    procedure Setcaixa(const Value: string);
+    procedure Setcancelado(const Value: integer);
+    procedure Setcodigo(const Value: string);
+    procedure Setdata(const Value: TDate);
+    procedure Setitem(const Value: integer);
+    procedure Setnumero(const Value: string);
+    procedure Setqtde(const Value: Real);
+    procedure Setunidade(const Value: string);
+    procedure Setvalor_acrescimo(const Value: real);
+    procedure Setvalor_custo(const Value: real);
+    procedure Setvalor_custo_total(const Value: Real);
+    procedure Setvalor_desconto(const Value: real);
+    procedure Setvalor_total(const Value: real);
+    procedure Setvalor_unitario(const Value: real);
+    procedure Setcodigo_cupom(const Value: string);
+    procedure Setcodigo_produto(const Value: string);
+  public
+  property loja:string;
+  property codigo:string read Fcodigo write Setcodigo;
+  property codigo_cupom:string read Fcodigo_cupom write Setcodigo_cupom;
+  property numero:string read Fnumero write Setnumero;
+  property data:TDate read Fdata write Setdata;
+  property caixa:string read Fcaixa write Setcaixa;
+
+  property codigo_produto:string read Fcodigo_produto write Setcodigo_produto;
+  property item:integer read Fitem write Setitem;
+  property unidade:string read Funidade write Setunidade;
+  property qtde:Real read Fqtde write Setqtde;
+  property valor_unitario:real read Fvalor_unitario write Setvalor_unitario;
+  property valor_desconto:real read Fvalor_desconto write Setvalor_desconto;
+  property valor_acrescimo:real read Fvalor_acrescimo write Setvalor_acrescimo;
+  property valor_total:real read Fvalor_total write Setvalor_total;
+  property cancelado:integer read Fcancelado write Setcancelado;
+  property valor_custo:real read Fvalor_custo write Setvalor_custo;
+  property valor_custo_total:Real read Fvalor_custo_total write Setvalor_custo_total;
+
+
+
+end;
+
+
+type TCupomForma = class
+  private
+    Fvalor: real;
+    Fcodigo_cupom: string;
+    Fcancelado: Integer;
+    Fcodigo: string;
+    Ffinalizadora: string;
+    Fcaixa: string;
+    Fprestacao: integer;
+    Ftipo: integer;
+    Fvalor_troco: real;
+    Fdata: TDate;
+    procedure Setcaixa(const Value: string);
+    procedure Setcancelado(const Value: Integer);
+    procedure Setcodigo(const Value: string);
+    procedure Setcodigo_cupom(const Value: string);
+    procedure Setdata(const Value: TDate);
+    procedure Setfinalizadora(const Value: string);
+    procedure Setprestacao(const Value: integer);
+    procedure Settipo(const Value: integer);
+    procedure Setvalor(const Value: real);
+    procedure Setvalor_troco(const Value: real);
+  published
+  property codigo:string read Fcodigo write Setcodigo;
+  property data:TDate read Fdata write Setdata;
+  property caixa:string read Fcaixa write Setcaixa;
+  property codigo_cupom:string read Fcodigo_cupom write Setcodigo_cupom;
+  property prestacao:integer read Fprestacao write Setprestacao;
+  property valor:real read Fvalor write Setvalor;
+  property finalizadora:string read Ffinalizadora write Setfinalizadora;
+  property tipo:integer read Ftipo write Settipo;
+  property valor_troco:real read Fvalor_troco write Setvalor_troco;
+  property cancelado:Integer read Fcancelado write Setcancelado;
+
+end;
+implementation
+
+{ TCupom }
+
+procedure TCupom.Setcaixa(const Value: string);
+begin
+  Fcaixa := Value;
+end;
+
+procedure TCupom.Setcancelado(const Value: integer);
+begin
+  Fcancelado := Value;
+end;
+
+procedure TCupom.Setcodigo(const Value: string);
+begin
+  Fcodigo := Value;
+end;
+
+procedure TCupom.Setcodigo_cliente(const Value: string);
+begin
+  Fcodigo_cliente := Value;
+end;
+
+procedure TCupom.Setcpf_consumidor(const Value: string);
+begin
+  Fcpf_consumidor := Value;
+end;
+
+procedure TCupom.Setdata(const Value: TDate);
+begin
+  Fdata := Value;
+end;
+
+procedure TCupom.Sethora(const Value: TDateTime);
+begin
+  Fhora := Value;
+end;
+
+procedure TCupom.Setloja(const Value: string);
+begin
+  Floja := Value;
+end;
+
+procedure TCupom.Setnome_consumidor(const Value: string);
+begin
+  Fnome_consumidor := Value;
+end;
+
+procedure TCupom.Setnumero(const Value: string);
+begin
+  Fnumero := Value;
+end;
+
+procedure TCupom.Setqtde_item(const Value: integer);
+begin
+  Fqtde_item := Value;
+end;
+
+procedure TCupom.Setvalor_acrescimo(const Value: Real);
+begin
+  Fvalor_acrescimo := Value;
+end;
+
+procedure TCupom.Setvalor_desconto(const Value: Real);
+begin
+  Fvalor_desconto := Value;
+end;
+
+procedure TCupom.Setvalor_total(const Value: Real);
+begin
+  Fvalor_total := Value;
+end;
+
+procedure TCupom.Setvendedor(const Value: string);
+begin
+  Fvendedor := Value;
+end;
+
+procedure TCupom.Setxml_cancelamento(const Value: string);
+begin
+  Fxml_cancelamento := Value;
+end;
+
+procedure TCupom.Setxml_venda(const Value: string);
+begin
+  Fxml_venda := Value;
+end;
+
+{ TCupomItem }
+
+procedure TCupomItem.Setcaixa(const Value: string);
+begin
+  Fcaixa := Value;
+end;
+
+procedure TCupomItem.Setcancelado(const Value: integer);
+begin
+  Fcancelado := Value;
+end;
+
+procedure TCupomItem.Setcodigo(const Value: string);
+begin
+  Fcodigo := Value;
+end;
+
+procedure TCupomItem.Setcodigo_cupom(const Value: string);
+begin
+  Fcodigo_cupom := Value;
+end;
+
+procedure TCupomItem.Setcodigo_produto(const Value: string);
+var
+  newCodigo:string;
+begin
+  newCodigo := removeZeroEsquerda(value);
+  
+  Fcodigo_produto := newCodigo;
+end;
+
+procedure TCupomItem.Setdata(const Value: TDate);
+begin
+  Fdata := Value;
+end;
+
+procedure TCupomItem.Setitem(const Value: integer);
+begin
+  Fitem := Value;
+end;
+
+procedure TCupomItem.Setnumero(const Value: string);
+begin
+  Fnumero := Value;
+end;
+
+procedure TCupomItem.Setqtde(const Value: Real);
+begin
+  Fqtde := Value;
+end;
+
+procedure TCupomItem.Setunidade(const Value: string);
+begin
+  Funidade := Value;
+end;
+
+procedure TCupomItem.Setvalor_acrescimo(const Value: real);
+begin
+  Fvalor_acrescimo := Value;
+end;
+
+procedure TCupomItem.Setvalor_custo(const Value: real);
+begin
+  Fvalor_custo := Value;
+end;
+
+procedure TCupomItem.Setvalor_custo_total(const Value: Real);
+begin
+  Fvalor_custo_total := Value;
+end;
+
+procedure TCupomItem.Setvalor_desconto(const Value: real);
+begin
+  Fvalor_desconto := Value;
+end;
+
+procedure TCupomItem.Setvalor_total(const Value: real);
+begin
+  Fvalor_total := Value;
+end;
+
+procedure TCupomItem.Setvalor_unitario(const Value: real);
+begin
+  Fvalor_unitario := Value;
+end;
+
+{ TCupomForma }
+
+procedure TCupomForma.Setcaixa(const Value: string);
+begin
+  Fcaixa := Value;
+end;
+
+procedure TCupomForma.Setcancelado(const Value: Integer);
+begin
+  Fcancelado := Value;
+end;
+
+procedure TCupomForma.Setcodigo(const Value: string);
+begin
+  Fcodigo := Value;
+end;
+
+procedure TCupomForma.Setcodigo_cupom(const Value: string);
+begin
+  Fcodigo_cupom := Value;
+end;
+
+procedure TCupomForma.Setdata(const Value: TDate);
+begin
+  Fdata := Value;
+end;
+
+procedure TCupomForma.Setfinalizadora(const Value: string);
+begin
+  Ffinalizadora := Value;
+end;
+
+procedure TCupomForma.Setprestacao(const Value: integer);
+begin
+  Fprestacao := Value;
+end;
+
+procedure TCupomForma.Settipo(const Value: integer);
+begin
+  Ftipo := Value;
+end;
+
+procedure TCupomForma.Setvalor(const Value: real);
+begin
+  Fvalor := Value;
+end;
+
+procedure TCupomForma.Setvalor_troco(const Value: real);
+begin
+  Fvalor_troco := Value;
+end;
+
+end.

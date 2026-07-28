@@ -1,0 +1,164 @@
+unit uDmProduto;
+
+interface
+
+uses
+vcl.dialogs,
+  System.SysUtils, System.Classes,Produto,Conexao, Data.DB, MemDS, DBAccess, Uni,System.Generics.collections,
+  FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Param,
+  FireDAC.Stan.Error, FireDAC.DatS, FireDAC.Phys.Intf, FireDAC.DApt.Intf,
+  FireDAC.Stan.Async, FireDAC.DApt, FireDAC.Comp.DataSet, FireDAC.Comp.Client,uConexao,
+  FireDAC.Phys.IBDef, FireDAC.Phys, FireDAC.Phys.IBBase, FireDAC.Phys.IB,Funcoes;
+
+type
+  TdmProduto = class(TDataModule)
+    UniQuery1: TUniQuery;
+    qrProdutoInsertUpdate: TUniQuery;
+    qrProduto: TFDQuery;
+    FDPhysIBDriverLink1: TFDPhysIBDriverLink;
+  private
+
+  public
+    function InsertProduto(listProduto:TObjectList<TProduto>):Boolean;
+    function InsertProdutoBulk(produtos:TObjectList<TProduto>):Boolean;
+  end;
+
+var
+  dmProduto: TdmProduto;
+
+implementation
+
+{%CLASSGROUP 'Vcl.Controls.TControl'}
+
+{$R *.dfm}
+
+{ TdmProduto }
+
+function TdmProduto.InsertProduto(listProduto:TObjectList<TProduto>): Boolean;
+var
+  I: Integer;
+  oProduto:TProduto;
+begin
+  i :=0;
+  qrProduto.Params.ArraySize := listProduto.Count;
+
+  for oProduto in listProduto do
+    begin
+      with oProduto do
+      begin
+         qrProduto.Params.ParamByName('CODIGO').AsString := Codigo;
+         qrProduto.ParamByName('CODIGO_BARRAS').AsString := CodigoBarras;
+         qrProduto.ParamByName('DESCRICAO').AsString := Descricao;
+         qrProduto.ParamByName('GRUPO').AsString := Grupo;
+         qrProduto.ParamByName('SUBGRUPO').AsString := Subgrupo;
+         qrProduto.ParamByName('FORNECEDOR').AsString := Fornecedor;
+         qrProduto.ParamByName('Tributacao').AsString := Tributacao;
+         qrProduto.ParamByName('NCM').AsString := NCM;
+         qrProduto.ParamByName('CEST').AsString := CEST;
+         qrProduto.ParamByName('Validade').AsString := Validade;//
+         qrProduto.ParamByName('BALANCA').AsInteger := getBalanca;
+         qrProduto.ParamByName('Fracionado').AsInteger := getFracionado;
+         qrProduto.ParamByName('INATIVO').AsInteger := getInativo;
+         qrProduto.ParamByName('DIVERSOS').AsInteger := getDiversos;
+         qrProduto.ParamByName('CUSTO').AsFloat := Custo;
+         qrProduto.ParamByName('PRECO').AsFloat := Preco;
+         qrProduto.ParamByName('MARGEM').AsFloat := Margem;
+         qrProduto.ParamByName('ESTOQUE').AsFloat := Estoque;
+         qrProduto.ParamByName('Unidade').AsString := Unidade;
+         qrProduto.ParamByName('DATA_ALTERADO').asDate := date;
+         qrProduto.ParamByName('DATA_CADASTRO').asDate := date;
+         qrProduto.ParamByName('PENDENTE').AsInteger := 1;
+         qrProduto.ParamByName('ESTOQUE_MINIMO').AsFloat := estoqueMinimo;
+         qrProduto.ParamByName('ESTOQUE_MAXIMO').AsFloat := estoqueMaximo;
+         try
+          qrProduto.ExecSQL;
+         except
+          on E:Exception do
+          begin
+            raise Exception.Create('Erro ao inserir produto: '+ e.Message + ' ' + Codigo);
+          end;
+
+         end;
+
+         inc(i);
+      end;
+
+
+    end;
+end;
+
+function TdmProduto.InsertProdutoBulk(
+  produtos: TObjectList<TProduto>): Boolean;
+var
+  Query:TFDquery;
+  I:integer;
+  countnotnil:integer;
+begin
+  Query := TConexao.GetInstance.CreateQuery;
+
+Query.SQL.Text :=
+  'UPDATE OR INSERT INTO PRODUTO (' +
+  'CODIGO, CODIGO_BARRAS, DESCRICAO, GRUPO, SUBGRUPO, FORNECEDOR, TRIBUTACAO, NCM, CEST, VALIDADE, ' +
+  'BALANCA, FRACIONADO, CUSTO, PRECO, MARGEM, ESTOQUE, UNIDADE, INATIVO, DIVERSOS, DATA_CADASTRO, ' +
+  'DATA_ALTERADO, PENDENTE, ESTOQUE_MINIMO, ESTOQUE_MAXIMO) ' +
+  'VALUES (' +
+  ':CODIGO, :CODIGO_BARRAS, :DESCRICAO, :GRUPO, :SUBGRUPO, :FORNECEDOR, :TRIBUTACAO, :NCM, :CEST, :VALIDADE, ' +
+  ':BALANCA, :FRACIONADO, :CUSTO, :PRECO, :MARGEM, :ESTOQUE, :UNIDADE, :INATIVO, :DIVERSOS, :DATA_CADASTRO, ' +
+  ':DATA_ALTERADO, :PENDENTE, :ESTOQUE_MINIMO, :ESTOQUE_MAXIMO)';
+
+  CountNotNil := 0;
+  for i := 0 to produtos.Count - 1 do
+    if Assigned(produtos[i]) then
+      Inc(CountNotNil);
+
+
+  query.Params.ArraySize := produtos.Count;
+
+
+  for i := 0 to query.Params.ArraySize-1 do
+  begin
+    with produtos[i] do
+    begin
+      if produtos[i] <> nil then
+      begin
+        Query.ParamByName('CODIGO').AsStrings[i]        := produtos[i].Codigo;
+        Query.ParamByName('CODIGO_BARRAS').AsStrings[i] := produtos[i].CodigoBarras;
+        Query.ParamByName('DESCRICAO').AsStrings[i]     := produtos[i].Descricao;
+        Query.ParamByName('GRUPO').AsStrings[i]         := produtos[i].Grupo;
+        Query.ParamByName('SUBGRUPO').AsStrings[i]      := produtos[i].Subgrupo;
+        Query.ParamByName('FORNECEDOR').AsStrings[i]    := produtos[i].Fornecedor;
+        Query.ParamByName('TRIBUTACAO').AsStrings[i]    := produtos[i].Tributacao;
+        Query.ParamByName('NCM').AsStrings[i]           := produtos[i].NCM;
+        Query.ParamByName('CEST').AsStrings[i]          := produtos[i].CEST;
+        Query.ParamByName('VALIDADE').AsStrings[i]      := produtos[i].Validade;
+
+        Query.ParamByName('BALANCA').AsIntegers[i]      := produtos[i].getBalanca;
+        Query.ParamByName('FRACIONADO').AsIntegers[i]   := produtos[i].getFracionado;
+        Query.ParamByName('INATIVO').AsIntegers[i]      := produtos[i].getInativo;
+        Query.ParamByName('DIVERSOS').AsIntegers[i]     := produtos[i].getDiversos;
+
+        Query.ParamByName('CUSTO').AsFloats[i]          := produtos[i].Custo;
+        Query.ParamByName('PRECO').AsFloats[i]          := produtos[i].Preco;
+        Query.ParamByName('MARGEM').AsFloats[i]         := produtos[i].Margem;
+        Query.ParamByName('ESTOQUE').AsFloats[i]        := produtos[i].Estoque;
+
+        Query.ParamByName('UNIDADE').AsStrings[i]       := produtos[i].Unidade;
+        Query.ParamByName('DATA_ALTERADO').AsDates[i]   := Iso8601ToDate(produtos[i].DataAlterado);
+        Query.ParamByName('DATA_CADASTRO').AsDates[i]  := Iso8601ToDate(produtos[i].DataCadastro);
+        Query.ParamByName('PENDENTE').AsIntegers[i]    := 1;
+        Query.ParamByName('ESTOQUE_MINIMO').AsFloats[i] := produtos[i].EstoqueMinimo;
+        Query.ParamByName('ESTOQUE_MAXIMO').AsFloats[i] := produtos[i].EstoqueMaximo;
+
+
+      end;
+
+    end;
+  end;
+
+
+
+
+  query.Execute(query.Params.ArraySize,0);
+end;
+
+end.

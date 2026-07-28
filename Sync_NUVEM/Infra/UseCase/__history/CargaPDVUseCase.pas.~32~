@@ -1,0 +1,42 @@
+unit CargaPDVUseCase;
+
+interface
+uses CaixaRepository,CaixaModel,System.Generics.Collections,ClienteAPIRepository,ClienteModel;
+type TCargaPDVUseCase = class
+  private
+  FCaixaRepository:ICaixaRepository;
+  FClienteApiRepository:IClienteApiRepository;
+//  FClientePDVRepository:IClientePDVRepository;
+  public
+  procedure EnviarCargaPDV;
+  constructor create;
+end;
+
+implementation
+
+{ TCargaPDVUseCase }
+
+constructor TCargaPDVUseCase.create;
+begin
+FCaixaRepository := TCaixaRepository.create;
+FClienteApiRepository := TClienteApiRepository.create;
+//FClientePDVRepository := TClientePDVFBRepository.create;
+end;
+
+procedure TCargaPDVUseCase.EnviarCargaPDV;
+var
+  caixas:TObjectList<TCaixaModel>;
+  caixa:TCaixaModel;
+  clientes:TObjectList<TClienteModel>;
+begin
+  caixas := FCaixaRepository.getAll;
+  clientes := FClienteApiRepository.getAll;
+
+
+  for caixa in caixas do
+  begin
+    FClienteRepositoryPDV.InsertBulk(clientes);
+  end;
+end;
+
+end.

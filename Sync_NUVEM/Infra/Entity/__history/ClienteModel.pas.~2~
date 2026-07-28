@@ -1,0 +1,10 @@
+unit ClienteModel;
+
+interface
+type TClienteModel = class
+
+end;
+
+implementation
+
+end.

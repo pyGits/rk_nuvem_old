@@ -1,0 +1,53 @@
+unit ApiRequest;
+
+interface
+
+uses
+  REST.Client, REST.Types, System.JSON, System.Net.HttpClient,IPPeerCommon;
+
+type
+  TApiRequest = class
+  private
+    FRESTClient: TRESTClient;
+  public
+    constructor Create(APIUrl: string);
+    destructor Destroy; override;
+    function GetRequest(RequestPath: string): TJSONValue;
+  end;
+
+implementation
+
+constructor TApiRequest.Create(APIUrl: string);
+begin
+  FRESTClient := TRESTClient.Create(nil);
+  FRESTClient.BaseURL := APIUrl;
+end;
+
+destructor TApiRequest.Destroy;
+begin
+  FRESTClient.Free;
+  inherited;
+end;
+
+function TApiRequest.GetRequest(RequestPath: string): TJSONValue;
+var
+  RESTRequest: TRESTRequest;
+  RESTResponse: TRESTResponse;
+begin
+  RESTRequest := TRESTRequest.Create(nil);
+  RESTResponse := TRESTResponse.Create(nil);
+  try
+    RESTRequest.Client := FRESTClient;
+    RESTRequest.Method := rmGET;
+    RESTRequest.Resource := RequestPath;
+    RESTRequest.Response := RESTResponse;
+    RESTRequest.Execute;
+    Result := RESTResponse.JSONValue;
+  finally
+    RESTRequest.Free;
+    RESTResponse.Free;
+  end;
+end;
+
+end.
+

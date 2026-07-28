@@ -1,0 +1,102 @@
+unit NaoFiscal;
+
+interface
+type TNaoFiscal = class
+  private
+    FValor: real;
+    FHora: TTime;
+    FDescricao: string;
+    Findice: string;
+
+    FVendedor: integer;
+    Fdata: TDate;
+    Fcaixa: integer;
+    Fcodigo: string;
+    Floja: string;
+    Ffzcod: string;
+
+
+    procedure Setdata(const Value: TDate);
+
+    procedure SetDescricao(const Value: string);
+    procedure SetHora(const Value: TTime);
+    procedure Setindice(const Value: string);
+    procedure SetValor(const Value: real);
+    procedure SetVendedor(const Value: integer);
+    procedure Setcaixa(const Value: integer);
+    procedure Setcodigo(const Value: string);
+    procedure Setloja(const Value: string);
+    procedure Setfzcod(const Value: string);
+  public
+  property codigo:string read Fcodigo write Setcodigo;
+  property data:TDate read Fdata write Setdata;
+  property indice :string read Findice write Setindice;
+  property Descricao:string read FDescricao write SetDescricao;
+  property Valor:real read FValor write SetValor;
+  property Hora:TTime read FHora write SetHora;
+  property Vendedor:integer read FVendedor write SetVendedor;
+  property fzcod:string read Ffzcod write Setfzcod;
+
+  property caixa:integer read Fcaixa write Setcaixa;
+  property loja:string read Floja write Setloja;
+end;
+
+implementation
+
+{ TNaoFiscal }
+
+
+procedure TNaoFiscal.Setcaixa(const Value: integer);
+begin
+  Fcaixa := Value;
+end;
+
+procedure TNaoFiscal.Setcodigo(const Value: string);
+begin
+  Fcodigo := Value;
+end;
+
+procedure TNaoFiscal.Setdata(const Value: TDate);
+begin
+  Fdata := Value;
+end;
+
+
+procedure TNaoFiscal.SetDescricao(const Value: string);
+begin
+  FDescricao := Value;
+end;
+
+
+
+procedure TNaoFiscal.Setfzcod(const Value: string);
+begin
+  Ffzcod := Value;
+end;
+
+procedure TNaoFiscal.SetHora(const Value: TTime);
+begin
+  FHora := Value;
+end;
+
+procedure TNaoFiscal.Setindice(const Value: string);
+begin
+  Findice := Value;
+end;
+
+procedure TNaoFiscal.Setloja(const Value: string);
+begin
+  Floja := Value;
+end;
+
+procedure TNaoFiscal.SetValor(const Value: real);
+begin
+  FValor := Value;
+end;
+
+procedure TNaoFiscal.SetVendedor(const Value: integer);
+begin
+  FVendedor := Value;
+end;
+
+end.

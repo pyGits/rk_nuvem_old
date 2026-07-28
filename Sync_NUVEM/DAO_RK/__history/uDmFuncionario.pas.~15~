@@ -1,0 +1,60 @@
+unit uDmFuncionario;
+
+interface
+
+uses
+  System.SysUtils, System.Classes,Conexao, Data.DB, MemDS, DBAccess, Uni,Funcionario;
+
+type
+  TdmFuncionario = class(TDataModule)
+    qrFuncionarioInsert: TUniQuery;
+  private
+    { Private declarations }
+  public
+    function InsertFuncionario(oFuncionario:TFuncionario):Boolean;
+  end;
+
+var
+  dmFuncionario: TdmFuncionario;
+
+implementation
+
+{%CLASSGROUP 'Vcl.Controls.TControl'}
+
+{$R *.dfm}
+
+{ TdmFuncionario }
+
+function TdmFuncionario.InsertFuncionario(oFuncionario: TFuncionario): Boolean;
+begin
+with qrFuncionarioInsert,oFuncionario do
+begin
+  Close;
+  SQL.Clear;
+  SQL.Add('INSERT INTO FUNCIONARIO(CODIGO,NOME,APELIDO,EMAIL,CPF,CARGO,SENHA,COMISSAO)');
+  SQL.Add('VALUES (:CODIGO,:NOME,:APELIDO,:EMAIL,:CPF,:CARGO,:SENHA,:COMISSAO)');
+
+  Params.ParamByName('CODIGO').AsString := codigo;
+  Params.ParamByName('NOME').AsString := nome;
+  Params.ParamByName('APELIDO').AsString := apelido;
+  Params.ParamByName('EMAIL').AsString := email;
+  Params.ParamByName('CPF').AsString := cpf;
+  Params.ParamByName('CARGO').AsInteger := cargo;
+  Params.ParamByName('SENHA').AsString := senha;
+  Params.ParamByName('COMISSAO').AsFloat := comissao;
+
+  try
+    ExecSQL;
+  except
+  on E:Exception do
+  begin
+    raise Exception.Create('Erro ao inserir funcionario: '+ E.Message );
+  end;
+
+  end;
+
+
+end;
+end;
+
+end.

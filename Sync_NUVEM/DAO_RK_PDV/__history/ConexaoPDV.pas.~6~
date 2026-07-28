@@ -1,0 +1,36 @@
+unit ConexaoPDV;
+
+interface
+
+uses
+  System.SysUtils, System.Classes, Data.DB, DBAccess, Uni, UniProvider,
+  InterBaseUniProvider, DASQLMonitor, UniSQLMonitor;
+
+type
+  TDataModule1 = class(TDataModule)
+    ConexaoPDV: TUniConnection;
+    InterBaseUniProvider1: TInterBaseUniProvider;
+    UniSQLMonitor1: TUniSQLMonitor;
+  private
+    { Private declarations }
+  public
+    function configurarIP(IP:string):Boolean;
+  end;
+
+var
+  DataModule1: TDataModule1;
+
+implementation
+
+{%CLASSGROUP 'Vcl.Controls.TControl'}
+
+{$R *.dfm}
+
+{ TDataModule1 }
+
+function TDataModule1.configurarIP(IP: string): Boolean;
+begin
+
+end;
+
+end.

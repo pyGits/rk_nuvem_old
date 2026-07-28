@@ -1,0 +1,10 @@
+object dmFuncionarioPDV: TdmFuncionarioPDV
+  OldCreateOrder = False
+  Height = 295
+  Width = 411
+  object qrInserirFuncionarioPDV: TUniQuery
+    Connection = uDmConexaoPDV.ConexaoPDV
+    Left = 192
+    Top = 128
+  end
+end

@@ -52,6 +52,13 @@ echo "==> 4/6 Ajustando o .env para producao"
 # Portas reais e agendador SEFAZ ligado (o do pm2 acabou de parar, entao agora
 # nao ha risco de duas instancias sincronizando a mesma loja).
 sed -i 's|^HTTP_PORT=.*|HTTP_PORT=80|; s|^HTTPS_PORT=.*|HTTPS_PORT=443|; s|^SEFAZ_SCHEDULER_ENABLED=.*|SEFAZ_SCHEDULER_ENABLED=true|' .env
+# A porta legada da API tem que voltar a 3000 em producao: e o endereco compilado
+# no agente RKNuvem de cada loja.
+if grep -q '^API_PORT=' .env; then
+  sed -i 's|^API_PORT=.*|API_PORT=3000|' .env
+else
+  echo 'API_PORT=3000' >> .env
+fi
 
 echo "==> 5/6 Subindo os containers"
 docker compose up -d
@@ -66,6 +73,10 @@ verifica() {
 }
 verifica https://rknuvem.com.br/                          200
 verifica https://rknuvem.com.br/api/produtos              401
+# Porta legada consumida pelo agente RKNuvem das lojas. Se esta cair, as lojas
+# param de receber carga e de subir venda — e o agente so reclama no log local,
+# nada aparece aqui. Verificar sempre.
+verifica https://rknuvem.com.br:3000/api/produtos         401
 verifica https://homologacao.rknuvem.com.br/              200
 verifica https://vps47862.publiccloud.com.br/privacidade  200
 

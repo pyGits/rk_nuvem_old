@@ -1,0 +1,43 @@
+unit Utils;
+
+interface
+
+uses
+  System.IniFiles, System.SysUtils,VCL.forms;
+
+function ReadIniString( Section, Ident, Default: string): string;
+procedure WriteIniString( Section, Ident, Value: string);
+
+
+implementation
+
+function ReadIniString( Section, Ident, Default: string): string;
+var
+  IniFile: TIniFile;
+  FileName:string;
+begin
+  FileName := ExtractFilePath(Application.ExeName)+'/config.ini';
+  IniFile := TIniFile.Create(FileName);
+  try
+    Result := IniFile.ReadString(Section, Ident, Default);
+  finally
+    IniFile.Free;
+  end;
+end;
+
+procedure WriteIniString( Section, Ident, Value: string);
+var
+  IniFile: TIniFile;
+  FileName:string;
+begin
+  FileName := ExtractFilePath(Application.ExeName)+'/config.ini';
+  IniFile := TIniFile.Create(FileName);
+  try
+    IniFile.WriteString(Section, Ident, Value);
+  finally
+    IniFile.Free;
+  end;
+end;
+
+end.
+

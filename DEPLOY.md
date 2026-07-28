@@ -8,16 +8,27 @@ proxy na frente dele muda.
 
 ```
 Internet
-   ├─ :80  → redirect 443 (exceto /.well-known/acme-challenge)
-   └─ :443 → container "web" (nginx, network_mode: host)
-               ├─ rknuvem.com.br              → dist do Vue (na imagem)
-               │     └─ /api/                 → 127.0.0.1:3001 → container "backend"
-               ├─ homologacao.rknuvem.com.br  → bind mount do disco do host
-               └─ vps47862.publiccloud...     → 127.0.0.1:3333 (dediet-api, pm2)
-                                                 /privacidade → bind mount
+   ├─ :80   → redirect 443 (exceto /.well-known/acme-challenge)
+   ├─ :443  → container "web" (nginx, network_mode: host)
+   │            ├─ rknuvem.com.br              → dist do Vue (na imagem)
+   │            │     └─ /api/                 → 127.0.0.1:3001 → container "backend"
+   │            ├─ homologacao.rknuvem.com.br  → bind mount do disco do host
+   │            └─ vps47862.publiccloud...     → 127.0.0.1:3333 (dediet-api, pm2)
+   │                                              /privacidade → bind mount
+   └─ :3000 → container "web" (mesmo nginx), porta legada da API
+                └─ /api/                       → 127.0.0.1:3001 → container "backend"
 
 container "backend" → PostgreSQL do host (host.docker.internal:5432)
 ```
+
+**Por que a porta 3000 existe:** o agente RKNuvem (Delphi, em `Sync_NUVEM/`) roda
+na retaguarda de cada loja e busca carga e sobe venda em
+`https://rknuvem.com.br:3000/api`. O endereço é uma constante compilada no
+executável (`API_URL`, em `Sync_NUVEM/API/uAPIRequest.pas`), e há muitos clientes
+instalados — a porta não pode mudar. Antes do Docker era o próprio Node que
+terminava TLS e escutava nela; hoje quem atende é o nginx, que faz proxy para o
+mesmo backend. Esse vhost é o único na porta 3000 e portanto o `default_server`
+dela, o que importa porque o Indy antigo do Delphi pode não enviar SNI.
 
 **Por que `network_mode: host`:** a API do dediet escuta apenas em
 `127.0.0.1:3333`, e um container em rede bridge não alcança o loopback do host.
@@ -105,6 +116,9 @@ docker compose ps
 docker compose logs -f backend
 docker compose logs -f web
 
+# As lojas estão enxergando a API? (401 = nginx e backend no ar, só falta token)
+curl -sk -o /dev/null -w '%{http_code}\n' https://rknuvem.com.br:3000/api/produtos
+
 # migrations
 docker compose exec backend npx knex migrate:latest --knexfile knexfile.ts
 
@@ -131,9 +145,24 @@ docker compose -f docker-compose.yml -f docker-compose.build.yml build
 Testar na VPS sem derrubar produção (portas 8080/8443):
 
 ```bash
-sed -i 's|^HTTP_PORT=.*|HTTP_PORT=8080|; s|^HTTPS_PORT=.*|HTTPS_PORT=8443|' .env
+sed -i 's|^HTTP_PORT=.*|HTTP_PORT=8080|; s|^HTTPS_PORT=.*|HTTPS_PORT=8443|; s|^API_PORT=.*|API_PORT=8000|' .env
 docker compose up -d
 ```
+
+Mude `API_PORT` junto: em 3000 o container de teste brigaria pela porta com o
+que está atendendo as lojas. Antes de considerar a validação encerrada, volte
+`API_PORT=3000`.
+
+### Quando as lojas param de sincronizar
+
+O agente RKNuvem não avisa ninguém quando falha — ele registra em
+`Logs\sync_erros_<data>.txt`, na pasta do executável na retaguarda da loja. Se o
+cliente reclamar que a carga não chega ou que a venda não sobe, peça esse
+arquivo. `Socket Error # 10061 Connection refused` significa que nada está
+escutando na porta 3000 da VPS (foi o que aconteceu na migração para Docker: o
+backend deixou de ser publicado externamente e ninguém assumiu a porta).
+Confirme com o `curl` da porta 3000 acima; timeout em vez de recusa aponta para
+firewall, não para container fora do ar.
 
 > A VPS tem 1,7 GB de RAM e já opera com swap alto. Se um container falhar com
 > `cannot allocate memory` ao criar a rede, rode `sync; echo 3 > /proc/sys/vm/drop_caches`

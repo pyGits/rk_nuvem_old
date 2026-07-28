@@ -1,0 +1,14 @@
+object dmProdutoPDV: TdmProdutoPDV
+  OldCreateOrder = False
+  Height = 324
+  Width = 404
+  object qrProdutoPDVInsert: TUniQuery
+    Connection = uDmConexaoPDV.ConexaoPDV
+    Left = 184
+    Top = 144
+  end
+  object qrProdutoPDV: TFDQuery
+    Left = 192
+    Top = 152
+  end
+end

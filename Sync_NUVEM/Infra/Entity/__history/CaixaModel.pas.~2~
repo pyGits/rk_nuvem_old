@@ -1,0 +1,10 @@
+unit CaixaModel;
+
+interface
+type TCaixaModel = class
+
+end;
+
+implementation
+
+end.

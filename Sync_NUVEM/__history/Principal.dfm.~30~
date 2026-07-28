@@ -1,0 +1,70 @@
+object frmPrincipal: TfrmPrincipal
+  Left = 0
+  Top = 0
+  Caption = 'Sincronizar RK Nuvem'
+  ClientHeight = 509
+  ClientWidth = 629
+  Color = clBtnFace
+  Font.Charset = DEFAULT_CHARSET
+  Font.Color = clWindowText
+  Font.Height = -11
+  Font.Name = 'Tahoma'
+  Font.Style = []
+  OldCreateOrder = False
+  Position = poScreenCenter
+  OnClose = FormClose
+  OnCreate = FormCreate
+  OnShow = FormShow
+  PixelsPerInch = 96
+  TextHeight = 13
+  object memLog: TMemo
+    Left = 0
+    Top = 0
+    Width = 629
+    Height = 488
+    Align = alClient
+    TabOrder = 0
+    ExplicitTop = -104
+  end
+  object edtToken: TEdit
+    Left = 0
+    Top = 488
+    Width = 629
+    Height = 21
+    Align = alBottom
+    TabOrder = 1
+  end
+  object tmInicializa: TTimer
+    Enabled = False
+    OnTimer = tmInicializaTimer
+    Left = 240
+    Top = 224
+  end
+  object tmCarga: TTimer
+    Enabled = False
+    Interval = 5000
+    OnTimer = tmCargaTimer
+    Left = 336
+    Top = 200
+  end
+  object tmSubidaVenda: TTimer
+    Interval = 5000
+    OnTimer = tmSubidaVendaTimer
+    Left = 312
+    Top = 264
+  end
+  object TrayIcon1: TTrayIcon
+    PopupMenu = PopupMenu1
+    OnDblClick = TrayIcon1DblClick
+    Left = 400
+    Top = 256
+  end
+  object PopupMenu1: TPopupMenu
+    Left = 296
+    Top = 240
+    object S1: TMenuItem
+      Caption = 'Sair'
+      OnClick = S1Click
+    end
+  end
+end

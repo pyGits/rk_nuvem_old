@@ -1,0 +1,142 @@
+unit ClienteModel;
+
+interface
+type TClienteModel = class
+  private
+    Fcodigo: string;
+    Fcnpjcpf: string;
+    Fnome: string;
+    Fperc_desconto: real;
+    Fobservacao: string;
+    Ffantasia: string;
+    Fbairro: string;
+    Femail: string;
+    Fuf: string;
+    Fcep: string;
+    Ftelefone2: string;
+    Fcomplemento: string;
+    Ftelefone1: string;
+    Fcidade: string;
+    Fendereco: string;
+    Fcelular: string;
+    procedure Setcnpjcpf(const Value: string);
+    procedure Setcodigo(const Value: string);
+    procedure Setnome(const Value: string);
+    procedure Setperc_desconto(const Value: real);
+    procedure Setbairro(const Value: string);
+    procedure Setcep(const Value: string);
+    procedure Setcidade(const Value: string);
+    procedure Setcomplemento(const Value: string);
+    procedure Setemail(const Value: string);
+    procedure Setendereco(const Value: string);
+    procedure Setfantasia(const Value: string);
+    procedure Setobservacao(const Value: string);
+    procedure Settelefone1(const Value: string);
+    procedure Settelefone2(const Value: string);
+    procedure Setuf(const Value: string);
+    procedure Setcelular(const Value: string);
+  published
+  property codigo:string read Fcodigo write Setcodigo;
+  property nome:string read Fnome write Setnome;
+  property cnpjcpf:string read Fcnpjcpf write Setcnpjcpf;
+  property perc_desconto:real read Fperc_desconto write Setperc_desconto;
+  property fantasia:string read Ffantasia write Setfantasia;
+  property observacao:string read Fobservacao write Setobservacao;
+  property telefone1:string read Ftelefone1 write Settelefone1;
+  property telefone2:string read Ftelefone2 write Settelefone2;
+  property email:string read Femail write Setemail;
+  property endereco:string read Fendereco write Setendereco;
+  property cidade:string read Fcidade write Setcidade;
+  property uf:string read Fuf write Setuf;
+  property cep:string read Fcep write Setcep;
+  property bairro:string read Fbairro write Setbairro;
+  property complemento:string read Fcomplemento write Setcomplemento;
+  property celular:string read Fcelular write Setcelular;
+
+end;
+
+implementation
+
+{ TClienteModel }
+
+procedure TClienteModel.Setbairro(const Value: string);
+begin
+  Fbairro := Value;
+end;
+
+procedure TClienteModel.Setcelular(const Value: string);
+begin
+  Fcelular := Value;
+end;
+
+procedure TClienteModel.Setcep(const Value: string);
+begin
+  Fcep := Value;
+end;
+
+procedure TClienteModel.Setcidade(const Value: string);
+begin
+  Fcidade := Value;
+end;
+
+procedure TClienteModel.Setcnpjcpf(const Value: string);
+begin
+  Fcnpjcpf := Value;
+end;
+
+procedure TClienteModel.Setcodigo(const Value: string);
+begin
+  Fcodigo := Value;
+end;
+
+procedure TClienteModel.Setcomplemento(const Value: string);
+begin
+  Fcomplemento := Value;
+end;
+
+procedure TClienteModel.Setemail(const Value: string);
+begin
+  Femail := Value;
+end;
+
+procedure TClienteModel.Setendereco(const Value: string);
+begin
+  Fendereco := Value;
+end;
+
+procedure TClienteModel.Setfantasia(const Value: string);
+begin
+  Ffantasia := Value;
+end;
+
+procedure TClienteModel.Setnome(const Value: string);
+begin
+  Fnome := Value;
+end;
+
+procedure TClienteModel.Setobservacao(const Value: string);
+begin
+  Fobservacao := Value;
+end;
+
+procedure TClienteModel.Setperc_desconto(const Value: real);
+begin
+  Fperc_desconto := Value;
+end;
+
+procedure TClienteModel.Settelefone1(const Value: string);
+begin
+  Ftelefone1 := Value;
+end;
+
+procedure TClienteModel.Settelefone2(const Value: string);
+begin
+  Ftelefone2 := Value;
+end;
+
+procedure TClienteModel.Setuf(const Value: string);
+begin
+  Fuf := Value;
+end;
+
+end.

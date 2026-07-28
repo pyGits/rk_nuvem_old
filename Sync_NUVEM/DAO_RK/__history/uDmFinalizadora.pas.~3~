@@ -1,0 +1,25 @@
+unit uDmFinalizadora;
+
+interface
+
+uses
+  System.SysUtils, System.Classes,Conexao;
+
+type
+  TdmFinalizadora = class(TDataModule)
+  private
+    { Private declarations }
+  public
+    { Public declarations }
+  end;
+
+var
+  dmFinalizadora: TdmFinalizadora;
+
+implementation
+
+{%CLASSGROUP 'Vcl.Controls.TControl'}
+
+{$R *.dfm}
+
+end.

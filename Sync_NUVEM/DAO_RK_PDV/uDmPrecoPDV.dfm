@@ -1,0 +1,32 @@
+object DmPrecoPDV: TDmPrecoPDV
+  OldCreateOrder = False
+  Height = 297
+  Width = 526
+  object qrPreco: TFDQuery
+    Connection = uDmConexaoPDV.FDConnection1
+    SQL.Strings = (
+      
+        'UPDATE ESTOQUE SET PRECO_VENDA=:PRECO_VENDA,CUSTO=:CUSTO WHERE C' +
+        'ODIGO =:CODIGO')
+    Left = 320
+    Top = 120
+    ParamData = <
+      item
+        Name = 'PRECO_VENDA'
+        ParamType = ptInput
+      end
+      item
+        Name = 'CUSTO'
+        DataType = ftBCD
+        Precision = 18
+        NumericScale = 3
+        ParamType = ptInput
+      end
+      item
+        Name = 'CODIGO'
+        DataType = ftString
+        ParamType = ptInput
+        Size = 6
+      end>
+  end
+end

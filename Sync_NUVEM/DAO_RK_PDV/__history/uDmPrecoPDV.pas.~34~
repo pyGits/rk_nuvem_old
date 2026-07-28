@@ -1,0 +1,86 @@
+unit uDmPrecoPDV;
+
+interface
+
+uses
+  System.SysUtils, System.Classes,ConexaoPDV, Data.DB, MemDS, DBAccess, Uni,Preco,System.Generics.collections,
+  FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Param,
+  FireDAC.Stan.Error, FireDAC.DatS, FireDAC.Phys.Intf, FireDAC.DApt.Intf,
+  FireDAC.Stan.Async, FireDAC.DApt, FireDAC.Comp.DataSet, FireDAC.Comp.Client;
+
+type
+  TDmPrecoPDV = class(TDataModule)
+    qrPrecoUpdate: TUniQuery;
+    qrPreco: TFDQuery;
+  private
+    { Private declarations }
+  public
+  function updatePreco(listPreco: TObjectList<TPreco>):boolean;
+  end;
+
+var
+  DmPrecoPDV: TDmPrecoPDV;
+
+implementation
+
+{%CLASSGROUP 'Vcl.Controls.TControl'}
+
+{$R *.dfm}
+
+{ TDataModule1 }
+
+function TDmPrecoPDV.updatePreco(listPreco: TObjectList<TPreco>): boolean;
+var
+  i:integer;
+  oPreco:TPreco;
+begin
+  i :=0;
+  qrPreco.Params.ArraySize := listPreco.Count;
+  for oPreco in listPreco do
+  begin
+
+    if oPreco.oferta > 0 then
+    begin
+    ParamByName('PRECO_VENDA').AsFloat := oPreco.oferta;
+    end
+    else
+    begin
+    ParamByName('PRECO_VENDA').AsFloat := oPreco.preco;
+    end;
+    ParamByName('CODIGO').AsString := oPreco.codigo_produto;
+    ParamByName('CUSTO').AsFloat := oPreco.custo;
+
+      ExecSQL;
+
+
+  end;
+
+
+  with qrPrecoUpdate do
+  begin
+    Close;
+    SQL.Clear;
+    SQl.Add('UPDATE ESTOQUE SET PRECO_VENDA=:PRECO_VENDA,CUSTO=:CUSTO WHERE CODIGO =:CODIGO');
+    if oPreco.oferta > 0 then
+    begin
+    ParamByName('PRECO_VENDA').AsFloat := oPreco.oferta;
+    end
+    else
+    begin
+    ParamByName('PRECO_VENDA').AsFloat := oPreco.preco;
+    end;
+    ParamByName('CODIGO').AsString := oPreco.codigo_produto;
+    ParamByName('CUSTO').AsFloat := oPreco.custo;
+    try
+      ExecSQL;
+    except
+    on E:Exception do
+    begin
+      raise Exception.Create('Erro ao atualizar preço no PDV: '+ e.Message);
+    end;
+
+    end;
+  end;
+end;
+
+end.

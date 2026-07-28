@@ -1,0 +1,81 @@
+unit Preco;
+interface
+uses
+  system.SysUtils,Funcoes,system.JSON,rest.json;
+ type TPreco = class
+  private
+    Fpreco: Currency;
+    Fmarkup: Currency;
+    Fcusto: Currency;
+    Fcodigo_produto: string;
+    procedure Setcodigo_produto(const Value: string);
+    procedure Setcusto(const Value: Currency);
+    procedure Setmarkup(const Value: Currency);
+    procedure Setpreco(const Value: Currency);
+  public
+  property codigo_produto:string read Fcodigo_produto write Setcodigo_produto;
+  property preco:Currency read Fpreco write Setpreco;
+  property markup:Currency read Fmarkup write Setmarkup;
+  property custo:Currency read Fcusto write Setcusto;
+
+  function JsonToPreco(const AJson: string): TPreco;
+end;
+implementation
+
+{ TPreco }
+
+function TPreco.JsonToPreco(const AJson: string): TPreco;
+var
+  LJsonObj: TJSONObject;
+  LPreco: TPreco;
+begin
+  LJsonObj := TJSONObject.ParseJSONValue(AJson) as TJSONObject;
+  try
+    LPreco := TJson.JsonToObject<TPreco>(AJson);
+    LPreco.Fpreco := StrToFloat(LJsonObj.GetValue('preco').Value);
+    LPreco.Fmarkup := StrToFloat(LJsonObj.GetValue('markup').Value);
+    LPreco.Fcusto := StrToFloat(LJsonObj.GetValue('custo').Value);
+    LPreco.Fcodigo_produto := LJsonObj.GetValue('codigo_produto').Value;
+
+    Result := LPreco;
+  finally
+    LJsonObj.Free;
+  end;
+end;
+
+procedure TPreco.Setcodigo_produto(const Value: string);
+var
+  CodigoBarras : string;
+begin
+  if (Value = '') then
+  begin
+    raise Exception.Create('Código de barras não pode ser em branco!');
+  end;
+  if Length(value)> 14 then
+  begin
+    raise Exception.Create('Limite de 14 caracteres!');
+  end;
+
+  CodigoBarras := Value;
+  CodigoBarras := removeLetras(CodigoBarras);
+  CodigoBarras := zeroEsquerda(CodigoBarras,14);
+
+  Fcodigo_produto := CodigoBarras;
+end;
+
+procedure TPreco.Setcusto(const Value: Currency);
+begin
+  Fcusto := Value;
+end;
+
+procedure TPreco.Setmarkup(const Value: Currency);
+begin
+  Fmarkup := Value;
+end;
+
+procedure TPreco.Setpreco(const Value: Currency);
+begin
+  Fpreco := Value;
+end;
+
+end.

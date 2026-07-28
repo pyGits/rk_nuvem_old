@@ -1,0 +1,125 @@
+unit uJsonUtils;
+
+
+interface
+uses
+System.Classes,System.Rtti,System.SysUtils,VCL.dialogs;
+
+function GetJsonValue(const AJson: string; const AKeyName: string): string;
+function ParseJsonArray(JsonArray: string): TStringList;
+
+function DelphiObjectToJson(obj: TObject): string;
+function ConverterDecimalPTBRParaAmericano(const Valor: string): string;
+implementation
+
+uses
+  System.JSON;
+
+  function ConverterDecimalPTBRParaAmericano(const Valor: string): string;
+var
+  novoValor:string;
+begin
+  novoValor := StringReplace(Valor,',','.',[rfReplaceAll,rfIgnoreCase]);
+  result := novoValor;
+end;
+
+function GetJsonValue(const AJson: string; const AKeyName: string): string;
+var
+  JSONValue: TJSONValue;
+  JSONPair: TJSONPair;
+begin
+  Result := '';
+  JSONValue := TJSONObject.ParseJSONValue(AJson);
+  try
+    if JSONValue <> nil then
+    begin
+      JSONPair := (JSONValue as TJSONObject).Get(AKeyName);
+      if JSONPair <> nil then
+      begin
+        Result := JSONPair.JsonValue.Value;
+      end;
+    end;
+  finally
+    JSONValue.Free;
+  end;
+end;
+
+
+function ParseJsonArray(JsonArray: string): TStringList;
+var
+  JArray: TJSONArray;
+  I: Integer;
+begin
+  Result := TStringList.Create;
+  JArray := TJSONObject.ParseJSONValue(JsonArray) as TJSONArray;
+  try
+    for I := 0 to JArray.Count - 1 do
+    begin
+      Result.Add(JArray.Items[I].ToString);
+    end;
+  finally
+    JArray.Free;
+  end;
+end;
+
+
+
+
+function DelphiObjectToJson(obj: TObject): string;
+var
+  ctx: TRttiContext;
+  objType: TRttiType;
+  prop: TRttiProperty;
+  propValue: TValue;
+  jsonObj: TJSONObject;
+  valorConvertido:string;
+begin
+  jsonObj := TJSONObject.Create;
+  try
+    objType := ctx.GetType(obj.ClassType);
+
+    for prop in objType.GetProperties do
+    begin
+      propValue := prop.GetValue(obj);
+
+      if propValue.IsObject then
+      begin
+        jsonObj.AddPair(prop.Name, TJSONString.Create(DelphiObjectToJson(propValue.AsObject)));
+      end
+      else if propValue.IsArray then
+      begin
+        // Not supported in this example
+      end
+      else
+      begin
+        if propValue.IsEmpty then
+          jsonObj.AddPair(prop.Name, TJSONNull.Create)
+        else
+        begin
+          if (prop.PropertyType.ToString = 'Real') then
+          begin
+            valorConvertido := ConverterDecimalPTBRParaAmericano(propValue.ToString);
+            valorConvertido := StringReplace(valorConvertido, '"', '', [rfReplaceAll]); // Remove as aspas duplas
+            jsonObj.AddPair(prop.Name, valorConvertido);
+          end
+          else
+          begin
+            // Campos de outros tipos (como string) permanecem inalterados
+            jsonObj.AddPair(prop.Name, propValue.ToString);
+          end;
+        end;
+      end;
+    end;
+
+    Result := jsonObj.ToString;
+  finally
+    jsonObj.Free;
+  end;
+end;
+
+
+
+
+
+end.
+

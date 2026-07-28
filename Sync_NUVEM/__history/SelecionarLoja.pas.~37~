@@ -1,0 +1,67 @@
+unit SelecionarLoja;
+
+interface
+
+uses
+  Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
+  Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.Grids, uAPIRequest,Loja;
+
+type
+  TfrmLoja = class(TForm)
+    gridLoja: TStringGrid;
+    procedure FormShow(Sender: TObject);
+    procedure gridLojaDblClick(Sender: TObject);
+  private
+
+  public
+    lojaSelecionada:TLoja;
+    class function retornaLoja:TLoja;
+
+  end;
+
+var
+  frmLoja: TfrmLoja;
+
+implementation
+
+{$R *.dfm}
+
+procedure TfrmLoja.FormShow(Sender: TObject);
+var
+  lojasList:TStringList;
+  i:integer;
+  loja:TLoja;
+begin
+try
+  lojasList := TStringList.Create;
+  lojasList := uAPIRequest.getLoja;
+  gridLoja.RowCount := lojasList.count;
+  for I := 0 to lojasList.Count -1 do
+  begin
+    loja := loja.JsonToLoja(lojasList[I]);
+
+    gridLoja.Cells[0,I] := loja.Codigo;
+    gridLoja.Cells[1,I] := loja.Nome;
+  end;
+finally
+  lojasList.Free;
+end;
+
+end;
+
+procedure TfrmLoja.gridLojaDblClick(Sender: TObject);
+begin
+  lojaSelecionada := TLoja.Create;
+  lojaSelecionada.Codigo := gridLoja.Cells[0,gridLoja.row];
+  lojaSelecionada.Nome := gridLoja.Cells[1,gridLoja.Row];
+end;
+
+class function TfrmLoja.retornaLoja: TLoja;
+var
+  frm:TfrmLoja;
+begin
+  frmLoja.ShowModal;
+  Result := lojaSelecionada;
+end;
+
+end.

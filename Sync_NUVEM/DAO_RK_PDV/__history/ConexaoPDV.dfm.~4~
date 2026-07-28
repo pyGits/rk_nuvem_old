@@ -1,0 +1,17 @@
+object DataModule1: TDataModule1
+  OldCreateOrder = False
+  Height = 443
+  Width = 538
+  object ConexaoPDV: TUniConnection
+    Left = 88
+    Top = 56
+  end
+  object InterBaseUniProvider1: TInterBaseUniProvider
+    Left = 256
+    Top = 56
+  end
+  object UniSQLMonitor1: TUniSQLMonitor
+    Left = 384
+    Top = 56
+  end
+end

@@ -1,0 +1,177 @@
+unit uConexao;
+
+interface
+
+uses
+  System.SysUtils, FireDAC.Comp.Client, FireDAC.Stan.Def, FireDAC.Stan.Async,
+  FireDAC.Phys, FireDAC.Phys.FB, FireDAC.DApt,uIniManager;
+
+type
+  TConexao = class
+  private
+    class var FInstance: TConexao;
+    FConexao: TFDConnection;
+    constructor CreatePrivate;
+  public
+    constructor Create; reintroduce;
+    destructor Destroy; override;
+
+    class function GetInstance: TConexao;
+
+    function ExecQuery(const ASQL: string): TFDQuery;
+    function ExecSQL(const ASQL: string): Integer; // insert/update/delete
+  end;
+
+implementation
+
+{ TConexao }
+
+constructor TConexao.Create;
+begin
+  raise Exception.Create('Use GetInstance para obter a conexão.');
+end;
+
+constructor TConexao.CreatePrivate;
+
+begin
+  FConexao := TFDConnection.Create(nil);
+  with FConexao do
+  begin
+    Params.DriverID := 'FB';
+    Params.Database := 'C:\System_RK\Server\BD\BANCO.FDB';
+    Params.UserName := 'SYSDBA';
+    Params.Password := 'masterkey';
+    Params.Add('Server=127.0.0.1');
+    Params.Add('Port=3050');
+    LoginPrompt := False;
+    Connected := True;
+  end;
+end;
+
+destructor TConexao.Destroy;
+begin
+  FConexao.Free;
+  inherited;
+end;
+
+class function TConexao.GetInstance: TConexao;
+begin
+  if not Assigned(FInstance) then
+    FInstance := TConexao.CreatePrivate;
+
+  Result := FInstance;
+end;
+
+function TConexao.ExecQuery(const ASQL: string): TFDQuery;
+begin
+  Result := TFDQuery.Create(nil);
+  Result.Connection := FConexao;
+  Result.SQL.Text := ASQL;
+  Result.Open;
+end;
+
+function TConexao.ExecSQL(const ASQL: string): Integer;
+var
+  Q: TFDQuery;
+begin
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConexao;
+    Q.SQL.Text := ASQL;
+    Q.ExecSQL;
+    Result := Q.RowsAffected;
+  finally
+    Q.Free;
+  end;
+end;
+
+end.
+unit uConexao;
+
+interface
+
+uses
+  System.SysUtils, FireDAC.Comp.Client, FireDAC.Stan.Def, FireDAC.Stan.Async,
+  FireDAC.Phys, FireDAC.Phys.FB, FireDAC.DApt;
+
+type
+  TConexao = class
+  private
+    class var FInstance: TConexao;
+    FConexao: TFDConnection;
+    constructor CreatePrivate;
+  public
+    constructor Create; reintroduce;
+    destructor Destroy; override;
+
+    class function GetInstance: TConexao;
+
+    function ExecQuery(const ASQL: string): TFDQuery;
+    function ExecSQL(const ASQL: string): Integer; // insert/update/delete
+  end;
+
+implementation
+
+{ TConexao }
+
+constructor TConexao.Create;
+begin
+  raise Exception.Create('Use GetInstance para obter a conexão.');
+end;
+
+constructor TConexao.CreatePrivate;
+begin
+  FConexao := TFDConnection.Create(nil);
+  Ini :=
+  with FConexao do
+  begin
+    Params.DriverID := 'FB';
+    Params.Database := 'C:\Dados\MEUBANCO.FDB';
+    Params.UserName := 'SYSDBA';
+    Params.Password := 'masterkey';
+    Params.Add('Server=localhost');
+    Params.Add('Port=3050');
+    LoginPrompt := False;
+    Connected := True;
+  end;
+end;
+
+destructor TConexao.Destroy;
+begin
+  FConexao.Free;
+  inherited;
+end;
+
+class function TConexao.GetInstance: TConexao;
+begin
+  if not Assigned(FInstance) then
+    FInstance := TConexao.CreatePrivate;
+
+  Result := FInstance;
+end;
+
+function TConexao.ExecQuery(const ASQL: string): TFDQuery;
+begin
+  Result := TFDQuery.Create(nil);
+  Result.Connection := FConexao;
+  Result.SQL.Text := ASQL;
+  Result.Open;
+end;
+
+function TConexao.ExecSQL(const ASQL: string): Integer;
+var
+  Q: TFDQuery;
+begin
+  Q := TFDQuery.Create(nil);
+  try
+    Q.Connection := FConexao;
+    Q.SQL.Text := ASQL;
+    Q.ExecSQL;
+    Result := Q.RowsAffected;
+  finally
+    Q.Free;
+  end;
+end;
+
+end.
+

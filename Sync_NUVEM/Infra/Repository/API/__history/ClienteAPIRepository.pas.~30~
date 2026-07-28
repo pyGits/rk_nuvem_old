@@ -1,0 +1,56 @@
+unit ClienteAPIRepository;
+
+interface
+uses System.Generics.Collections,ClienteModel,uAPIRequest,System.Classes,System.JSON;
+type IClienteApiRepository = interface
+  ['{7AF6A5E0-A0D8-4CC1-9BF5-4BDE563E6B6A}']
+  function getAll:TObjectList<TClienteModel>;
+end;
+
+type TClienteApiRepository = class(TInterfacedObject,IClienteApiRepository)
+
+  public
+    function getAll: TObjectList<ClienteModel.TClienteModel>;
+end;
+
+implementation
+
+{ TClienteApiRepository }
+
+function TClienteApiRepository.getAll: TObjectList<ClienteModel.TClienteModel>;
+var
+  jsonClientes:TStringList;
+  jsonCliente:string;
+  LJsonObj: TJSONObject;
+begin
+  jsonClientes := getClientes(false);
+
+  for jsonCliente in jsonClientes do
+  begin
+   LJsonObj := TJSONObject.ParseJSONValue(jsonCliente) as TJSONObject;
+   result := TObjectList<TClienteModel>.create(True);
+
+    Result.Add(TClienteModel.create);
+    result.Last.codigo := LJsonObj.GetValue('codigo').Value;
+    result.last.nome := LJsonObj.GetValue('nome').Value;
+    result.last.cnpjcpf := LJsonObj.GetValue('cnpjcpf').Value;
+
+    result.last.fantasia := LJsonObj.GetValue('fantasia').Value;
+    result.last.Observacao :=  LJsonObj.GetValue('observacao').Value;
+    result.last.telefone1 := LJsonObj.GetValue('telefone').Value;
+    result.last.telefone2 := LJsonObj.GetValue('telefone2').Value;
+    result.last.celular := LJsonObj.GetValue('celular').Value;
+    result.last.email:= LJsonObj.GetValue('email').Value;
+    result.last.endereco := LJsonObj.GetValue('logradouro').Value;
+    result.last.cidade := LJsonObj.GetValue('cidade').Value;
+    result.last.uf := LJsonObj.GetValue('uf').Value;
+    result.last.cep := LJsonObj.GetValue('cep').Value;
+    result.last.bairro := LJsonObj.GetValue('bairro').Value;
+    result.last.complemento := LJsonObj.GetValue('complemento').Value;
+    result.last.perc_desconto := StrToFloat(LJsonObj.GetValue('perc_desconto').Value);
+    Result := result;
+
+  end;
+end;
+
+end.

@@ -89,6 +89,58 @@ server {
 }
 
 # ===================================================================
+# RK Nuvem — porta legada da API (agente RKNuvem instalado nas lojas)
+# ===================================================================
+# Antes do Docker o backend Node terminava TLS ele mesmo e escutava direto na
+# 3000. O agente RKNuvem de cada loja aponta para https://<dominio>:3000/api
+# numa constante compilada no executavel (API_URL, em Sync_NUVEM), entao a porta
+# precisa continuar atendendo: sao muitos clientes instalados e nao ha como
+# atualizar todos. A diferenca e que agora quem termina o TLS e o nginx, que faz
+# proxy para o backend igual ao vhost 443.
+#
+# Este e o unico server block nesta porta e portanto tambem e o default_server
+# dela — importante porque o Indy antigo do Delphi pode nao mandar SNI, e sem
+# SNI o nginx entrega o certificado do default_server.
+server {
+    # Sem "http2 on" de proposito: o Indy do Delphi so fala HTTP/1.1, era isso
+    # que o backend Node servia nesta porta, e nao ha ganho em oferecer h2 por
+    # ALPN para uma stack TLS antiga.
+    listen ${API_PORT} ssl;
+    server_name ${DOMAIN};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
+    include             /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
+
+    client_max_body_size 50m;
+
+    location ^~ /api/ {
+        proxy_pass http://127.0.0.1:${BACKEND_PORT};
+
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # A carga completa de produtos passa bem de 60s.
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    300s;
+        proxy_read_timeout    300s;
+
+        # Ao contrario do vhost 443, aqui o buffering fica ligado (padrao): o
+        # agente nao usa SSE, e bufferar libera o backend mais cedo quando a
+        # carga de produtos e grande e o cliente le devagar.
+    }
+
+    # O agente so consome /api. Nada mais e exposto nesta porta.
+    location / {
+        return 404;
+    }
+}
+
+# ===================================================================
 # RK Nuvem — homologacao (servida do disco do host, bind mount)
 # ===================================================================
 server {

@@ -1,0 +1,8 @@
+unit Global;
+
+interface
+uses CargaPDVUseCase;
+
+implementation
+
+end.

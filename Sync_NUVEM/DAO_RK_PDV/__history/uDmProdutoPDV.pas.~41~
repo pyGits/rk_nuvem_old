@@ -1,0 +1,63 @@
+unit uDmProdutoPDV;
+
+interface
+
+uses
+  System.SysUtils, System.Classes,Produto,ConexaoPDV, Data.DB, MemDS, DBAccess,System.Generics.collections,
+  Uni, FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Param,
+  FireDAC.Stan.Error, FireDAC.DatS, FireDAC.Phys.Intf, FireDAC.DApt.Intf,
+  FireDAC.Stan.Async, FireDAC.DApt, FireDAC.Comp.DataSet, FireDAC.Comp.Client;
+
+type
+  TdmProdutoPDV = class(TDataModule)
+    qrProdutoPDVInsert: TUniQuery;
+    qrProdutoPDV: TFDQuery;
+  private
+    { Private declarations }
+  public
+    function insertProdutoPDV(listProduto:TObjectList<TProduto>):boolean;
+  end;
+
+var
+  dmProdutoPDV: TdmProdutoPDV;
+
+implementation
+
+{%CLASSGROUP 'Vcl.Controls.TControl'}
+
+{$R *.dfm}
+
+{ TdmProdutoPDV }
+
+function TdmProdutoPDV.insertProdutoPDV(listProduto:TObjectList<TProduto>): boolean;
+begin
+  with qrProdutoPDV, oProduto do
+  begin
+    Close;
+    SQL.Clear;
+    SQl.Add('UPDATE OR INSERT INTO ESTOQUE(CODIGO,COD_BARRA,NOME,UNIDADE,NCM,PRECO_VARIAVEL,USA_BALANCA,CEST,TRIBUTACAO,SITUACAO)');
+    SQl.Add('VALUES (:CODIGO,:COD_BARRA,:NOME,:UNIDADE,:NCM,:PRECO_VARIAVEL,:USA_BALANCA,:CEST,:TRIBUTACAO,:SITUACAO)');
+    ParamByName('CODIGO').AsString := oProduto.Codigo;
+    ParamByName('COD_BARRA').AsString := oProduto.CodigoBarras;
+    ParamByName('NOME').AsString := oProduto.Descricao;
+    ParamByName('UNIDADE').AsString := oProduto.Unidade;
+    ParamByName('SITUACAO').AsString :=    IntToStr(oProduto.getInativo);
+    ParamByName('PRECO_VARIAVEL').AsInteger :=  oProduto.getDiversos;
+    ParamByName('USA_BALANCA').AsInteger := oProduto.getFracionado;
+    ParamByName('NCM').AsString := oProduto.NCM;
+
+    ParamByName('CEST').AsString := oProduto.CEST;
+    ParamByName('TRIBUTACAO').AsString := oProduto.Tributacao;
+    try
+    ExecSQL;
+    except
+    on E:Exception do
+    begin
+      raise Exception.Create('Erro ao inserir produto no PDV: '+E.Message);
+    end;
+
+    end;
+  end;
+end;
+
+end.

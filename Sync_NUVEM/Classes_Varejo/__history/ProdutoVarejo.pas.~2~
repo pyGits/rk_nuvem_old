@@ -1,0 +1,137 @@
+unit ProdutoVarejo;
+
+interface
+
+type
+  TProdutoVarejo = class
+  private
+    Fdiversos: string;
+    Fbalanca_validade: Integer;
+    Fativo: string;
+    Fpreco: currency;
+    Fdescricao: string;
+    Fcest: string;
+    Fcodigo: string;
+    Fncm: string;
+    Fbalanca: string;
+    Funidade: string;
+    Ftributacao: string;
+    FformaVenda: string;
+    Fsubgrupo: Integer;
+    Fsecao: Integer;
+    Fgrupo: Integer;
+    procedure Setativo(const Value: string);
+    procedure Setbalanca(const Value: string);
+    procedure Setbalanca_validade(const Value: Integer);
+    procedure Setcest(const Value: string);
+    procedure Setcodigo(const Value: string);
+    procedure Setdescricao(const Value: string);
+    procedure Setdiversos(const Value: string);
+    procedure SetformaVenda(const Value: string);
+    procedure Setgrupo(const Value: Integer);
+    procedure Setncm(const Value: string);
+    procedure Setpreco(const Value: currency);
+    procedure Setsecao(const Value: Integer);
+    procedure Setsubgrupo(const Value: Integer);
+    procedure Settributacao(const Value: string);
+    procedure Setunidade(const Value: string);
+  published
+        property codigo: string read Fcodigo write Setcodigo;
+    property descricao: string read Fdescricao write Setdescricao;
+    property secao: Integer read Fsecao write Setsecao;
+    property grupo: Integer read Fgrupo write Setgrupo;
+    property subgrupo: Integer read Fsubgrupo write Setsubgrupo;
+    property unidade: string read Funidade write Setunidade;
+    property formaVenda: string read FformaVenda write SetformaVenda;
+    property preco:currency read Fpreco write Setpreco;
+    property ncm: string read Fncm write Setncm;
+    property cest: string read Fcest write Setcest;
+    property tributacao: string read Ftributacao write Settributacao;
+    property balanca: string read Fbalanca write Setbalanca;
+    property balanca_validade: Integer read Fbalanca_validade write Setbalanca_validade;
+    property diversos: string read Fdiversos write Setdiversos;
+    property ativo: string read Fativo write Setativo;
+  end;
+
+
+
+implementation
+
+{ TProdutoVarejo }
+
+procedure TProdutoVarejo.Setativo(const Value: string);
+begin
+  Fativo := Value;
+end;
+
+procedure TProdutoVarejo.Setbalanca(const Value: string);
+begin
+  Fbalanca := Value;
+end;
+
+procedure TProdutoVarejo.Setbalanca_validade(const Value: Integer);
+begin
+  Fbalanca_validade := Value;
+end;
+
+procedure TProdutoVarejo.Setcest(const Value: string);
+begin
+  Fcest := Value;
+end;
+
+procedure TProdutoVarejo.Setcodigo(const Value: string);
+begin
+  Fcodigo := Value;
+end;
+
+procedure TProdutoVarejo.Setdescricao(const Value: string);
+begin
+  Fdescricao := Value;
+end;
+
+procedure TProdutoVarejo.Setdiversos(const Value: string);
+begin
+  Fdiversos := Value;
+end;
+
+procedure TProdutoVarejo.SetformaVenda(const Value: string);
+begin
+  FformaVenda := Value;
+end;
+
+procedure TProdutoVarejo.Setgrupo(const Value: Integer);
+begin
+  Fgrupo := Value;
+end;
+
+procedure TProdutoVarejo.Setncm(const Value: string);
+begin
+  Fncm := Value;
+end;
+
+procedure TProdutoVarejo.Setpreco(const Value: currency);
+begin
+  Fpreco := Value;
+end;
+
+procedure TProdutoVarejo.Setsecao(const Value: Integer);
+begin
+  Fsecao := Value;
+end;
+
+procedure TProdutoVarejo.Setsubgrupo(const Value: Integer);
+begin
+  Fsubgrupo := Value;
+end;
+
+procedure TProdutoVarejo.Settributacao(const Value: string);
+begin
+  Ftributacao := Value;
+end;
+
+procedure TProdutoVarejo.Setunidade(const Value: string);
+begin
+  Funidade := Value;
+end;
+
+end.

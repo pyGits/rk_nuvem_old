@@ -1,0 +1,10 @@
+object DmPrecoPDV: TDmPrecoPDV
+  OldCreateOrder = False
+  Height = 297
+  Width = 526
+  object qrPrecoUpdate: TUniQuery
+    Connection = uDmConexaoPDV.ConexaoPDV
+    Left = 248
+    Top = 136
+  end
+end

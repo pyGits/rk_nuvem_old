@@ -1,0 +1,12 @@
+unit CaixaModel;
+
+interface
+type TCaixaModel = class
+  property codigo:string;
+  property nome:string;
+  property ip:string;
+end;
+
+implementation
+
+end.

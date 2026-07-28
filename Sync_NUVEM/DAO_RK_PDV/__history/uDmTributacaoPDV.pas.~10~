@@ -1,0 +1,41 @@
+unit uDmTributacaoPDV;
+
+interface
+
+uses
+  System.SysUtils, System.Classes,ConexaoPDV, Data.DB, MemDS, DBAccess, Uni,Tributacao;
+
+type
+  TdmTributacaoPDV = class(TDataModule)
+    qrInsertTributacaoPDV: TUniQuery;
+  private
+    { Private declarations }
+  public
+    function insertTributacaoPDV(oTributacao:TTributacao):Boolean;
+  end;
+
+var
+  dmTributacaoPDV: TdmTributacaoPDV;
+
+implementation
+
+{%CLASSGROUP 'Vcl.Controls.TControl'}
+
+{$R *.dfm}
+
+{ TdmTributacaoPDV }
+
+function TdmTributacaoPDV.insertTributacaoPDV(
+  oTributacao: TTributacao): Boolean;
+begin
+  with qrInsertTributacaoPDV do
+  begin
+    Close;
+    SQL.Clear;
+    SQl.Add('UPDATE OR INSERT INTO TRIBUTACAO (CODIGO,DESCRICAO,CST,CFOP,CSOSN,ICMS)');
+    SQl.Add('VALUES (:CODIGO,:DESCRICAO,:CST,:CFOP,:CSOSN,:ICMS)');
+    ParamByName('CODIGO').AsString := oTributacao.codigo;
+  end;
+end;
+
+end.

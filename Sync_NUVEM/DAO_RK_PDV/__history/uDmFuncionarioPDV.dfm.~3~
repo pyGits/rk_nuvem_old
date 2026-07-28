@@ -1,0 +1,5 @@
+object dmFuncionarioPDV: TdmFuncionarioPDV
+  OldCreateOrder = False
+  Height = 295
+  Width = 411
+end

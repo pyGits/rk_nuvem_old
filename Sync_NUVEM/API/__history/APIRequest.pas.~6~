@@ -1,0 +1,78 @@
+unit APIRequest;
+
+interface
+
+uses
+System.SysUtils, System.JSON, System.Net.HttpClient, System.Net.URLClient,
+System.Classes, APIConnectionConfig,System.NetEncoding;
+
+type
+TAPIRequest = class
+private
+FConnection: TAPIConnectionConfig;
+FResponseBody: string;
+FResponseCode: Integer;
+public
+constructor Create(const AConnection: TAPIConnectionConfig);
+function GET(const AEndpoint: string): Boolean;
+function POST(const AEndpoint: string; const ABody: TJSONObject): Boolean;
+property ResponseBody: string read FResponseBody;
+property ResponseCode: Integer read FResponseCode;
+end;
+
+implementation
+
+constructor TAPIRequest.Create(const AConnection: TAPIConnectionConfig);
+begin
+FConnection := AConnection;
+end;
+
+function TAPIRequest.GET(const AEndpoint: string): Boolean;
+var
+LClient: THTTPClient;
+LRequest: THTTPRequest;
+LResponse: IHTTPResponse;
+begin
+LClient := THTTPClient.Create;
+try
+LRequest := THTTPRequest.Create(TNetEncoding.URL.Encode(FConnection.HTTP.Request.URL + AEndpoint), THTTPMethod.Get);
+try
+LResponse := LClient.Execute(LRequest);
+FResponseBody := LResponse.ContentAsString;
+FResponseCode := LResponse.StatusCode;
+Result := (FResponseCode >= 200) and (FResponseCode < 300);
+finally
+LRequest.Free;
+end;
+finally
+LClient.Free;
+end;
+end;
+
+function TAPIRequest.POST(const AEndpoint: string; const ABody: TJSONObject): Boolean;
+var
+LClient: THTTPClient;
+LRequest: THTTPRequest;
+LResponse: IHTTPResponse;
+LJSONBody: TStringStream;
+begin
+LClient := THTTPClient.Create;
+try
+LJSONBody := TStringStream.Create(ABody.ToString, TEncoding.UTF8);
+try
+LRequest := THTTPRequest.Create(TNetEncoding.URL.Encode(FConnection.HTTP.Request.URL + AEndpoint), THTTPMethod.Post, LJSONBody);
+LRequest.ContentType := 'application/json';
+LResponse := LClient.Execute(LRequest);
+FResponseBody := LResponse.ContentAsString;
+FResponseCode := LResponse.StatusCode;
+Result := (FResponseCode >= 200) and (FResponseCode < 300);
+finally
+LJSONBody.Free;
+LRequest.Free;
+end;
+finally
+LClient.Free;
+end;
+end;
+
+end.

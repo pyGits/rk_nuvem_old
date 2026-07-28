@@ -1,0 +1,36 @@
+unit CaixaRepository;
+
+interface
+uses System.Generics.Collections,CaixaModel,uConexaoRetaguarda,Firedac.comp.client;
+type ICaixaRepository = interface
+  ['{C1EF9691-63B2-46F5-8F06-4ED03DEF1EAC}']
+  function getAll:TObjectList<TCaixaModel>;
+end;
+
+type TCaixaRepository = class(TInterfacedObject,ICaixaRepository)
+
+  public
+    constructor create;
+    function getAll: TObjectList<CaixaModel.TCaixaModel>;
+end;
+
+implementation
+
+{ TCaixaRepository }
+
+
+
+function TCaixaRepository.getAll: TObjectList<CaixaModel.TCaixaModel>;
+var
+  Query:TFdquery;
+begin
+  Query := TConexao.GetInstance.ExecQuery('select * from caixa');
+  result := TObjectList<TCaixaModel>.Create(true);
+
+  while not Query.Eof do
+  begin
+    Query.Next;
+  end;
+end;
+
+end.

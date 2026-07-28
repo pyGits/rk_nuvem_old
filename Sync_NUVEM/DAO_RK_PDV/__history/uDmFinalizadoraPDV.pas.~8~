@@ -1,0 +1,56 @@
+unit uDmFinalizadoraPDV;
+
+interface
+
+uses
+  System.SysUtils, System.Classes,ConexaoPDV, Data.DB, MemDS, DBAccess, Uni,Finalizadora;
+
+type
+  TDmFinalizadoraPDV = class(TDataModule)
+    qrInsertFinalizadoraPDV: TUniQuery;
+  private
+    { Private declarations }
+  public
+    function insertFinalizadoraPDV(oFinalizadora:TFinalizadora):Boolean;
+  end;
+
+var
+  DmFinalizadoraPDV: TDmFinalizadoraPDV;
+
+implementation
+
+{%CLASSGROUP 'Vcl.Controls.TControl'}
+
+{$R *.dfm}
+
+{ TDmFinalizadoraPDV }
+
+function TDmFinalizadoraPDV.insertFinalizadoraPDV(
+  oFinalizadora: TFinalizadora): Boolean;
+begin
+  with qrInsertFinalizadoraPDV do
+  begin
+    Close;
+    SQL.Clear;
+    SQl.Add('UPDATE OR INSERT INTO FINALIZADORA (CODIGO,DESCRICAO,CST,CFOP,CSOSN,ICMS)');
+    SQl.Add('VALUES (:CODIGO,:DESCRICAO,:CST,:CFOP,:CSOSN,:ICMS)');
+    ParamByName('CODIGO').AsString := oTributacao.codigo;
+    ParamByName('DESCRICAO').AsString := oTributacao.nome;
+    ParamByName('CST').AsString := oTributacao.cst;
+    ParamByName('CFOP').AsString := oTributacao.cfop;
+    ParamByName('CSOSN').AsString := oTributacao.csosn;
+    ParamByName('ICMS').AsFloat := oTributacao.icms;
+
+    try
+      ExecSQL;
+    except
+    on E:Exception do
+    begin
+      raise Exception.Create('Erro ao inserir tributação no PDV: '+ E.message);
+    end;
+
+    end;
+  end;
+end;
+
+end.

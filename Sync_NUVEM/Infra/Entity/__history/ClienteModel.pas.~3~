@@ -1,0 +1,45 @@
+unit ClienteModel;
+
+interface
+type TClienteModel = class
+  private
+    Fcodigo: string;
+    Fcnpjcpf: string;
+    Fnome: string;
+    Fperc_desconto: real;
+    procedure Setcnpjcpf(const Value: string);
+    procedure Setcodigo(const Value: string);
+    procedure Setnome(const Value: string);
+    procedure Setperc_desconto(const Value: real);
+  published
+  property codigo:string read Fcodigo write Setcodigo;
+  property nome:string read Fnome write Setnome;
+  property cnpjcpf:string read Fcnpjcpf write Setcnpjcpf;
+  property perc_desconto:real read Fperc_desconto write Setperc_desconto;
+end;
+
+implementation
+
+{ TClienteModel }
+
+procedure TClienteModel.Setcnpjcpf(const Value: string);
+begin
+  Fcnpjcpf := Value;
+end;
+
+procedure TClienteModel.Setcodigo(const Value: string);
+begin
+  Fcodigo := Value;
+end;
+
+procedure TClienteModel.Setnome(const Value: string);
+begin
+  Fnome := Value;
+end;
+
+procedure TClienteModel.Setperc_desconto(const Value: real);
+begin
+  Fperc_desconto := Value;
+end;
+
+end.

@@ -1,0 +1,48 @@
+unit APIConnectionConfig;
+
+interface
+
+uses
+  System.SysUtils, System.Classes, System.JSON, REST.Types, REST.Client,
+  Data.Bind.Components, Data.Bind.ObjectScope;
+
+type
+  TAPIConnectionConfig = class
+  private
+    FRESTClient: TRESTClient;
+    FRESTRequest: TRESTRequest;
+  public
+    constructor Create(const ABaseURL: string);
+    destructor Destroy; override;
+
+    property RESTClient: TRESTClient read FRESTClient;
+    property RESTRequest: TRESTRequest read FRESTRequest;
+    property Response: TRESTResponse read GetResponse; // Correção
+  protected
+    function GetResponse: TRESTResponse; // Correção
+  end;
+
+implementation
+
+constructor TAPIConnectionConfig.Create(const ABaseURL: string);
+begin
+  FRESTClient := TRESTClient.Create(ABaseURL);
+  FRESTRequest := TRESTRequest.Create(FRESTClient);
+  FRESTRequest.Accept := 'application/json';
+  FRESTRequest.ContentType := 'application/json';
+end;
+
+destructor TAPIConnectionConfig.Destroy;
+begin
+  FRESTRequest.Free;
+  FRESTClient.Free;
+  inherited;
+end;
+
+function TAPIConnectionConfig.GetResponse: TRESTResponse; // Correção
+begin
+  Result := FRESTRequest.Response;
+end;
+
+end.
+

@@ -1,0 +1,76 @@
+unit Finalizadora;
+
+interface
+uses
+  system.SysUtils,Funcoes,system.JSON,rest.json;
+type TFinalizadora = class
+  private
+    Futiliza99: integer;
+    Fespecie: integer;
+    Fcodigo: string;
+    Fnome: string;
+    Ftipo: string;
+    procedure Setcodigo(const Value: string);
+    procedure Setespecie(const Value: integer);
+    procedure Setnome(const Value: string);
+    procedure Settipo(const Value: string);
+    procedure Setutiliza99(const Value: integer);
+  public
+  property codigo:string read Fcodigo write Setcodigo;
+  property nome:string read Fnome write Setnome;
+  property especie:integer read Fespecie write Setespecie;
+  property tipo:string read Ftipo write Settipo;
+  property utiliza99:integer read Futiliza99 write Setutiliza99;
+
+  function JsonToFinalizadora(const AJson: string):TFinalizadora;
+end;
+
+implementation
+
+{ TFinalizadora }
+
+function TFinalizadora.JsonToFinalizadora(const AJson: string): TFinalizadora;
+var
+  LJsonObj: TJSONObject;
+  LFinalizadora: TFinalizadora;
+begin
+  LJsonObj := TJSONObject.ParseJSONValue(AJson) as TJSONObject;
+  try
+    LFinalizadora := TJson.JsonToObject<TFinalizadora>(AJson);
+    LFinalizadora.codigo := LJsonObj.GetValue('codigo').Value;
+    LFinalizadora.nome := LJsonObj.GetValue('nome').Value;
+    LFinalizadora.especie := LJsonObj.GetValue('especie').Value.ToInteger();
+    LFinalizadora.tipo := LJsonObj.GetValue('tipo').Value;
+    LFinalizadora.utiliza99 := LJsonObj.GetValue('utiliza99').Value.ToInteger();
+    Result := LFinalizadora;
+  finally
+    LJsonObj.Free;
+  end;
+end;
+
+procedure TFinalizadora.Setcodigo(const Value: string);
+begin
+  Fcodigo := Value;
+end;
+
+procedure TFinalizadora.Setespecie(const Value: integer);
+begin
+  Fespecie := Value;
+end;
+
+procedure TFinalizadora.Setnome(const Value: string);
+begin
+  Fnome := Value;
+end;
+
+procedure TFinalizadora.Settipo(const Value: string);
+begin
+  Ftipo := Value;
+end;
+
+procedure TFinalizadora.Setutiliza99(const Value: integer);
+begin
+  Futiliza99 := Value;
+end;
+
+end.

@@ -1,0 +1,46 @@
+object DmPrecoPDV: TDmPrecoPDV
+  OldCreateOrder = False
+  Height = 297
+  Width = 526
+  object qrPrecoUpdate: TUniQuery
+    Connection = uDmConexaoPDV.ConexaoPDV
+    Left = 248
+    Top = 136
+  end
+  object qrPreco: TFDQuery
+    Connection = uDmConexaoPDV.FDConnection1
+    SQL.Strings = (
+      
+        'UPDATE PRODUTO SET PRECO = :PRECO,CUSTO=:CUSTO,MARGEM=:MARGEM WH' +
+        'ERE CODIGO = :CODIGO')
+    Left = 320
+    Top = 120
+    ParamData = <
+      item
+        Name = 'PRECO'
+        ArrayType = atArray
+        DataType = ftFloat
+        ParamType = ptInput
+      end
+      item
+        Name = 'CUSTO'
+        DataType = ftBCD
+        Precision = 18
+        NumericScale = 3
+        ParamType = ptInput
+      end
+      item
+        Name = 'MARGEM'
+        DataType = ftBCD
+        Precision = 18
+        NumericScale = 3
+        ParamType = ptInput
+      end
+      item
+        Name = 'CODIGO'
+        DataType = ftString
+        ParamType = ptInput
+        Size = 6
+      end>
+  end
+end

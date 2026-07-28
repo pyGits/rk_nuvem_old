@@ -1,0 +1,9 @@
+object dmConexao: TdmConexao
+  OldCreateOrder = False
+  Height = 317
+  Width = 474
+  object ConexaoServer: TUniConnection
+    Left = 224
+    Top = 144
+  end
+end

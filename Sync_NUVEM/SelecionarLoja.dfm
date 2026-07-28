@@ -1,0 +1,36 @@
+object frmLoja: TfrmLoja
+  Left = 0
+  Top = 0
+  Caption = 'Selecionar Loja'
+  ClientHeight = 173
+  ClientWidth = 615
+  Color = clBtnFace
+  Font.Charset = DEFAULT_CHARSET
+  Font.Color = clWindowText
+  Font.Height = -11
+  Font.Name = 'Tahoma'
+  Font.Style = []
+  OldCreateOrder = False
+  Position = poScreenCenter
+  OnShow = FormShow
+  PixelsPerInch = 96
+  TextHeight = 13
+  object gridLoja: TStringGrid
+    Left = 0
+    Top = 0
+    Width = 615
+    Height = 173
+    Align = alClient
+    ColCount = 2
+    FixedCols = 0
+    FixedRows = 0
+    Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goRowSelect]
+    TabOrder = 0
+    OnDblClick = gridLojaDblClick
+    ExplicitWidth = 638
+    ExplicitHeight = 203
+    ColWidths = (
+      35
+      575)
+  end
+end

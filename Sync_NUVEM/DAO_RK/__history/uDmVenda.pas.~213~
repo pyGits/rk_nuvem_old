@@ -1,0 +1,509 @@
+unit uDmVenda;
+
+interface
+
+uses
+  System.SysUtils, System.Classes,Conexao, Data.DB, MemDS, DBAccess, Uni,Cupom,VCL.dialogs,Estoque,NaoFiscal,Fechamento;
+
+type
+  TdmVenda = class(TDataModule)
+    qrCupomSincroniza: TUniQuery;
+    qrCupomUpdate: TUniQuery;
+    qrCupomItemUpdate: TUniQuery;
+    qrCupomFormaUpdate: TUniQuery;
+    qrNaoFiscalSincroniza: TUniQuery;
+    qrNaoFiscalUpdate: TUniQuery;
+    qrFechamentoSincroniza: TUniQuery;
+    qrFechamentoUpdate: TUniQuery;
+  private
+    function sincronizaCupom:Boolean;
+    function sincronizaCupomItem:boolean;
+    function sincronizaCupomForma:boolean;
+    function sincronizaEstoqueMovimentacao:Boolean;
+    function sincronizaNaoFiscal:Boolean;
+    function sincronizaFechamento:Boolean;
+    function sincronizaFechamentoForma:boolean;
+
+
+
+    function encerrarSubidaCupom(oCupom:TCupom):boolean;
+    function encerrarSubidaCupomItem(oCupomItem:TCupomItem):boolean;
+    function encerrarSubidaCupomForma(oCupomForma:TCupomForma):boolean;
+    function encerrarSubidaEstoqueMovimentacao(oEstoqueMovimentacao:TEstoqueMovimentacao):boolean;
+    function encerrarSubidaNaoFiscal(oNaoFiscal:TNaoFiscal):boolean;
+    function encerrarSubidaFechamento(oFechamento:TFechamento):boolean;
+    function encerrarSubidaFechamentoForma(oFechamentoForma:TFechamentoFin):Boolean;
+  public
+    function sincronizaVenda:Boolean;
+  end;
+
+var
+  dmVenda: TdmVenda;
+
+implementation
+uses uAPIRequest;
+{%CLASSGROUP 'Vcl.Controls.TControl'}
+
+{$R *.dfm}
+
+{ TdmVenda }
+
+function TdmVenda.encerrarSubidaCupom(oCupom: TCupom): boolean;
+begin
+  with qrCupomUpdate do
+  begin
+    Close;
+    SQL.Clear;
+    SQL.Add('UPDATE CUPOM SET NUVEM = 1 WHERE CODIGO = :CODIGO AND COD_CAIXA = :COD_CAIXA');
+    ParamByName('CODIGO').AsString := oCupom.codigo;
+    ParamByName('COD_CAIXA').AsString := oCupom.caixa;
+    try
+      ExecSQL;
+      result := true;
+    except
+      result := false;
+    end;
+
+
+  end;
+end;
+
+function TdmVenda.encerrarSubidaCupomForma(oCupomForma: TCupomForma): boolean;
+begin
+  with qrCupomFormaUpdate do
+  begin
+    Close;
+    SQL.Clear;
+    SQL.Add('UPDATE CUPOM_FORMA SET NUVEM = 1 WHERE CODIGO = :CODIGO AND COD_CAIXA = :COD_CAIXA');
+    ParamByName('CODIGO').AsString := oCupomForma.codigo;
+    ParamByName('COD_CAIXA').AsString := oCupomForma.caixa;
+    try
+      ExecSQL;
+      result := true;
+    except
+      result := false;
+    end;
+
+
+  end;
+end;
+
+function TdmVenda.encerrarSubidaCupomItem(oCupomItem: TCupomItem): boolean;
+begin
+  with qrCupomItemUpdate do
+  begin
+    Close;
+    SQL.Clear;
+    SQL.Add('UPDATE CUPOM_ITEM SET NUVEM = 1 WHERE CODIGO = :CODIGO AND COD_CAIXA = :COD_CAIXA');
+    ParamByName('CODIGO').AsString := oCupomItem.codigo;
+    ParamByName('COD_CAIXA').AsString := oCupomItem.caixa;
+    try
+      ExecSQL;
+      result := true;
+    except
+      result := false;
+    end;
+
+
+  end;
+end;
+
+function TdmVenda.encerrarSubidaEstoqueMovimentacao(
+  oEstoqueMovimentacao: TEstoqueMovimentacao): boolean;
+begin
+    with qrCupomItemUpdate do
+  begin
+    Close;
+    SQL.Clear;
+    SQL.Add('UPDATE ESTOQUE_MOVIMENTACAO SET NUVEM = 1 WHERE COD_CUPOM = :CODIGO AND ITEM = :ITEM');
+    ParamByName('CODIGO').AsString := oEstoqueMovimentacao.codigo_cupom;
+    ParamByName('ITEM').AsInteger := oEstoqueMovimentacao.item;
+    try
+      ExecSQL;
+      result := true;
+    except
+      result := false;
+    end;
+
+
+  end;
+end;
+
+function TdmVenda.encerrarSubidaFechamento(oFechamento: TFechamento): boolean;
+begin
+  with qrFechamentoUpdate do
+  begin
+    Close;
+    SQL.Clear;
+    SQL.Add('UPDATE FECHAMENTO SET NUVEM = 1 WHERE CODIGO = :CODIGO AND COD_CAIXA = :CAIXA');
+    ParamByName('CODIGO').AsString := oFechamento.codigo;
+    ParamByName('CAIXA').AsInteger := oFechamento.codCaixa;
+    try
+      ExecSQL;
+      result := true;
+    except
+      result := false;
+    end;
+
+
+  end;
+
+end;
+
+function TdmVenda.encerrarSubidaFechamentoForma(
+  oFechamentoForma: TFechamentoFin): Boolean;
+begin
+  with qrFechamentoUpdate do
+  begin
+    Close;
+    SQL.Clear;
+    SQL.Add('UPDATE FECHAMENTO_FINALIZADORA SET NUVEM = 1 WHERE ID_FECHAMENTO = :CODIGO AND COD_CAIXA = :CAIXA AND FZCOD=:FZCOD');
+    ParamByName('CODIGO').AsString := oFechamentoForma.id;
+    ParamByName('CAIXA').AsInteger := oFechamentoForma.codCaixa;
+    ParamByName('FZCOD').AsString := oFechamentoForma.Finalizadora;
+    try
+      ExecSQL;
+      result := true;
+    except
+      result := false;
+    end;
+
+
+  end;
+end;
+
+
+function TdmVenda.encerrarSubidaNaoFiscal(oNaoFiscal: TNaoFiscal): boolean;
+begin
+    with qrNaoFiscalUpdate do
+  begin
+    Close;
+    SQL.Clear;
+    SQL.Add('UPDATE NAO_FISCAL SET NUVEM = 1 WHERE CODIGO = :CODIGO AND COD_CAIXA = :CAIXA');
+    ParamByName('CODIGO').AsString := oNaoFiscal.codigo;
+    ParamByName('CAIXA').AsInteger := oNaoFiscal.caixa;
+    try
+      ExecSQL;
+      result := true;
+    except
+      result := false;
+    end;
+
+
+  end;
+end;
+
+function TdmVenda.sincronizaCupom: Boolean;
+var
+  oCupom:TCupom;
+
+begin
+with qrCupomSincroniza do
+begin
+  Close;
+  SQL.Clear;
+  SQL.Add('SELECT * FROM CUPOM where NUVEM = 0');
+  Open;
+
+  if qrCupomSincroniza.RecordCount > 0 then
+  begin
+    while not qrCupomSincroniza.Eof do
+    begin
+      try
+        oCupom := TCupom.Create;
+        oCupom.codigo := FieldByName('CODIGO').AsString;
+        oCupom.numero := FieldByName('NUMERO').AsString;
+        oCupom.data := FieldByName('data').AsDateTime;
+        oCupom.hora := FieldByName('hora').AsDateTime;
+        oCupom.caixa := FieldByName('COD_CAIXA').AsString;
+        oCupom.qtde_item := FieldByName('qtde_item').AsInteger;
+        oCupom.valor_desconto := FieldByName('valor_desconto').AsFloat;
+        oCupom.valor_acrescimo := FieldByName('valor_acrescimo').AsFloat;
+        oCupom.valor_total := FieldByName('valor_total').AsFloat;
+        oCupom.codigo_cliente := FieldByName('COD_CLIENTE').AsString;
+        oCupom.cancelado := FieldByName('cancelado').AsInteger;
+        oCupom.cpf_consumidor := FieldByName('cpf_consumidor').AsString;
+        oCupom.nome_consumidor := FieldByName('nome_consumidor').AsString;
+        oCupom.vendedor := FieldByName('COD_VENDEDOR').AsString;
+        oCupom.xml_venda := FieldByName('XML_CHAVE').AsString;
+        oCupom.xml_cancelamento := FieldByName('XML_CHAVE_CANCELAMENTO').AsString;
+        oCupom.valor_custo := FieldByName('VALOR_CUSTO').AsFloat;
+
+        if (uAPIRequest.postVenda(oCupom)) then
+        begin
+          encerrarSubidaCupom(oCupom);
+        end;
+
+
+
+      finally
+        oCupom.Free;
+        qrCupomSincroniza.Next;
+      end;
+    end;
+
+
+  end;
+end;
+end;
+
+function TdmVenda.sincronizaCupomForma: boolean;
+var
+  oCupomForma:TCupomForma;
+begin
+  with qrCupomSincroniza do
+  begin
+    Close;
+    SQL.Clear;
+    SQL.Add('SELECT * FROM CUPOM_FORMA where NUVEM = 0');
+    Open;
+
+    while not qrCupomSincroniza.Eof do
+    begin
+      oCupomForma := TCupomForma.Create;
+      try
+        oCupomForma.codigo := FieldByName('CODIGO').AsString;
+        oCupomForma.codigo_cupom := FieldByName('COD_CUPOM').AsString;
+        oCupomForma.prestacao := FieldByName('PRESTACAO').asinteger;
+        oCupomForma.data := FieldByName('DATA').AsDateTime;
+        oCupomForma.caixa := FieldByName('COD_CAIXA').ASString;
+        oCupomForma.valor := FieldByName('VALOR').AsFloat;
+        oCupomForma.finalizadora := FieldByName('FORMA').AsString;
+        oCupomForma.tipo := FieldByName('TIPO').AsInteger;
+        oCupomForma.valor_troco := FieldByName('VALOR_TROCO').AsFloat;
+        oCupomForma.cancelado:= FieldByName('CANCELADO').AsInteger;
+
+        if (uAPIRequest.postVendaForma(oCupomForma)) then
+        begin
+          encerrarSubidaCupomForma(oCupomForma);
+        end;
+
+      finally
+      oCupomForma.Free;
+      qrCupomSincroniza.Next;
+      end;
+    end;
+  end;
+end;
+
+function TdmVenda.sincronizaCupomItem: boolean;
+var
+  oCupomItem:TCupomItem;
+begin
+  with qrCupomSincroniza do
+  begin
+    Close;
+    SQL.Clear;
+    SQL.Add('SELECT * FROM CUPOM_ITEM where NUVEM = 0');
+    Open;
+
+    while not qrCupomSincroniza.Eof do
+    begin
+      oCupomItem := TCupomItem.Create;
+      try
+        oCupomItem.codigo := FieldByName('CODIGO').AsString;
+        oCupomItem.codigo_cupom := FieldByName('COD_CUPOM').AsString;
+        oCupomItem.item := FieldByName('ITEM').asinteger;
+        oCupomItem.unidade := FieldByName('UNIDADE').AsString;
+        oCupomItem.qtde := FieldByName('QTDE').AsFloat;
+        oCupomItem.valor_unitario := FieldByName('VALOR_UNITARIO').AsFloat;
+        oCupomItem.valor_desconto := FieldByName('VALOR_DESCONTO').asfloat;
+        oCupomItem.valor_acrescimo := FieldByName('VALOR_ACRESCIMO').AsFloat;
+        oCupomItem.valor_total:= FieldByName('VALOR_TOTAL').AsFloat;
+        oCupomItem.cancelado:= FieldByName('CANCELADO').AsInteger;
+        oCupomItem.data:= FieldByName('DATA').AsDateTime;
+        oCupomItem.caixa:= FieldByName('COD_CAIXA').AsString;
+        oCupomItem.codigo_produto := FieldByName('COD_PRODUTO').AsString;
+        oCupomItem.valor_custo := FieldByName('VALOR_CUSTO').AsFloat;
+        oCupomItem.valor_custo_total := FieldByName('VALOR_CUSTO_TOTAL').AsFloat;
+
+        if (uAPIRequest.postVendaItem(oCupomItem)) then
+        begin
+          encerrarSubidaCupomItem(oCupomItem);
+        end;
+
+      finally
+      oCupomItem.Free;
+      qrCupomSincroniza.Next;
+      end;
+    end;
+  end;
+end;
+
+function TdmVenda.sincronizaEstoqueMovimentacao: Boolean;
+var
+  oEstoqueMovimentacao:TEstoqueMovimentacao;
+begin
+  with qrCupomSincroniza do
+  begin
+    Close;
+    SQL.Clear;
+    SQL.Add('SELECT * FROM ESTOQUE_MOVIMENTACAO where NUVEM = 0');
+    Open;
+
+    while not qrCupomSincroniza.Eof do
+    begin
+      oEstoqueMovimentacao := TEstoqueMovimentacao.Create;
+      try
+        oEstoqueMovimentacao.codigo_produto := FieldByName('CODPRODUTO').AsString;
+        oEstoqueMovimentacao.qtde := FieldByName('QTDE').AsFloat;
+        oEstoqueMovimentacao.data  := FieldByName('DATA').AsDateTime;
+        oEstoqueMovimentacao.hora := FieldByName('HORA').AsDateTime;
+        oEstoqueMovimentacao.codigo_cupom := FieldByName('COD_CUPOM').AsString;
+        oEstoqueMovimentacao.item := FieldByName('ITEM').asinteger;
+        oEstoqueMovimentacao.codigo_funcionario  := FieldByName('COD_FUNCIONARIO').AsString;
+        oEstoqueMovimentacao.origem := FieldByName('ORIGEM').AsString;
+
+        if (uAPIRequest.postEstoqueMovimentacao(oEstoqueMovimentacao)) then
+        begin
+          encerrarSubidaEstoqueMovimentacao(oEstoqueMovimentacao);
+        end;
+
+      finally
+      oEstoqueMovimentacao.Free;
+      qrCupomSincroniza.Next;
+      end;
+    end;
+  end;
+end;
+
+function TdmVenda.sincronizaFechamento: Boolean;
+var
+oFechamento: TFechamento;
+begin
+with qrFechamentoSincroniza do
+begin
+Close;
+SQL.Clear;
+SQL.Add('SELECT * FROM FECHAMENTO where NUVEM = 0');
+Open;
+
+while not qrFechamentoSincroniza.Eof do
+begin
+  oFechamento := TFechamento.Create;
+  try
+    oFechamento.codigo := FieldByName('CODIGO').AsString;
+    oFechamento.operador := FieldByName('OPERADOR').AsString;
+    oFechamento.dataAbertura := FieldByName('DATA_ABERTURA').AsDateTime;
+    oFechamento.dataFechamento := FieldByName('DATA_FECHAMENTO').AsDateTime;
+    oFechamento.horaAbertura := FieldByName('HORA_ABERTURA').AsDateTime;
+    oFechamento.horaFechamento := FieldByName('HORA_FECHAMENTO').AsDateTime;
+    oFechamento.codOperador := FieldByName('COD_OPERADOR').AsInteger;
+    oFechamento.codCaixa := FieldByName('COD_CAIXA').AsInteger;
+
+    oFechamento.vendaBruta := FieldByName('VENDA_BRUTA').AsFloat;
+    oFechamento.cancelamentoCupom := FieldByName('CANCELAMENTO_CUPOM').AsFloat;
+    oFechamento.cancelamentoItem := FieldByName('CANCELAMENTO_ITEM').AsFloat;
+    oFechamento.descontoItem := FieldByName('DESCONTO_ITEM').AsFloat;
+    oFechamento.descontoCupom := FieldByName('DESCONTO_CUPOM').AsFloat;
+    oFechamento.acrescimoCupom := FieldByName('ACRESCIMO_CUPOM').AsFloat;
+    oFechamento.vendaLiquida := FieldByName('VENDA_LIQUIDA').AsFloat;
+    oFechamento.fundoCaixa := FieldByName('FUNDO_CAIXA').AsFloat;
+    oFechamento.sangria := FieldByName('SANGRIA').AsFloat;
+    oFechamento.totais := FieldByName('TOTAIS').AsFloat;
+
+    oFechamento.qtdCuponsEfetivados := FieldByName('QTD_CUPONS_EFETIVADOS').AsInteger;
+    oFechamento.qtdCuponsCancelados := FieldByName('QTD_CUPONS_CANCELADOS').AsInteger;
+
+    if (uAPIRequest.postFechamento(oFechamento)) then
+    begin
+      encerrarSubidaFechamento(oFechamento);
+    end;
+
+  finally
+    oFechamento.Free;
+    qrFechamentoSincroniza.Next;
+  end;
+end;
+end;
+end;
+
+function TdmVenda.sincronizaFechamentoForma: boolean;
+var
+  oFechamentoForma: TFechamentoFin;
+begin
+with qrFechamentoSincroniza do
+  begin
+    Close;
+    SQL.Clear;
+    SQL.Add('SELECT * FROM FECHAMENTO_FINALIZADORA where NUVEM = 0');
+    Open;
+
+    while not qrFechamentoSincroniza.Eof do
+    begin
+      oFechamentoForma := TFechamentoFin.Create;
+      try
+        oFechamentoForma.id := FieldByName('ID_FECHAMENTO').AsString;
+        oFechamentoForma.Finalizadora := FieldByName('FZCOD').AsString;
+        oFechamentoForma.valorLiquido := FieldByName('VALOR_LIQUIDO').AsFloat;
+        oFechamentoForma.valorEntrada := FieldByName('VALOR_ENTRADA').AsFloat;
+        oFechamentoForma.valorTroco := FieldByName('VALOR_TROCO').AsFloat;
+        oFechamentoForma.valorReforco := FieldByName('VALOR_REFORCO').AsFloat;
+        oFechamentoForma.valorSangria := FieldByName('VALOR_SANGRIA').AsFloat;
+        oFechamentoForma.valorTotal := FieldByName('VALOR_TOTAL').AsFloat;
+        oFechamentoForma.codCaixa := FieldByName('COD_CAIXA').AsInteger;
+
+        if (uAPIRequest.postFechamentoForma(oFechamentoForma)) then
+        begin
+          encerrarSubidaFechamentoForma(oFechamentoForma);
+        end;
+
+      finally
+      oFechamentoForma.Free;
+      qrFechamentoSincroniza.Next;
+      end;
+    end;
+  end;
+end;
+
+function TdmVenda.sincronizaNaoFiscal: Boolean;
+var
+  oNaoFiscal:TNaoFiscal;
+begin
+with qrNaoFiscalSincroniza do
+  begin
+    Close;
+    SQL.Clear;
+    SQL.Add('SELECT * FROM NAO_FISCAL where NUVEM = 0');
+    Open;
+
+    while not qrNaoFiscalSincroniza.Eof do
+    begin
+      oNaoFiscal := TNaoFiscal.Create;
+      try
+
+        oNaoFiscal.codigo := FieldByName('CODIGO').AsString;
+        oNaoFiscal.data := FieldByName('DATA').AsDateTime;
+        oNaoFiscal.indice  := FieldByName('INDICE').AsString;
+        oNaoFiscal.Descricao := FieldByName('DESCRICAO').AsString;
+        oNaoFiscal.Valor := FieldByName('VALOR').AsFloat;
+        oNaoFiscal.Hora := FieldByName('HORA').AsDateTime;
+        oNaoFiscal.Vendedor  := FieldByName('CODVENDEDOR').AsInteger;
+        oNaoFiscal.Finalizadora := FieldByName('FZCOD').AsString;
+        oNaoFiscal.caixa := FieldByName('COD_CAIXA').AsInteger;
+
+        if (uAPIRequest.postNaoFiscal(oNaoFiscal)) then
+        begin
+          encerrarSubidaNaoFiscal(oNaoFiscal);
+        end;
+
+      finally
+      oNaoFiscal.Free;
+      qrNaoFiscalSincroniza.Next;
+      end;
+    end;
+  end;
+end;
+
+function TdmVenda.sincronizaVenda: Boolean;
+begin
+sincronizaCupom;
+sincronizaCupomItem;
+sincronizaCupomForma;
+sincronizaEstoqueMovimentacao;
+sincronizaNaoFiscal;
+sincronizaFechamento;
+sincronizaFechamentoForma;
+end;
+
+end.

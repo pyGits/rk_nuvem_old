@@ -1,0 +1,260 @@
+unit Cliente;
+
+interface
+uses System.SysUtils,Funcoes,System.JSON,REST.json;
+
+type TCliente = class
+  private
+    Fcodigo: string;
+    FObservacao: string;
+    FDataCadastro: TDate;
+    FLimiteCredito: real;
+    FUtilizadoCredito: Real;
+    Ftipopessoa: string;
+    Ffantasia: string;
+    Femail: string;
+    Fbairro: string;
+    Fuf: string;
+    Fcnpjcpf: string;
+    Fcep: string;
+    Ftelefone2: string;
+    Fcomplemento: string;
+    Ftelefone1: string;
+    Fnome: string;
+    Fcidade: string;
+    Fendereco: string;
+    Fcelular: string;
+    Fnumero: string;
+    FPercDesconto: real;
+    FPerc_Desconto: real;
+
+    procedure Setcodigo(const Value: string);
+    procedure SetDataCadastro(const Value: TDate);
+    procedure SetObservacao(const Value: string);
+    procedure SetLimiteCredito(const Value: real);
+    procedure SetUtilizadoCredito(const Value: Real);
+    procedure Setbairro(const Value: string);
+    procedure Setcelular(const Value: string);
+    procedure Setcep(const Value: string);
+    procedure Setcidade(const Value: string);
+    procedure Setcnpjcpf(const Value: string);
+    procedure Setcomplemento(const Value: string);
+    procedure Setemail(const Value: string);
+    procedure Setendereco(const Value: string);
+    procedure Setfantasia(const Value: string);
+    procedure Setnome(const Value: string);
+    procedure Settelefone1(const Value: string);
+    procedure Settelefone2(const Value: string);
+    procedure Settipopessoa(const Value: string);
+    procedure Setuf(const Value: string);
+    procedure Setnumero(const Value: string);
+    procedure SetPercDesconto(const Value: real);
+    procedure SetPerc_Desconto(const Value: real);
+
+  public
+  constructor create;
+  destructor destroy;override;
+  property codigo : string read Fcodigo write Setcodigo;
+  property nome:string read Fnome write Setnome;
+  property fantasia:string read Ffantasia write Setfantasia;
+  property endereco:string read Fendereco write Setendereco;
+  property bairro:string read Fbairro write Setbairro;
+  property cidade:string read Fcidade write Setcidade;
+  property numero:string read Fnumero write Setnumero;
+  property uf:string read Fuf write Setuf;
+  property cep:string read Fcep write Setcep;
+  property complemento:string read Fcomplemento write Setcomplemento;
+  property telefone1:string read Ftelefone1 write Settelefone1;
+  property telefone2:string read Ftelefone2 write Settelefone2;
+  property celular:string read Fcelular write Setcelular;
+  property email:string read Femail write Setemail;
+  property cnpjcpf:string read Fcnpjcpf write Setcnpjcpf;
+  property tipopessoa:string read Ftipopessoa write Settipopessoa;
+  property Observacao:string read FObservacao write SetObservacao;
+  property DataCadastro:TDate read FDataCadastro write SetDataCadastro;
+  property LimiteCredito:real read FLimiteCredito write SetLimiteCredito;
+  property UtilizadoCredito:Real read FUtilizadoCredito write SetUtilizadoCredito;
+  property Perc_Desconto:real read FPerc_Desconto write SetPerc_Desconto;
+  function JsonToCliente(const AJson: string):TCliente;
+
+
+
+end;
+
+implementation
+
+{ TCliente }
+
+
+
+constructor TCliente.create;
+begin
+
+end;
+
+destructor TCliente.destroy;
+begin
+
+  inherited;
+end;
+
+function TCliente.JsonToCliente(const AJson: string): TCliente;
+var
+  LJsonObj: TJSONObject;
+  LCliente: TCliente;
+begin
+  LJsonObj := TJSONObject.ParseJSONValue(AJson) as TJSONObject;
+  try
+    LCliente := TJson.JsonToObject<TCliente>(AJson);
+    LCliente.codigo := LJsonObj.GetValue('codigo').Value;
+    LCliente.nome := LJsonObj.GetValue('nome').Value;
+    LCliente.fantasia := LJsonObj.GetValue('fantasia').Value;
+    LCliente.Observacao :=  LJsonObj.GetValue('observacao').Value;
+    LCliente.cnpjcpf := LJsonObj.GetValue('cnpjcpf').Value;
+    LCliente.telefone1 := LJsonObj.GetValue('telefone').Value;
+    LCliente.telefone2 := LJsonObj.GetValue('telefone2').Value;
+    LCliente.celular := LJsonObj.GetValue('celular').Value;
+    LCliente.email:= LJsonObj.GetValue('email').Value;
+    LCliente.endereco := LJsonObj.GetValue('logradouro').Value;
+    LCliente.cidade := LJsonObj.GetValue('cidade').Value;
+    LCliente.uf := LJsonObj.GetValue('uf').Value;
+    LCliente.cep := LJsonObj.GetValue('cep').Value;
+    LCliente.bairro := LJsonObj.GetValue('bairro').Value;
+    LCliente.complemento := LJsonObj.GetValue('complemento').Value;
+    LCliente.perc_desconto := LJsonObj.GetValue('perc_desconto').Value;
+    Result := LCliente;
+  finally
+    LJsonObj.Free;
+  end;
+end;
+
+procedure TCliente.Setbairro(const Value: string);
+begin
+  Fbairro := Value;
+end;
+
+procedure TCliente.Setcelular(const Value: string);
+begin
+  Fcelular := Value;
+end;
+
+procedure TCliente.Setcep(const Value: string);
+begin
+  Fcep := Value;
+end;
+
+procedure TCliente.Setcidade(const Value: string);
+begin
+  Fcidade := Value;
+end;
+
+procedure TCliente.Setcnpjcpf(const Value: string);
+begin
+  Fcnpjcpf := Value;
+end;
+
+procedure TCliente.Setcodigo(const Value: string);
+var
+
+  codigo : string;
+begin
+
+  if (Value = '') or (Value = '000000') then
+  begin
+    CODIGO := '000000';
+  end;
+
+  codigo := zeroEsquerda(Value,6);
+
+  Fcodigo := Codigo;
+end;
+
+procedure TCliente.Setcomplemento(const Value: string);
+begin
+  Fcomplemento := Value;
+end;
+
+procedure TCliente.SetDataCadastro(const Value: TDate);
+begin
+  FDataCadastro := Value;
+end;
+
+
+
+procedure TCliente.Setemail(const Value: string);
+begin
+  Femail := Value;
+end;
+
+procedure TCliente.Setendereco(const Value: string);
+begin
+  Fendereco := Value;
+end;
+
+procedure TCliente.Setfantasia(const Value: string);
+begin
+  Ffantasia := Value;
+end;
+
+procedure TCliente.SetLimiteCredito(const Value: real);
+begin
+  if Value < 0 then
+  begin
+    raise Exception.Create('Valor não pode ser negativo');
+  end;
+  FLimiteCredito := Value;
+end;
+
+procedure TCliente.Setnome(const Value: string);
+begin
+  Fnome := Value;
+end;
+
+procedure TCliente.Setnumero(const Value: string);
+begin
+  Fnumero := Value;
+end;
+
+procedure TCliente.SetObservacao(const Value: string);
+begin
+  FObservacao := Value;
+end;
+
+
+
+procedure TCliente.SetPercDesconto(const Value: real);
+begin
+  FPercDesconto := Value;
+end;
+
+procedure TCliente.SetPerc_Desconto(const Value: real);
+begin
+  FPerc_Desconto := Value;
+end;
+
+procedure TCliente.Settelefone1(const Value: string);
+begin
+  Ftelefone1 := Value;
+end;
+
+procedure TCliente.Settelefone2(const Value: string);
+begin
+  Ftelefone2 := Value;
+end;
+
+procedure TCliente.Settipopessoa(const Value: string);
+begin
+  Ftipopessoa := Value;
+end;
+
+procedure TCliente.Setuf(const Value: string);
+begin
+  Fuf := Value;
+end;
+
+procedure TCliente.SetUtilizadoCredito(const Value: Real);
+begin
+  FUtilizadoCredito := Value;
+end;
+
+end.

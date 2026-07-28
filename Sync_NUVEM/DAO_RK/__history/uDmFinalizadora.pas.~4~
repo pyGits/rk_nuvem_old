@@ -1,0 +1,26 @@
+unit uDmFinalizadora;
+
+interface
+
+uses
+  System.SysUtils, System.Classes,Conexao, Data.DB, MemDS, DBAccess, Uni;
+
+type
+  TdmFinalizadora = class(TDataModule)
+    qrFinalizadoraInsertUpdate: TUniQuery;
+  private
+    { Private declarations }
+  public
+    { Public declarations }
+  end;
+
+var
+  dmFinalizadora: TdmFinalizadora;
+
+implementation
+
+{%CLASSGROUP 'Vcl.Controls.TControl'}
+
+{$R *.dfm}
+
+end.

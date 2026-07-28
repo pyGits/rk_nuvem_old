@@ -1,0 +1,101 @@
+unit Estoque;
+
+
+interface
+
+type TEstoqueMovimentacao = class
+  private
+    Fcodigo_funcionario: string;
+    Fhora: TDateTime;
+    Fcodigo_cupom: string;
+    Fqtde: Real;
+    Fitem: integer;
+    Forigem: string;
+    Fdata: TDate;
+    Fcodigo_produto: string;
+    Fcaixa: string;
+    Floja: string;
+    procedure Setcodigo_cupom(const Value: string);
+    procedure Setcodigo_funcionario(const Value: string);
+    procedure Setcodigo_produto(const Value: string);
+    procedure Setdata(const Value: TDate);
+    procedure Sethora(const Value: TDateTime);
+    procedure Setitem(const Value: integer);
+    procedure Setorigem(const Value: string);
+    procedure Setqtde(const Value: Real);
+    procedure Setcaixa(const Value: string);
+    procedure Setloja(const Value: string);
+  public
+  property codigo_produto:string read Fcodigo_produto write Setcodigo_produto;
+  property loja:string read Floja write Setloja;
+  property caixa:string read Fcaixa write Setcaixa;
+  property qtde: Real read Fqtde write Setqtde;
+  property data:TDate read Fdata write Setdata;
+  property hora:TDateTime read Fhora write Sethora;
+  property codigo_cupom:string read Fcodigo_cupom write Setcodigo_cupom;
+  property item:integer read Fitem write Setitem;
+  property codigo_funcionario:string read Fcodigo_funcionario write Setcodigo_funcionario;
+  property origem:string read Forigem write Setorigem;
+
+end;
+
+implementation
+uses
+Funcoes;
+
+{ TEstoqueMovimentacao }
+
+procedure TEstoqueMovimentacao.Setcaixa(const Value: string);
+begin
+  Fcaixa := Value;
+end;
+
+procedure TEstoqueMovimentacao.Setcodigo_cupom(const Value: string);
+begin
+  Fcodigo_cupom := Value;
+end;
+
+procedure TEstoqueMovimentacao.Setcodigo_funcionario(const Value: string);
+begin
+  Fcodigo_funcionario := Value;
+end;
+
+procedure TEstoqueMovimentacao.Setcodigo_produto(const Value: string);
+var
+  newCodigo:string;
+begin
+  newCodigo := removeZeroEsquerda(Value);
+  Fcodigo_produto := newCodigo;
+end;
+
+procedure TEstoqueMovimentacao.Setdata(const Value: TDate);
+begin
+  Fdata := Value;
+end;
+
+procedure TEstoqueMovimentacao.Sethora(const Value: TDateTime);
+begin
+  Fhora := Value;
+end;
+
+procedure TEstoqueMovimentacao.Setitem(const Value: integer);
+begin
+  Fitem := Value;
+end;
+
+procedure TEstoqueMovimentacao.Setloja(const Value: string);
+begin
+  Floja := Value;
+end;
+
+procedure TEstoqueMovimentacao.Setorigem(const Value: string);
+begin
+  Forigem := Value;
+end;
+
+procedure TEstoqueMovimentacao.Setqtde(const Value: Real);
+begin
+  Fqtde := Value;
+end;
+
+end.

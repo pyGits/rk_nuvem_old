@@ -1,0 +1,21 @@
+unit Estoque;
+
+interface
+
+type TEstoqueMovimentacao = class
+  private
+  public
+  property codigo_produto:string;
+  property qtde: Real;
+  property data:TDate;
+  property hora:TDateTime;
+  property codigo_cupom:string;
+  property item:integer;
+  property codigo_funcionario:string;
+  property origem:string;
+
+end;
+
+implementation
+
+end.

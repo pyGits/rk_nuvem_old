@@ -1,0 +1,10 @@
+object dmPreco: TdmPreco
+  OldCreateOrder = False
+  Height = 291
+  Width = 483
+  object qrAtualizarPreco: TUniQuery
+    Connection = dmConexao.ConexaoServer
+    Left = 208
+    Top = 112
+  end
+end

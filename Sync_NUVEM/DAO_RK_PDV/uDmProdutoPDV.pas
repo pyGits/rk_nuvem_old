@@ -1,0 +1,68 @@
+unit uDmProdutoPDV;
+
+interface
+
+uses
+  System.SysUtils, System.Classes,Produto,ConexaoPDV, Data.DB, MemDS, DBAccess,System.Generics.collections,
+  Uni, FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Param,
+  FireDAC.Stan.Error, FireDAC.DatS, FireDAC.Phys.Intf, FireDAC.DApt.Intf,
+  FireDAC.Stan.Async, FireDAC.DApt, FireDAC.Comp.DataSet, FireDAC.Comp.Client;
+
+type
+  TdmProdutoPDV = class(TDataModule)
+    qrProdutoPDV: TFDQuery;
+  private
+    { Private declarations }
+  public
+    function insertProdutoPDV(listProduto:TObjectList<TProduto>):boolean;
+  end;
+
+var
+  dmProdutoPDV: TdmProdutoPDV;
+
+implementation
+
+{%CLASSGROUP 'Vcl.Controls.TControl'}
+
+{$R *.dfm}
+
+{ TdmProdutoPDV }
+
+function TdmProdutoPDV.insertProdutoPDV(listProduto:TObjectList<TProduto>): boolean;
+var
+  oProduto:TProduto;
+begin
+  for oProduto in listProduto do
+  begin
+  with qrProdutoPDV, oProduto do
+  begin
+    ParamByName('CODIGO').AsString := oProduto.Codigo;
+    ParamByName('COD_BARRA').AsString := oProduto.CodigoBarras;
+    ParamByName('NOME').AsString := oProduto.Descricao;
+    ParamByName('UNIDADE').AsString := oProduto.Unidade;
+    ParamByName('SITUACAO').AsString :=    IntToStr(oProduto.getInativo);
+    ParamByName('PRECO_VARIAVEL').AsInteger :=  oProduto.getDiversos;
+    ParamByName('USA_BALANCA').AsInteger := oProduto.getFracionado;
+    ParamByName('NCM').AsString := oProduto.NCM;
+
+    ParamByName('PRECO_VENDA').AsFloat := oProduto.Preco;
+
+
+    ParamByName('CEST').AsString := oProduto.CEST;
+    ParamByName('TRIBUTACAO').AsString := oProduto.Tributacao;
+    ParamByName('PRECO2').AsFloat := oProduto.Preco2;
+    ParamByName('PRECO2_QTD').AsFloat := oProduto.Preco2_Qtd;
+    try
+    ExecSQL;
+    except
+    on E:Exception do
+    begin
+      raise Exception.Create('Erro ao inserir produto no PDV: '+E.Message);
+    end;
+
+    end;
+  end;
+  end;
+end;
+
+end.

@@ -31,4 +31,5 @@ RUN rm /etc/nginx/conf.d/default.conf
 COPY erp_rk_front/nginx/default.conf.template /etc/nginx/templates/default.conf.template
 COPY --from=builder /app/dist /usr/share/nginx/html
 
-EXPOSE 80 443
+# 3000 é a porta legada da API, consumida pelo agente RKNuvem das lojas.
+EXPOSE 80 443 3000

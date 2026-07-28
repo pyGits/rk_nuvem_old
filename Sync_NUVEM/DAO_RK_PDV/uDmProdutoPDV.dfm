@@ -1,0 +1,72 @@
+object dmProdutoPDV: TdmProdutoPDV
+  OldCreateOrder = False
+  Height = 324
+  Width = 404
+  object qrProdutoPDV: TFDQuery
+    Connection = uDmConexaoPDV.FDConnection1
+    SQL.Strings = (
+      
+        'UPDATE OR INSERT INTO ESTOQUE(CODIGO,COD_BARRA,NOME,UNIDADE,NCM,' +
+        'PRECO_VARIAVEL,USA_BALANCA,CEST,TRIBUTACAO,SITUACAO,PRECO2,PRECO' +
+        '2_QTD,PRECO_VENDA)'
+      
+        'VALUES (:CODIGO,:COD_BARRA,:NOME,:UNIDADE,:NCM,:PRECO_VARIAVEL,:' +
+        'USA_BALANCA,:CEST,:TRIBUTACAO,:SITUACAO,:PRECO2,:PRECO2_QTD,:PRE' +
+        'CO_VENDA) MATCHING (CODIGO)')
+    Left = 280
+    Top = 144
+    ParamData = <
+      item
+        Name = 'CODIGO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'COD_BARRA'
+        ParamType = ptInput
+      end
+      item
+        Name = 'NOME'
+        ParamType = ptInput
+      end
+      item
+        Name = 'UNIDADE'
+        ParamType = ptInput
+      end
+      item
+        Name = 'NCM'
+        ParamType = ptInput
+      end
+      item
+        Name = 'PRECO_VARIAVEL'
+        ParamType = ptInput
+      end
+      item
+        Name = 'USA_BALANCA'
+        ParamType = ptInput
+      end
+      item
+        Name = 'CEST'
+        ParamType = ptInput
+      end
+      item
+        Name = 'TRIBUTACAO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'SITUACAO'
+        ParamType = ptInput
+      end
+      item
+        Name = 'PRECO2'
+        ParamType = ptInput
+      end
+      item
+        Name = 'PRECO2_QTD'
+        ParamType = ptInput
+      end
+      item
+        Name = 'PRECO_VENDA'
+        ParamType = ptInput
+      end>
+  end
+end

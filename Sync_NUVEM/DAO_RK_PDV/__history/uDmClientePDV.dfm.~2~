@@ -1,0 +1,5 @@
+object dmClientePDV: TdmClientePDV
+  OldCreateOrder = False
+  Height = 321
+  Width = 470
+end
