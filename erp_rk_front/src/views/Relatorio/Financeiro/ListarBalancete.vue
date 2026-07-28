@@ -1,76 +1,82 @@
 <template>
   <div>
-    <v-card>
-      <v-card-title>Balancete</v-card-title>
-      <v-card-text>
-        <v-row dense>
-          <v-col cols="12" sm="3">
-            <span>Data Início:</span>
-            <InputDate v-model="filtro.dtInicio" />
-          </v-col>
-          <v-col cols="12" sm="3">
-            <span>Data Fim:</span>
-            <InputDate v-model="filtro.dtFim" />
-          </v-col>
-          <v-col cols="12" sm="3" class="mt-6">
-            <v-btn color="primary" @click="gerarBalancete">Gerar</v-btn>
-          </v-col>
-        </v-row>
-        <v-row dense>
-          <v-col cols="12" sm="6">
-            <v-subheader>Loja</v-subheader>
-            <v-autocomplete v-model="filtro.loja" :items="lojas" item-text="nome" item-value="codigo" label="Selecione a Loja" outlined dense clearable>
+    <v-card flat>
+      <CabecalhoRelatorio
+        titulo="Balancete"
+        :subtitulo="resumoFiltro"
+        icone="mdi-scale-balance"
+        :carregando="carregando"
+        :sem-dados="!data.length"
+        texto-atualizar="Gerar"
+        :mostrar-exportar="false"
+        @atualizar="gerarBalancete"
+      />
+
+      <div class="px-6">
+        <FiltroPeriodo :dt-inicio.sync="filtro.dtInicio" :dt-fim.sync="filtro.dtFim" @alterado="gerarBalancete">
+          <v-col cols="12" md="4">
+            <v-autocomplete
+              v-model="filtro.loja"
+              :items="lojas"
+              item-text="nome"
+              item-value="codigo"
+              label="Loja"
+              prepend-inner-icon="mdi-store-outline"
+              dense
+              outlined
+              hide-details
+              clearable
+              @change="gerarBalancete"
+            >
               <template v-slot:append-outer>
-                <v-btn icon @click="abrirDialogLoja">
+                <v-btn icon small @click="abrirDialogLoja">
                   <v-icon>mdi-magnify</v-icon>
                 </v-btn>
               </template>
             </v-autocomplete>
           </v-col>
-        </v-row>
+        </FiltroPeriodo>
+      </div>
 
-        <v-row>
-          <v-col cols="12">
-            <v-data-table :headers="headerCategoria" :items="data" item-key="nome" show-expand class="elevation-1">
-              <!-- Coloração da célula de total da categoria -->
-              <template v-slot:item.total="{ item }">
-                <span :style="{ color: item.total < 0 ? 'red' : 'green' }">
-                  {{ item.total | money }}
-                </span>
-              </template>
+      <v-card-text class="pt-0">
+        <EstadoVazio v-if="!carregando && !data.length" mensagem="Nenhum lançamento no período selecionado." />
 
-              <!-- Subtabela de subcategorias -->
-              <template v-slot:expanded-item="{ headers, item }">
-                <td :colspan="headers.length" class="pa-0">
-                  <v-data-table :headers="subHeaders" :items="item.subcategoria" hide-default-footer class="ml-4 mr-4 mb-4" dense>
-                    <template v-slot:item="{ item }">
-                      <tr :class="getRowClass(item)">
-                        <td>{{ item.nome }}</td>
-                        <td>{{ item.total | money }}</td>
-                      </tr>
-                    </template>
-
-                    <template v-slot:no-data> Sem subcategorias </template>
-                  </v-data-table>
-                </td>
-              </template>
-            </v-data-table>
-          </v-col>
-        </v-row>
-
-        <!-- ✅ Linha fixa com saldo total geral -->
-        <v-row class="mt-4">
-          <v-col cols="12" class="text-right">
-            <span style="font-weight: bold; font-size: 18px">
-              Saldo Total:
-              <span :style="{ color: saldoTotalGeral < 0 ? 'red' : 'green' }">
-                {{ saldoTotalGeral | money }}
+        <template v-else>
+          <v-data-table :headers="headerCategoria" :items="data" item-key="nome" show-expand class="elevation-1">
+            <!-- Coloração da célula de total da categoria -->
+            <template v-slot:item.total="{ item }">
+              <span :style="{ color: item.total < 0 ? 'red' : 'green' }">
+                {{ item.total | money }}
               </span>
+            </template>
+
+            <!-- Subtabela de subcategorias -->
+            <template v-slot:expanded-item="{ headers, item }">
+              <td :colspan="headers.length" class="pa-0">
+                <v-data-table :headers="subHeaders" :items="item.subcategoria" hide-default-footer class="ml-4 mr-4 mb-4" dense>
+                  <template v-slot:item="{ item }">
+                    <tr :class="getRowClass(item)">
+                      <td>{{ item.nome }}</td>
+                      <td>{{ item.total | money }}</td>
+                    </tr>
+                  </template>
+
+                  <template v-slot:no-data> Sem subcategorias </template>
+                </v-data-table>
+              </td>
+            </template>
+          </v-data-table>
+
+          <div class="d-flex justify-end align-center mt-4">
+            <span class="text-subtitle-1 mr-2">Saldo total:</span>
+            <span class="text-h6 font-weight-bold" :class="saldoTotalGeral < 0 ? 'red--text' : 'green--text'">
+              {{ saldoTotalGeral | money }}
             </span>
-          </v-col>
-        </v-row>
+          </div>
+        </template>
       </v-card-text>
     </v-card>
+
     <v-dialog v-model="dialogLoja">
       <LocalizarLoja @selecionar="selecionarLoja"></LocalizarLoja>
     </v-dialog>
@@ -78,27 +84,35 @@
 </template>
 
 <script>
-import InputDate from "@/components/Input/InputDate.vue";
-import InputMoney from "@/components/Input/InputMoney.vue";
 import CategoriaFinanceiraService from "@/infra/service/CategoriaFinanceiraService";
 import LojaService from "@/infra/service/LojaService";
 import LocalizarLoja from "@/views/Loja/LocalizarLoja.vue";
+import CabecalhoRelatorio from "@/components/Relatorio/CabecalhoRelatorio.vue";
+import FiltroPeriodo from "@/components/Relatorio/FiltroPeriodo.vue";
+import EstadoVazio from "@/components/Relatorio/EstadoVazio.vue";
+import { getCurrentDate } from "@/utils/date";
 
 export default {
   components: {
-    InputDate,
-    InputMoney,
     LocalizarLoja,
+    CabecalhoRelatorio,
+    FiltroPeriodo,
+    EstadoVazio,
   },
   async mounted() {
     await this.carregarLojas();
+    await this.gerarBalancete();
   },
   data() {
     return {
       dialogLoja: false,
+      carregando: false,
+      // Strings YYYY-MM-DD: a coluna data do lançamento é date puro. Antes eram
+      // objetos Date, que o axios serializava em UTC — depois das 21h no
+      // horário de Brasília o filtro "hoje" já apontava para o dia seguinte.
       filtro: {
-        dtInicio: new Date(),
-        dtFim: new Date(),
+        dtInicio: getCurrentDate(),
+        dtFim: getCurrentDate(),
         loja: null,
       },
       headerCategoria: [
@@ -115,7 +129,22 @@ export default {
       saldoTotalGeral: 0,
     };
   },
+  computed: {
+    lojaSelecionada() {
+      if (!this.filtro.loja) return "Todas as lojas";
+      const loja = this.lojas.find((l) => l.codigo === this.filtro.loja);
+      return loja ? loja.nome : `Loja ${this.filtro.loja}`;
+    },
+    resumoFiltro() {
+      return `${this.formatarData(this.filtro.dtInicio)} até ${this.formatarData(this.filtro.dtFim)} · ${this.lojaSelecionada}`;
+    },
+  },
   methods: {
+    formatarData(data) {
+      if (!data) return "";
+      const [ano, mes, dia] = String(data).split("-");
+      return `${dia}/${mes}/${ano}`;
+    },
     async carregarLojas() {
       const data = await LojaService.getAll();
       this.lojas = data.lojas;
@@ -126,12 +155,19 @@ export default {
     selecionarLoja(loja) {
       this.filtro.loja = loja.codigo;
       this.dialogLoja = false;
+      this.gerarBalancete();
     },
-
     async gerarBalancete() {
-      const list = await CategoriaFinanceiraService.getBalancete(this.filtro);
-      this.data = list.categorias;
-      this.saldoTotalGeral = list.saldo;
+      if (this.filtro.dtFim < this.filtro.dtInicio) return;
+
+      this.carregando = true;
+      try {
+        const list = await CategoriaFinanceiraService.getBalancete(this.filtro);
+        this.data = list.categorias;
+        this.saldoTotalGeral = list.saldo;
+      } finally {
+        this.carregando = false;
+      }
     },
     getRowClass(item) {
       if (item.tipo === "RECEITA") {
