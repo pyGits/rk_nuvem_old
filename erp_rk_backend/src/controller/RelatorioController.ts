@@ -15,10 +15,7 @@ function lojaFiltro(query: any): number | null {
 export default {
   async relPainelLoja(req: any, res: any) {
     const { tenant_id } = req;
-    const loja = lojaFiltro(req.query);
-    const lojas = await Loja.findAll({
-      where: loja ? { tenant_id, codigo: loja } : { tenant_id },
-    });
+    const filtroLoja = lojaFiltro(req.query);
     const dtInicio = req.query.dtInicio;
     const dtFim = req.query.dtFim;
 
@@ -27,13 +24,22 @@ export default {
       return;
     }
 
-    let result: any[] = [];
+    // Sem try/catch, uma falha aqui vira unhandledRejection e derruba o
+    // processo inteiro — o que já aconteceu em produção.
+    try {
+      // lojas.codigo é varchar: comparar com número faz o Postgres abortar com
+      // "operator does not exist: character varying = integer".
+      const lojas = await Loja.findAll({
+        where: filtroLoja ? { tenant_id, codigo: String(filtroLoja) } : { tenant_id },
+      });
 
-    await Promise.all(
-      lojas.map(async (loja: any) => {
-        const results: any = await sequelize.query(
-          `
-          SELECT 
+      let result: any[] = [];
+
+      await Promise.all(
+        lojas.map(async (loja: any) => {
+          const results: any = await sequelize.query(
+            `
+          SELECT
             CONCAT(${loja.codigo}, ' - ', '${loja.nome}') as loja,
             COUNT(*) as qtd_clientes,
             COALESCE(SUM(valor_total), 0) as venda,
@@ -44,27 +50,30 @@ export default {
             tenant_id = ${tenant_id}
             AND cancelado = 0
             AND loja = ${loja.codigo}
-            AND data >= '${dtInicio}' 
+            AND data >= '${dtInicio}'
             AND data <= '${dtFim}'
           `,
-          {
-            type: QueryTypes.SELECT,
-          }
-        );
+            {
+              type: QueryTypes.SELECT,
+            }
+          );
 
-        const formattedResult = {
-          loja: results[0].loja,
-          qtd_clientes: parseInt(results[0].qtd_clientes) || 0,
-          venda: results[0].venda || 0,
-          venda_custo: results[0].venda_custo || 0,
-          ticket_medio: results[0].ticket_medio || 0,
-        };
+          const formattedResult = {
+            loja: results[0].loja,
+            qtd_clientes: parseInt(results[0].qtd_clientes) || 0,
+            venda: results[0].venda || 0,
+            venda_custo: results[0].venda_custo || 0,
+            ticket_medio: results[0].ticket_medio || 0,
+          };
 
-        result.push(formattedResult);
-      })
-    );
+          result.push(formattedResult);
+        })
+      );
 
-    res.status(200).json(result);
+      res.status(200).json(result);
+    } catch (error: any) {
+      res.status(400).json({ message: error.message });
+    }
   },
 
   async relPainelProduto(req: any, res: any) {
