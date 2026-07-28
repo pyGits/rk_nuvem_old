@@ -44,7 +44,10 @@ server {
     gzip_proxied      any;
     gzip_types        text/plain text/css text/javascript application/javascript application/json image/svg+xml;
 
-    location /api/ {
+    # "^~" e obrigatorio: sem ele, a location de assets estaticos (regex, logo
+    # abaixo) teria prioridade sobre este prefixo e capturaria /api/logo/<tenant>/
+    # *.jpg, fazendo o nginx procurar a logo no disco local e devolver 404.
+    location ^~ /api/ {
         # Resolvido em runtime pelo DNS interno do Docker. Sem isso o nginx tenta
         # resolver "backend" no boot e se recusa a iniciar quando o backend está
         # fora do ar — derrubando o front junto. Assim ele sobe e devolve 502
