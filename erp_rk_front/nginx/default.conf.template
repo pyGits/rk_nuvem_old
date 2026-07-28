@@ -45,7 +45,13 @@ server {
     gzip_types        text/plain text/css text/javascript application/javascript application/json image/svg+xml;
 
     location /api/ {
-        proxy_pass http://backend:3000;
+        # Resolvido em runtime pelo DNS interno do Docker. Sem isso o nginx tenta
+        # resolver "backend" no boot e se recusa a iniciar quando o backend está
+        # fora do ar — derrubando o front junto. Assim ele sobe e devolve 502
+        # apenas em /api/ até o backend voltar.
+        resolver 127.0.0.11 ipv6=off valid=10s;
+        set $rk_backend backend;
+        proxy_pass http://$rk_backend:3000;
 
         proxy_http_version 1.1;
         proxy_set_header Upgrade    $http_upgrade;

@@ -193,10 +193,15 @@ docker compose exec backend npx knex migrate:latest --knexfile knexfile.ts
 sed -i 's|^IMAGE_TAG=.*|IMAGE_TAG=<sha-anterior>|' .env
 docker compose pull && docker compose up -d
 
-# backup das logos
-docker run --rm -v rk-nuvem_backend_images:/data -v $PWD:/backup alpine \
-  tar czf /backup/logos-$(date +%F).tar.gz -C /data .
+# backup dos volumes (logos e XMLs de NF-e)
+for v in backend_images backend_uploads; do
+  docker run --rm -v rk-nuvem_$v:/data -v $PWD:/backup alpine \
+    tar czf /backup/$v-$(date +%F).tar.gz -C /data .
+done
 ```
+
+Os XMLs de nota de entrada em `backend_uploads` são referenciados pela tabela
+`nota_fiscal_entrada_diretorio` — entram no backup junto com o banco, não depois.
 
 Testar o build localmente antes de dar push:
 
