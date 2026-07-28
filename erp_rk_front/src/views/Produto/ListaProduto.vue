@@ -68,6 +68,7 @@
       :headers="headers"
       :items="itens"
       :search="search"
+      sort-by="codigo"
       :footer-props="{
         'items-per-page-text': 'Produtos por pág.',
       }"
@@ -85,6 +86,20 @@
 </template>
 
 <script>
+// Compara como número quando os dois lados são numéricos; o que não for número
+// vai para o fim da lista em vez de bagunçar a ordem.
+function ordenarNumerico(a, b) {
+  const na = Number(a);
+  const nb = Number(b);
+  const aValido = a !== null && a !== "" && Number.isFinite(na);
+  const bValido = b !== null && b !== "" && Number.isFinite(nb);
+
+  if (aValido && bValido) return na - nb;
+  if (aValido) return -1;
+  if (bValido) return 1;
+  return String(a || "").localeCompare(String(b || ""));
+}
+
 export default {
   async mounted() {
     this.$store.commit("setContainerLoading", true);
@@ -94,7 +109,11 @@ export default {
   data() {
     return {
       headers: [
-        { text: "Código Barras", value: "codigo_barras" },
+        // codigo e codigo_barras são varchar no banco, então a ordenação padrão
+        // seria alfabética (1, 10, 100, 2...). Ordenamos como número, jogando
+        // eventuais códigos não numéricos para o fim.
+        { text: "Código", value: "codigo", width: 120, sort: ordenarNumerico },
+        { text: "Código Barras", value: "codigo_barras", sort: ordenarNumerico },
         { text: "Produto", value: "descricao" },
       ],
       search: "",
