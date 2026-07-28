@@ -1,60 +1,62 @@
-# Necessário para o proxy repassar WebSocket / EventSource sem cortar a conexão.
+# Configuracao do nginx que roda no container e substitui o nginx do host.
+# Atende os tres sites da VPS: RK producao, RK homologacao e a API do dediet.
+#
+# O container usa network_mode: host. Isso e necessario porque a API do dediet
+# escuta apenas em 127.0.0.1:3333 — um container em rede bridge nao alcanca o
+# loopback do host. Como efeito colateral, o backend do RK tambem e acessado
+# por 127.0.0.1 (porta publicada pelo compose) em vez do DNS interno do Docker.
+#
+# HTTP_PORT/HTTPS_PORT sao parametrizadas para permitir validar tudo em
+# 8080/8443 com o nginx do host ainda no ar, antes da virada para 80/443.
+
 map $http_upgrade $connection_upgrade {
     default upgrade;
     ''      close;
 }
 
+# ===================================================================
+# RK Nuvem — producao
+# ===================================================================
 server {
-    listen 80;
-    listen [::]:80;
+    listen ${HTTP_PORT};
     server_name ${DOMAIN};
 
-    # Renovação do Let's Encrypt pelo modo webroot (certbot roda no host).
     location /.well-known/acme-challenge/ {
         root /var/www/certbot;
     }
-
     location / {
         return 301 https://$host$request_uri;
     }
 }
 
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
+    listen ${HTTPS_PORT} ssl;
     http2 on;
     server_name ${DOMAIN};
 
     ssl_certificate     /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
-    ssl_protocols       TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers off;
-    ssl_session_cache   shared:SSL:10m;
-    ssl_session_timeout 1d;
+    include             /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
 
-    # O backend aceita payloads de até 50mb (import de XML, cargas, certificados).
+    # O backend aceita payloads de ate 50mb (XML, cargas, certificados).
     client_max_body_size 50m;
 
     root  /usr/share/nginx/html;
     index index.html;
 
-    gzip              on;
-    gzip_vary         on;
-    gzip_min_length   1024;
-    gzip_proxied      any;
-    gzip_types        text/plain text/css text/javascript application/javascript application/json image/svg+xml;
+    gzip            on;
+    gzip_vary       on;
+    gzip_min_length 1024;
+    gzip_proxied    any;
+    gzip_types      text/plain text/css text/javascript application/javascript application/json image/svg+xml;
 
-    # "^~" e obrigatorio: sem ele, a location de assets estaticos (regex, logo
-    # abaixo) teria prioridade sobre este prefixo e capturaria /api/logo/<tenant>/
-    # *.jpg, fazendo o nginx procurar a logo no disco local e devolver 404.
+    # "^~" e obrigatorio: sem ele, a location de assets estaticos (regex, mais
+    # abaixo) teria prioridade sobre este prefixo e capturaria
+    # /api/logo/<tenant_id>/*.jpg, fazendo o nginx procurar a logo no disco
+    # local e devolver 404 — a logo de todos os tenants ficaria quebrada.
     location ^~ /api/ {
-        # Resolvido em runtime pelo DNS interno do Docker. Sem isso o nginx tenta
-        # resolver "backend" no boot e se recusa a iniciar quando o backend está
-        # fora do ar — derrubando o front junto. Assim ele sobe e devolve 502
-        # apenas em /api/ até o backend voltar.
-        resolver 127.0.0.11 ipv6=off valid=10s;
-        set $rk_backend backend;
-        proxy_pass http://$rk_backend:3000;
+        proxy_pass http://127.0.0.1:${BACKEND_PORT};
 
         proxy_http_version 1.1;
         proxy_set_header Upgrade    $http_upgrade;
@@ -64,7 +66,7 @@ server {
         proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
 
-        # Consultas à SEFAZ e cargas grandes passam bem de 60s.
+        # Consultas a SEFAZ e cargas grandes passam bem de 60s.
         proxy_connect_timeout 30s;
         proxy_send_timeout    300s;
         proxy_read_timeout    300s;
@@ -74,7 +76,6 @@ server {
         proxy_cache     off;
     }
 
-    # Assets com hash no nome podem ser cacheados agressivamente.
     location ~* \.(?:js|css|woff2?|ttf|eot|png|jpe?g|gif|svg|ico)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
@@ -84,5 +85,99 @@ server {
     # vue-router em mode: "history"
     location / {
         try_files $uri $uri/ /index.html;
+    }
+}
+
+# ===================================================================
+# RK Nuvem — homologacao (servida do disco do host, bind mount)
+# ===================================================================
+server {
+    listen ${HTTP_PORT};
+    server_name ${DOMAIN_HOMOLOG};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen ${HTTPS_PORT} ssl;
+    server_name ${DOMAIN_HOMOLOG};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN_HOMOLOG}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_HOMOLOG}/privkey.pem;
+    include             /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam         /etc/letsencrypt/ssl-dhparams.pem;
+
+    root  /srv/homologacao;
+    index index.html;
+
+    error_page 404 /404.html;
+    error_page 500 502 503 504 /50x.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+        add_header Cache-Control "no-cache, no-store, must-revalidate";
+        add_header Pragma "no-cache";
+        add_header Expires 0;
+    }
+}
+
+# ===================================================================
+# dediet — API de outro projeto que roda no host (pm2, porta 3333)
+# ===================================================================
+server {
+    listen ${HTTP_PORT};
+    server_name ${DOMAIN_DEDIET};
+
+    # Renovacao do certificado precisa continuar respondendo em texto claro.
+    location /.well-known/acme-challenge/ {
+        root /var/www/dediet-acme;
+    }
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen ${HTTPS_PORT} ssl;
+    server_name ${DOMAIN_DEDIET};
+
+    ssl_certificate     /etc/letsencrypt/live/${DOMAIN_DEDIET}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN_DEDIET}/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache   shared:SSL_dediet:5m;
+    ssl_session_timeout 1h;
+
+    # A API responde JSON para um app, nao paginas para navegador.
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    # Politica de privacidade: pagina estatica, exigida pela Play Store e pela
+    # LGPD. Servida pelo nginx, sem passar pela API.
+    location = /privacidade {
+        root /var/www/dediet-legal;
+        try_files /privacidade.html =404;
+        default_type text/html;
+        charset utf-8;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:3333;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        # O Fastify le isto para saber que a origem foi https; sem ele, os
+        # redirects do OAuth sairiam apontando para http.
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # A analise de foto chama o modelo de visao e demora.
+        proxy_read_timeout 120s;
+        # A foto vai em base64 no corpo; o padrao de 1M cortaria.
+        client_max_body_size 12m;
     }
 }

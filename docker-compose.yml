@@ -11,17 +11,19 @@ services:
       NODE_ENV: production
       SERVER_PORT: "3000"
       XMLLINT_PATH: /usr/bin/xmllint
-    # Permite alcançar o PostgreSQL instalado no host com DB_HOST=host.docker.internal
+    # Publicado no loopback porque o "web" roda com network_mode: host e
+    # alcanca o backend por 127.0.0.1, nao pelo DNS interno do Docker.
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-3001}:3000"
+    # Permite alcancar o PostgreSQL instalado no host com DB_HOST=host.docker.internal
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       # Logos enviadas pelos tenants (multer grava em images/logo/<tenant_id>)
       - backend_images:/app/erp_rk_backend/images
       # XMLs de NF-e de entrada, guardados por tenant e referenciados na tabela
-      # nota_fiscal_entrada_diretorio — não podem sumir a cada deploy.
+      # nota_fiscal_entrada_diretorio — nao podem sumir a cada deploy.
       - backend_uploads:/app/erp_rk_backend/uploads
-    expose:
-      - "3000"
     networks:
       - rk
     logging:
@@ -36,20 +38,30 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+    # Rede do host: a API do dediet escuta apenas em 127.0.0.1:3333 e um
+    # container em bridge nao alcanca o loopback do host. Com isso o nginx
+    # tambem passa a ouvir direto nas portas do host (o mapeamento "ports"
+    # nao se aplica em network_mode: host).
+    network_mode: host
     environment:
       DOMAIN: ${DOMAIN:?defina DOMAIN no .env}
-    ports:
-      - "80:80"
-      - "443:443"
+      DOMAIN_HOMOLOG: ${DOMAIN_HOMOLOG:?defina DOMAIN_HOMOLOG no .env}
+      DOMAIN_DEDIET: ${DOMAIN_DEDIET:?defina DOMAIN_DEDIET no .env}
+      BACKEND_PORT: ${BACKEND_PORT:-3001}
+      # 8080/8443 para validar com o nginx do host ainda no ar; 80/443 na virada.
+      HTTP_PORT: ${HTTP_PORT:-80}
+      HTTPS_PORT: ${HTTPS_PORT:-443}
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt:ro
       - /var/www/certbot:/var/www/certbot:ro
-    # Evita que o SELinux do CentOS bloqueie a leitura de /etc/letsencrypt sem
+      # Sites que continuam servidos do disco do host
+      - /usr/share/nginx/frontend/RK_Nuvem_Front_Homologacao:/srv/homologacao:ro
+      - /var/www/dediet-acme:/var/www/dediet-acme:ro
+      - /var/www/dediet-legal:/var/www/dediet-legal:ro
+    # Evita que o SELinux do CentOS bloqueie a leitura desses caminhos sem
     # precisar relabelar arquivos do host (o que quebraria o certbot).
     security_opt:
       - label=disable
-    networks:
-      - rk
     logging:
       driver: json-file
       options:
