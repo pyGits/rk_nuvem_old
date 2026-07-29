@@ -8,7 +8,10 @@ const NaoFiscal = db.define(
   "NaoFiscal",
   {
     id: { type: DataTypes.INTEGER, autoIncrement: true },
-    loja: { type: DataTypes.STRING(3) },
+    // `loja` faz parte da chave: cada loja tem seu próprio sequencial de
+    // documento não fiscal, então duas lojas do mesmo tenant chegam ao mesmo
+    // `codigo` no mesmo caixa. Sem ela, a segunda loja colide na PK.
+    loja: { type: DataTypes.STRING(3), primaryKey: true },
     caixa: { type: DataTypes.STRING(3), primaryKey: true },
     codigo: { type: DataTypes.STRING, primaryKey: true },
     tenant_id: { type: DataTypes.INTEGER, primaryKey: true },

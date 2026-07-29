@@ -2,6 +2,30 @@ import moment from "moment";
 import Venda from "../models/Venda";
 import VendaForma from "../models/VendaForma";
 import VendaItem from "../models/VendaItem";
+import Preco from "../models/Preco";
+
+// O custo que sobe do sync e o que estava gravado no PDV no momento da venda,
+// que chega zerado ou desatualizado. Por isso o custo do item passa a ser lido
+// do cadastro de precos da propria loja. Se o produto nao tiver preco cadastrado
+// ali, o valor enviado pelo sync ainda e usado como ultimo recurso.
+async function custoAtualDoProduto(tenant_id: number, loja: number, codigo_produto: string, custoInformado: any) {
+  const custoSync = Number(custoInformado) || 0;
+
+  if (!codigo_produto) return custoSync;
+
+  const preco: any = await Preco.findOne({
+    where: { tenant_id, loja, codigo_produto },
+    attributes: ["custo"],
+  });
+
+  if (!preco) return custoSync;
+
+  // mesma regra do PrecoRepository: custo invalido ou negativo vale zero
+  const custo = Number(preco.getDataValue("custo"));
+  if (!Number.isFinite(custo)) return custoSync;
+
+  return custo < 0 ? 0 : custo;
+}
 
 export default {
   async InserirVendaForma(req: any, res: any) {
@@ -150,8 +174,12 @@ export default {
   },
   async InserirVendaItem(req: any, res: any) {
     const { tenant_id } = req;
-    const { loja, codigo, codigo_cupom, data, caixa, codigo_produto, item, unidade, qtde, valor_unitario, valor_desconto, valor_acrescimo, valor_total, cancelado, valor_custo, valor_custo_total } = req.body;
+    // valor_custo_total nao e mais lido do body: o custo do item vem do cadastro
+    const { loja, codigo, codigo_cupom, data, caixa, codigo_produto, item, unidade, qtde, valor_unitario, valor_desconto, valor_acrescimo, valor_total, cancelado, valor_custo } = req.body;
     try {
+      const custoUnitario = await custoAtualDoProduto(tenant_id, loja, codigo_produto, valor_custo);
+      const custoTotal = Number((custoUnitario * (Number(qtde) || 0)).toFixed(2));
+
       const existingVendaItem = await VendaItem.findOne({
         where: {
           loja,
@@ -179,8 +207,8 @@ export default {
             valor_acrescimo,
             valor_total,
             cancelado,
-            valor_custo,
-            valor_custo_total,
+            valor_custo: custoUnitario,
+            valor_custo_total: custoTotal,
             tenant_id,
           },
           {
@@ -209,8 +237,8 @@ export default {
           valor_acrescimo,
           valor_total,
           cancelado,
-          valor_custo,
-          valor_custo_total,
+          valor_custo: custoUnitario,
+          valor_custo_total: custoTotal,
           tenant_id,
         });
       }

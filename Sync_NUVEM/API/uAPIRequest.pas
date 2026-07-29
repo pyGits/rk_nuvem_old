@@ -73,22 +73,31 @@ var
   RequestBody: TStringStream;
 begin
   IdHTTP := TIdHTTP.Create(nil);
-  RequestBody := TStringStream.Create(AJSON, TEncoding.UTF8);
-  IdSSL := TIdSSLIOHandlerSocketOpenSSL.Create(IdHTTP);
   try
-    IdHTTP.Request.ContentType := 'application/json';
-    IdSSL.SSLOptions.Method := sslvTLSv1_2; // configura para usar a versão 1.2 do protocolo TLS
-    IdHTTP.IOHandler := IdSSL; // atribui o handler SSL/TLS para o TIdHTTP
-    IdHTTP.Request.CustomHeaders.Add('x-access-token: '+TOKEN);
-    Result := IdHTTP.Post(API_URL+route, RequestBody);
-  except
-  on E:Exception do
-  begin
-    raise Exception.Create(e.Message);
-  end;
-//    IdSSL.Free; // libera o handler SSL/TLS após o uso
-  end;
+    RequestBody := TStringStream.Create(AJSON, TEncoding.UTF8);
+    try
+      // O IdSSL pertence ao IdHTTP (Create(IdHTTP)), entao sai junto com ele.
+      IdSSL := TIdSSLIOHandlerSocketOpenSSL.Create(IdHTTP);
+      IdHTTP.Request.ContentType := 'application/json';
+      IdSSL.SSLOptions.Method := sslvTLSv1_2; // configura para usar a versão 1.2 do protocolo TLS
+      IdHTTP.IOHandler := IdSSL; // atribui o handler SSL/TLS para o TIdHTTP
+      IdHTTP.Request.CustomHeaders.Add('x-access-token: '+TOKEN);
 
+      // A excecao original sobe intacta de proposito. O "raise Exception.Create
+      // (E.Message)" que existia aqui trocava a EIdHTTPProtocolException por uma
+      // Exception generica e descartava o ErrorMessage - que e onde vem o corpo
+      // da resposta. Num 400 o corpo e o proprio motivo da recusa ({"error":...}
+      // devolvido pela API), a unica informacao util para saber por que o
+      // registro nao subiu.
+      Result := IdHTTP.Post(API_URL+route, RequestBody);
+    finally
+      RequestBody.Free;
+    end;
+  finally
+    // O codigo anterior nao liberava nem o stream nem o IdHTTP: cada POST
+    // vazava os dois, e o agente fica postando o dia inteiro.
+    IdHTTP.Free;
+  end;
 end;
 
 // Detalha a excecao para o arquivo de log. Erros de protocolo do Indy trazem o
@@ -107,6 +116,15 @@ begin
        EIdHTTPProtocolException(E).ErrorMessage])
   else
     Result := E.ClassName + ': ' + E.Message;
+end;
+
+// Uma falha de envio so e diagnosticavel com as tres pontas: qual registro era,
+// o que o servidor respondeu e o JSON que saiu daqui. O payload vai truncado
+// porque um cupom grande encheria o arquivo sem acrescentar nada.
+procedure LogFalhaEnvio(const contexto, identificacao, payload, motivo: string);
+begin
+  uLogErro.LogErro(contexto,
+    identificacao + ' | ' + motivo + ' | enviado: ' + Copy(payload, 1, 500));
 end;
 
 function Login(user:string;password:string):Boolean;
@@ -322,17 +340,17 @@ begin
   else
   begin
     result := false;
-    uLogErro.LogErro('POST_VENDA',
-      Format('Cupom %s caixa %s | resposta inesperada: %s',
-        [cupom.codigo, cupom.caixa, jsonResponse]));
+    LogFalhaEnvio('POST_VENDA',
+        Format('Cupom %s caixa %s', [cupom.codigo, cupom.caixa]),
+        venda, 'resposta inesperada: ' + jsonResponse);
   end;
   except
   on E:Exception do
   begin
   result := false;
-  uLogErro.LogErro('POST_VENDA',
-    Format('Cupom %s caixa %s | %s',
-      [cupom.codigo, cupom.caixa, DescreveErro(E)]));
+  LogFalhaEnvio('POST_VENDA',
+      Format('Cupom %s caixa %s', [cupom.codigo, cupom.caixa]),
+      venda, DescreveErro(E));
   end;
 
   end;
@@ -356,17 +374,17 @@ begin
   else
   begin
     result := false;
-    uLogErro.LogErro('POST_VENDA_ITEM',
-      Format('Cupom %s item %d caixa %s | resposta inesperada: %s',
-        [cupomItem.codigo_cupom, cupomItem.item, cupomItem.caixa, jsonResponse]));
+    LogFalhaEnvio('POST_VENDA_ITEM',
+        Format('Cupom %s item %d caixa %s', [cupomItem.codigo_cupom, cupomItem.item, cupomItem.caixa]),
+        venda, 'resposta inesperada: ' + jsonResponse);
   end;
   except
   on E:Exception do
   begin
   result := false;
-  uLogErro.LogErro('POST_VENDA_ITEM',
-    Format('Cupom %s item %d caixa %s | %s',
-      [cupomItem.codigo_cupom, cupomItem.item, cupomItem.caixa, DescreveErro(E)]));
+  LogFalhaEnvio('POST_VENDA_ITEM',
+      Format('Cupom %s item %d caixa %s', [cupomItem.codigo_cupom, cupomItem.item, cupomItem.caixa]),
+      venda, DescreveErro(E));
   end;
 
   end;
@@ -389,17 +407,17 @@ begin
   else
   begin
     result := false;
-    uLogErro.LogErro('POST_VENDA_FORMA',
-      Format('Cupom %s forma %s caixa %s | resposta inesperada: %s',
-        [cupomForma.codigo_cupom, cupomForma.finalizadora, cupomForma.caixa, jsonResponse]));
+    LogFalhaEnvio('POST_VENDA_FORMA',
+        Format('Cupom %s forma %s caixa %s', [cupomForma.codigo_cupom, cupomForma.finalizadora, cupomForma.caixa]),
+        venda, 'resposta inesperada: ' + jsonResponse);
   end;
   except
   on E:Exception do
   begin
   result := false;
-  uLogErro.LogErro('POST_VENDA_FORMA',
-    Format('Cupom %s forma %s caixa %s | %s',
-      [cupomForma.codigo_cupom, cupomForma.finalizadora, cupomForma.caixa, DescreveErro(E)]));
+  LogFalhaEnvio('POST_VENDA_FORMA',
+      Format('Cupom %s forma %s caixa %s', [cupomForma.codigo_cupom, cupomForma.finalizadora, cupomForma.caixa]),
+      venda, DescreveErro(E));
   end;
 
   end;
@@ -422,18 +440,18 @@ begin
     else
     begin
       result := false;
-      uLogErro.LogErro('POST_FECHAMENTO',
-        Format('Fechamento %s caixa %d | resposta inesperada: %s',
-          [fechamento.codigo, fechamento.codCaixa, jsonResponse]));
+      LogFalhaEnvio('POST_FECHAMENTO',
+        Format('Fechamento %s caixa %d', [fechamento.codigo, fechamento.codCaixa]),
+        venda, 'resposta inesperada: ' + jsonResponse);
     end;
     except
     on E: Exception do
     begin
 //      showmessage(e.Message);
       result := false;
-      uLogErro.LogErro('POST_FECHAMENTO',
-        Format('Fechamento %s caixa %d | %s',
-          [fechamento.codigo, fechamento.codCaixa, DescreveErro(E)]));
+      LogFalhaEnvio('POST_FECHAMENTO',
+      Format('Fechamento %s caixa %d', [fechamento.codigo, fechamento.codCaixa]),
+      venda, DescreveErro(E));
     end;
 
   end;
@@ -455,17 +473,17 @@ begin
     else
     begin
       result := false;
-      uLogErro.LogErro('POST_FECHAMENTO_FORMA',
-        Format('Fechamento %s finalizadora %s caixa %d | resposta inesperada: %s',
-          [fechamentoForma.id, fechamentoForma.Finalizadora, fechamentoForma.codCaixa, jsonResponse]));
+      LogFalhaEnvio('POST_FECHAMENTO_FORMA',
+        Format('Fechamento %s finalizadora %s caixa %d', [fechamentoForma.id, fechamentoForma.Finalizadora, fechamentoForma.codCaixa]),
+        venda, 'resposta inesperada: ' + jsonResponse);
     end;
     except
     on E: Exception do
     begin
       result := false;
-      uLogErro.LogErro('POST_FECHAMENTO_FORMA',
-        Format('Fechamento %s finalizadora %s caixa %d | %s',
-          [fechamentoForma.id, fechamentoForma.Finalizadora, fechamentoForma.codCaixa, DescreveErro(E)]));
+      LogFalhaEnvio('POST_FECHAMENTO_FORMA',
+      Format('Fechamento %s finalizadora %s caixa %d', [fechamentoForma.id, fechamentoForma.Finalizadora, fechamentoForma.codCaixa]),
+      venda, DescreveErro(E));
     end;
 
   end;
@@ -489,17 +507,17 @@ begin
     else
     begin
       result := false;
-      uLogErro.LogErro('POST_NAO_FISCAL',
-        Format('Documento %s caixa %d | resposta inesperada: %s',
-          [naoFiscal.codigo, naoFiscal.caixa, jsonResponse]));
+      LogFalhaEnvio('POST_NAO_FISCAL',
+        Format('Documento %s caixa %d', [naoFiscal.codigo, naoFiscal.caixa]),
+        venda, 'resposta inesperada: ' + jsonResponse);
     end;
     except
     on E:Exception do
     begin
     result := false;
-    uLogErro.LogErro('POST_NAO_FISCAL',
-      Format('Documento %s caixa %d | %s',
-        [naoFiscal.codigo, naoFiscal.caixa, DescreveErro(E)]));
+    LogFalhaEnvio('POST_NAO_FISCAL',
+      Format('Documento %s caixa %d', [naoFiscal.codigo, naoFiscal.caixa]),
+      venda, DescreveErro(E));
     end;
 
   end;
@@ -523,19 +541,17 @@ begin
   else
   begin
     result := false;
-    uLogErro.LogErro('POST_ESTOQUE_MOVIMENTACAO',
-      Format('Cupom %s item %d produto %s | resposta inesperada: %s',
-        [estoqueMovimentacao.codigo_cupom, estoqueMovimentacao.item,
-         estoqueMovimentacao.codigo_produto, jsonResponse]));
+    LogFalhaEnvio('POST_ESTOQUE_MOVIMENTACAO',
+        Format('Cupom %s item %d produto %s', [estoqueMovimentacao.codigo_cupom, estoqueMovimentacao.item, estoqueMovimentacao.codigo_produto]),
+        venda, 'resposta inesperada: ' + jsonResponse);
   end;
   except
   on E:Exception do
   begin
   result := false;
-  uLogErro.LogErro('POST_ESTOQUE_MOVIMENTACAO',
-    Format('Cupom %s item %d produto %s | %s',
-      [estoqueMovimentacao.codigo_cupom, estoqueMovimentacao.item,
-       estoqueMovimentacao.codigo_produto, DescreveErro(E)]));
+  LogFalhaEnvio('POST_ESTOQUE_MOVIMENTACAO',
+      Format('Cupom %s item %d produto %s', [estoqueMovimentacao.codigo_cupom, estoqueMovimentacao.item, estoqueMovimentacao.codigo_produto]),
+      venda, DescreveErro(E));
   end;
 
   end;

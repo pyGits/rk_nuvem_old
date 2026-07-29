@@ -162,6 +162,7 @@
     <File Path="Infra"/>
     <File Path="Infra\Application"/>
     <File Path="Infra\Application\Global.pas"/>
+    <File Path="Infra\Application\uLogErro.pas"/>
     <File Path="Infra\Entity"/>
     <File Path="Infra\Entity\CaixaModel.pas"/>
     <File Path="Infra\Entity\ClienteModel.pas"/>

@@ -95,12 +95,17 @@ export default {
     } = req.body;
 
     try {
+      // A busca tem que usar exatamente a chave primária
+      // (tenant_id, loja, caixa, codigo). A versão anterior procurava por
+      // (loja, codigo, data), o que dava errado de duas formas:
+      //   - sem `tenant_id`, podia encontrar o documento de OUTRO tenant, cair no
+      //     update (que filtra por tenant_id), não atualizar nada e ainda assim
+      //     responder SINCRONIZADO — o agente marcava NUVEM=1 e o registro se
+      //     perdia em silêncio;
+      //   - com `data`, que não é parte da identidade do documento, não achava o
+      //     registro já gravado e tentava inserir de novo, batendo na PK.
       const isNaoFiscalExists = await NaoFiscal.findOne({
-        where: {
-          loja,
-          codigo,
-          data: moment(data, "DD/MM/YYYY").format("YYYY-MM-DD"),
-        },
+        where: { tenant_id, loja, caixa, codigo },
       });
 
       if (!isNaoFiscalExists) {
@@ -132,12 +137,7 @@ export default {
             loja,
           },
           {
-            where: {
-              loja,
-              codigo,
-              data: moment(data, "DD/MM/YYYY").format("YYYY-MM-DD"),
-              tenant_id,
-            },
+            where: { tenant_id, loja, caixa, codigo },
           }
         );
       }
