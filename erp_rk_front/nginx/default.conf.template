@@ -100,6 +100,32 @@ server {
         proxy_cache     off;
     }
 
+    # O index.html NAO pode ser cacheado. Ele e o unico arquivo do build sem
+    # hash no nome, e e ele que aponta para app.<hash>.js — se o navegador
+    # reaproveitar um index.html antigo, continua carregando o bundle antigo
+    # (que esta marcado como immutable) e o cliente so ve a versao nova depois
+    # de um F5. Sem Cache-Control explicito o navegador aplica cache heuristico
+    # a partir do Last-Modified, que era exatamente o que acontecia aqui.
+    #
+    # "=" tem prioridade maxima no nginx, e o try_files da location / faz
+    # internal redirect para /index.html, entao esta location pega os dois
+    # casos: acesso a raiz e qualquer rota do vue-router.
+    # "no-cache" nao quer dizer "nao guarde": quer dizer "revalide antes de
+    # usar". O navegador manda um If-None-Match e leva 304 quando nada mudou,
+    # ou o HTML novo apos um deploy. Nao se usa "expires" junto, senao o nginx
+    # emite um segundo header Cache-Control.
+    location = /index.html {
+        add_header Cache-Control "no-cache, must-revalidate" always;
+    }
+
+    # Nao tem hash no nome (vem de public/), entao nao pode entrar na regra
+    # immutable de 1 ano junto com os assets versionados.
+    location = /favicon.ico {
+        expires 1d;
+    }
+
+    # Assets do build tem hash no nome: trocar de versao troca a URL, entao
+    # podem ficar em cache indefinidamente.
     location ~* \.(?:js|css|woff2?|ttf|eot|png|jpe?g|gif|svg|ico)$ {
         expires 1y;
         add_header Cache-Control "public, immutable";
