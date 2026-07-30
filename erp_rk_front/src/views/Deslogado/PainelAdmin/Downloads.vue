@@ -99,7 +99,7 @@
           <v-text-field
             v-model="form.versao"
             label="Versão"
-            placeholder="1.0.0"
+            placeholder="Data da publicação ou número da versão"
             outlined
             dense
             :disabled="enviando"
@@ -173,6 +173,15 @@ import MenuAdmin from "@/components/Admin/Menu/MenuAdmin.vue";
 
 const formVazio = { id: null, titulo: "", descricao: "", versao: "", arquivo: null };
 
+// O que se publica aqui e quase sempre o instalador do PDV, e a versao e
+// identificada pela data em que foi publicada. Os dois campos continuam
+// editaveis — isto e so o valor inicial.
+const TITULO_PADRAO = "RK - PDV";
+
+function dataDeHoje() {
+  return new Date().toLocaleDateString("pt-BR");
+}
+
 export default {
   components: { MenuAdmin },
   data() {
@@ -236,7 +245,7 @@ export default {
       return new Date(data).toLocaleString("pt-BR");
     },
     abrirNovo() {
-      this.form = { ...formVazio };
+      this.form = { ...formVazio, titulo: TITULO_PADRAO, versao: dataDeHoje() };
       this.erros = { titulo: "", arquivo: "" };
       this.progresso = 0;
       this.dialogUpload = true;
@@ -248,7 +257,8 @@ export default {
         id: item.id,
         titulo: item.titulo,
         descricao: item.descricao,
-        versao: item.versao,
+        // Versao nova, data nova: e a data desta publicacao, nao a da anterior.
+        versao: dataDeHoje(),
         arquivo: null,
       };
       this.erros = { titulo: "", arquivo: "" };

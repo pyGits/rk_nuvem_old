@@ -68,6 +68,7 @@ export default {
       });
       res.status(200).json(downloads);
     } catch (error) {
+      console.error(error);
       res.status(500).json({ message: "Erro ao listar os downloads" });
     }
   },
@@ -77,6 +78,7 @@ export default {
       const downloads = await Download.findAll({ order: [["titulo", "ASC"]] });
       res.status(200).json(downloads);
     } catch (error) {
+      console.error(error);
       res.status(500).json({ message: "Erro ao listar os downloads" });
     }
   },
@@ -128,6 +130,7 @@ export default {
         await Download.create({ ...dados, ativo: true });
         res.status(201).json({ message: "Download publicado com sucesso" });
       } catch (error) {
+        console.error(error);
         apagaArquivo(arquivo.filename);
         res.status(500).json({ message: "Erro ao publicar o download" });
       }
@@ -148,6 +151,7 @@ export default {
       await Download.update({ titulo, descricao, versao, ativo }, { where: { id } });
       res.status(200).json({ message: "Download atualizado com sucesso" });
     } catch (error) {
+      console.error(error);
       res.status(500).json({ message: "Erro ao atualizar o download" });
     }
   },
@@ -165,6 +169,7 @@ export default {
 
       res.status(200).json({ message: "Download removido com sucesso" });
     } catch (error) {
+      console.error(error);
       res.status(500).json({ message: "Erro ao remover o download" });
     }
   },
@@ -188,6 +193,7 @@ export default {
       // Só o token: quem monta a URL é o front, que sabe a baseURL da API.
       res.status(200).json({ token });
     } catch (error) {
+      console.error(error);
       res.status(500).json({ message: "Erro ao gerar o link de download" });
     }
   },
@@ -213,6 +219,7 @@ export default {
 
       res.download(caminho, download.arquivo_original);
     } catch (error) {
+      console.error(error);
       res.status(500).json({ message: "Erro ao baixar o arquivo" });
     }
   },
