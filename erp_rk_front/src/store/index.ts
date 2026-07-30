@@ -20,6 +20,7 @@ import admin from "./modules/admin";
 import fechamento from "./modules/fechamento";
 import naofiscal from "./modules/naofiscal";
 import error from "./modules/error";
+import download from "./modules/download";
 Vue.use(Vuex);
 
 export default new Vuex.Store({
@@ -44,6 +45,7 @@ export default new Vuex.Store({
     fechamento,
     naofiscal,
     error,
+    download,
   },
   state: {
     errorsx: {} as Record<string, string>,

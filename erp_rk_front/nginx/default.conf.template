@@ -51,6 +51,30 @@ server {
     gzip_proxied    any;
     gzip_types      text/plain text/css text/javascript application/javascript application/json image/svg+xml;
 
+    # O painel admin publica instalador em zip, que passa longe dos 50m do
+    # resto da API. Prefixo mais longo que "/api/" vence no nginx, entao esta
+    # location atende o upload sem afrouxar o limite dos demais endpoints.
+    location ^~ /api/admin/downloads {
+        client_max_body_size 1g;
+
+        proxy_pass http://127.0.0.1:${BACKEND_PORT};
+
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # Upload de arquivo grande em conexao lenta.
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    900s;
+        proxy_read_timeout    900s;
+
+        # Sem bufferar: o multer grava direto em disco conforme o upload chega.
+        proxy_request_buffering off;
+        proxy_buffering         off;
+    }
+
     # "^~" e obrigatorio: sem ele, a location de assets estaticos (regex, mais
     # abaixo) teria prioridade sobre este prefixo e capturaria
     # /api/logo/<tenant_id>/*.jpg, fazendo o nginx procurar a logo no disco

@@ -52,6 +52,11 @@ export default {
           icon: "mdi-account",
           route: "/administracao/clientes",
         },
+        {
+          title: "Downloads",
+          icon: "mdi-cloud-download-outline",
+          route: "/administracao/downloads",
+        },
       ],
     };
   },

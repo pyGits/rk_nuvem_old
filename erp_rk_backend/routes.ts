@@ -19,6 +19,7 @@ import TributacaoRouter from "./src/routes/tributacoes";
 import UsuarioRouter from "./src/routes/usuarios";
 import VendaRouter from "./src/routes/venda";
 import CompraRouter from "./src/routes/compra";
+import DownloadRouter from "./src/routes/downloads";
 
 const router = Router();
 router.use(ProdutosRouter);
@@ -41,5 +42,6 @@ router.use(FornecedorRouter);
 router.use(TenantRouter);
 router.use(UsuarioRouter);
 router.use(CompraRouter);
+router.use(DownloadRouter);
 
 export default router;

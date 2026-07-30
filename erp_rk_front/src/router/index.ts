@@ -29,6 +29,7 @@ import PainelEstoque from "@/views/Relatorio/Estoque/Painel.vue";
 import Login from "@/views/Deslogado/Login.vue";
 import RegistrarAdmin from "@/views/Deslogado/PainelAdmin/RegistrarAdmin.vue";
 import ClientesAdmin from "@/views/Deslogado/PainelAdmin/ListarClientes.vue";
+import DownloadsAdmin from "@/views/Deslogado/PainelAdmin/Downloads.vue";
 import LoginAdmin from "@/views/Deslogado/LoginAdmin.vue";
 import Configuracoes from "@/views/Configuracoes/Configuracoes.vue";
 import ListarContasPagar from "@/views/Financeiro/ContasAPagar/ListarContasPagar.vue";
@@ -77,6 +78,16 @@ const routes: Array<RouteConfig> = [
     name: "admin-clientes",
     components: {
       "rotas-deslogado": ClientesAdmin,
+    },
+    meta: {
+      requiresAuthAdmin: true,
+    },
+  },
+  {
+    path: "/administracao/downloads",
+    name: "admin-downloads",
+    components: {
+      "rotas-deslogado": DownloadsAdmin,
     },
     meta: {
       requiresAuthAdmin: true,
