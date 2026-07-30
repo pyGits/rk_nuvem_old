@@ -47,6 +47,11 @@ implementation
 
 {$R *.dfm}
 
+const
+  // PDV, produtos, tributacoes, finalizadoras, clientes e funcionarios: as
+  // etapas reportadas para a nuvem montar a barra de progresso.
+  TOTAL_ETAPAS_CARGA = 6;
+
 procedure TfrmPrincipal.LogFalha(const contexto, mensagem: string);
 begin
   memLog.Lines.Add('[ERRO] ' + contexto + ': ' + mensagem);
@@ -249,6 +254,7 @@ function TfrmPrincipal.cargaProdutos(alterados:boolean): boolean;
 var
   produtoList :TStringList;
   novoProduto:TProduto;
+  produtoConvertido:TProduto;
 
   listProd:TObjectList<TProduto>;
 
@@ -269,16 +275,30 @@ try
   try
     if produtoList[i] <> '' then
     begin
+      // JsonToProduto devolve um objeto novo; o criado aqui serve so para a
+      // chamada e precisa ser liberado, senao cada carga vaza um TProduto.
       novoProduto := TProduto.Create;
-      listProd.Add(novoProduto.JsonToProduto(produtoList[i]));
+      try
+        produtoConvertido := novoProduto.JsonToProduto(produtoList[i]);
+      finally
+        novoProduto.Free;
+      end;
+
+      if Assigned(produtoConvertido) then
+        listProd.Add(produtoConvertido)
+      else
+        LogFalha('CARGA_PRODUTO',
+          Format('Registro %d ignorado: json invalido | json: %s',
+            [I, Copy(produtoList[I], 1, 300)]));
     end;
     except
     on E:Exception do
     begin
+      // um produto com problema nao pode mais abortar a carga inteira:
+      // registra o que falhou e segue com os demais
       LogFalha('CARGA_PRODUTO',
-        Format('Registro %d | %s | json: %s',
+        Format('Registro %d ignorado | %s | json: %s',
           [I, E.Message, Copy(produtoList[I], 1, 300)]));
-      raise Exception.Create('error'+e.message);
     end;
 
     end;
@@ -343,7 +363,7 @@ try
       tributacao := TTributacao.Create;
       tributacao := tributacao.JsonToTributacao(tributacaoList[I]);
       uDmTributacao.InsertTributacao(tributacao);
-      memLog.Lines.Add('Atualizando Tributação: '+tributacao.codigo + ' - '+ tributacao.nome);
+      memLog.Lines.Add('Atualizando Tributaï¿½ï¿½o: '+tributacao.codigo + ' - '+ tributacao.nome);
 
 
 
@@ -381,7 +401,7 @@ try
 
 //  produto.Free;
 //  produtoList.free;
-  memLog.Lines.Add('Tributações sincronizadas...');
+  memLog.Lines.Add('Tributaï¿½ï¿½es sincronizadas...');
 
   except
   on E:Exception do
@@ -423,6 +443,10 @@ try
 
   if solicitacao = 'CARGA_COMPLETA' then
   begin
+    memLog.Lines.Clear;
+    memLog.Lines.Add('CARGA COMPLETA SOLICITADA !');
+
+    informaProgressoCarga('PDV', 1, TOTAL_ETAPAS_CARGA);
     try
       CargaPDVUseCase.EnviarCargaPDV;
     except
@@ -430,13 +454,20 @@ try
       LogFalha('CARGA_PDV', E);
     end;
 
-    memLog.Lines.Clear;
-    memLog.Lines.Add('CARGA COMPLETA SOLICITADA !');
+    informaProgressoCarga('PRODUTOS', 2, TOTAL_ETAPAS_CARGA);
     cargaProdutos(false);
 //    cargaPrecos(false);
+
+    informaProgressoCarga('TRIBUTACOES', 3, TOTAL_ETAPAS_CARGA);
     cargaTributacoes(false);
+
+    informaProgressoCarga('FINALIZADORAS', 4, TOTAL_ETAPAS_CARGA);
     cargaFinalizadoras(false);
+
+    informaProgressoCarga('CLIENTES', 5, TOTAL_ETAPAS_CARGA);
     cargaClientes(false);
+
+    informaProgressoCarga('FUNCIONARIOS', 6, TOTAL_ETAPAS_CARGA);
     cargaFuncionarios(false);
 
     if not finalizaCargaPendente then
@@ -449,6 +480,10 @@ try
 
   if solicitacao = 'CARGA_ALTERADOS' then
   begin
+    memLog.Lines.Clear;
+    memLog.Lines.Add('CARGA ALTERADOS SOLICITADA !');
+
+    informaProgressoCarga('PDV', 1, TOTAL_ETAPAS_CARGA);
     try
       CargaPDVUseCase.EnviarCargaPDV;
     except
@@ -456,13 +491,20 @@ try
       LogFalha('CARGA_PDV', E);
     end;
 
-      memLog.Lines.Clear;
-    memLog.Lines.Add('CARGA ALTERADOS SOLICITADA !');
+    informaProgressoCarga('PRODUTOS', 2, TOTAL_ETAPAS_CARGA);
     cargaProdutos(true);
 //    cargaPrecos(true);
+
+    informaProgressoCarga('TRIBUTACOES', 3, TOTAL_ETAPAS_CARGA);
     cargaTributacoes(true);
+
+    informaProgressoCarga('CLIENTES', 4, TOTAL_ETAPAS_CARGA);
     cargaClientes(true);
+
+    informaProgressoCarga('FUNCIONARIOS', 5, TOTAL_ETAPAS_CARGA);
     cargaFuncionarios(true);
+
+    informaProgressoCarga('FINALIZADORAS', 6, TOTAL_ETAPAS_CARGA);
     cargaFinalizadoras(true);
 
     if not finalizaCargaPendente then
@@ -521,7 +563,7 @@ begin
 
 
   memLog.Lines.Add('Inicializado, Loja: '+ codLoja + ' - ' + nomeLoja);
-  memLog.Lines.Add('Aguardando Solicitação de carga');
+  memLog.Lines.Add('Aguardando Solicitaï¿½ï¿½o de carga');
   memLog.Lines.Add('Carregando lista de caixas ...');
 
   try

@@ -102,20 +102,20 @@ export default {
       state.loja.endereco.setComplemento(payload);
     },
     setLojaStatus(state: any, payload: any) {
-      console.log(payload);
-      state.lojaList.map((loja: any) => {
-        const index = payload.findIndex((item: any) => item.codigo === loja.codigo);
+      const cargas = Array.isArray(payload) ? payload : [];
 
-        if (index === -1) {
-          loja.status = 100;
-        } else {
-          if (payload[index].carga === "COMPLETA") {
-            loja.status = 0;
-          }
-          if (payload[index].carga === "ALTERADOS") {
-            loja.status = 0;
-          }
-        }
+      state.lojaList.map((loja: any) => {
+        const carga = cargas.find(
+          (item: any) => String(item.codigo) === String(loja.codigo)
+        );
+
+        // Esses campos nao vem da API de lojas, entao precisam de Vue.set para
+        // a barra de progresso reagir as trocas de estado.
+        Vue.set(loja, "cargaStatus", carga ? carga.status : "CONCLUIDA");
+        Vue.set(loja, "cargaEtapa", carga ? carga.etapa : null);
+        Vue.set(loja, "cargaIndice", carga ? carga.indice : null);
+        Vue.set(loja, "cargaTotal", carga ? carga.total : null);
+        Vue.set(loja, "cargaPercentual", carga ? carga.percentual : null);
       });
     },
   },

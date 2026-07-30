@@ -2,6 +2,26 @@ import Funcionario from "../models/Funcionario";
 import { getNextSequencial } from "./UtilsController";
 import { CriptRK } from "../utils/utils";
 
+// Campos de texto que o agente de carga le direto do JSON. Em null ele grava a
+// string literal "null" no PDV, entao saem sempre como string vazia.
+const CAMPOS_TEXTO = ["codigo", "nome", "fantasia", "email", "cnpjcpf"];
+
+// O agente converte cargo e comissao para numero sem tratar null, e um
+// StrToInt('null') derruba a carga inteira do tenant - foi o que aconteceu com
+// os funcionarios criados pelo seeder, que nasciam sem esses dois campos.
+function normalizarFuncionario(funcionario: any) {
+  const dados = typeof funcionario?.toJSON === "function" ? funcionario.toJSON() : { ...funcionario };
+
+  for (const campo of CAMPOS_TEXTO) {
+    if (dados[campo] === null || dados[campo] === undefined) dados[campo] = "";
+  }
+
+  dados.cargo = dados.cargo === null || dados.cargo === undefined || dados.cargo === "" ? "0" : String(dados.cargo);
+  dados.comissao = Number(dados.comissao) || 0;
+
+  return dados;
+}
+
 export default {
   async getFuncionario(req: any, res: any) {
     const { tenant_id } = req;
@@ -24,7 +44,7 @@ export default {
           .status(404)
           .json({ message: "Funcionario não encontrado !" });
       } else {
-        return res.status(200).json(funcionario);
+        return res.status(200).json(normalizarFuncionario(funcionario));
       }
     }
   },
@@ -43,8 +63,11 @@ export default {
         });
       }
 
-      res.status(200).json(funcionarios);
-    } catch (error) {}
+      res.status(200).json(funcionarios.map(normalizarFuncionario));
+    } catch (error) {
+      console.log(error);
+      res.status(400).json({ error });
+    }
   },
   async insertFuncionario(req: any, res: any) {
     const { tenant_id } = req;

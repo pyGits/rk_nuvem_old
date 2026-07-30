@@ -6,13 +6,16 @@ uses
   System.SysUtils, System.Classes,Produto,ConexaoPDV, Data.DB, MemDS, DBAccess,System.Generics.collections,
   Uni, FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Param,
   FireDAC.Stan.Error, FireDAC.DatS, FireDAC.Phys.Intf, FireDAC.DApt.Intf,
-  FireDAC.Stan.Async, FireDAC.DApt, FireDAC.Comp.DataSet, FireDAC.Comp.Client;
+  FireDAC.Stan.Async, FireDAC.DApt, FireDAC.Comp.DataSet, FireDAC.Comp.Client,
+  uLogErro;
 
 type
   TdmProdutoPDV = class(TDataModule)
     qrProdutoPDV: TFDQuery;
   private
     { Private declarations }
+    function tabelaAuxiliarExiste: Boolean;
+    procedure gravarCodigosAuxiliares(listProduto:TObjectList<TProduto>);
   public
     function insertProdutoPDV(listProduto:TObjectList<TProduto>):boolean;
   end;
@@ -27,6 +30,109 @@ implementation
 {$R *.dfm}
 
 { TdmProdutoPDV }
+
+// PDV que ainda nao recebeu a ESTOQUE_COD_AUXILIAR nao pode virar um erro por
+// produto na carga - a checagem custa uma consulta por caixa e evita o ruido.
+function TdmProdutoPDV.tabelaAuxiliarExiste: Boolean;
+var
+  qrTabela: TFDQuery;
+begin
+  qrTabela := TFDQuery.Create(nil);
+  try
+    qrTabela.Connection := qrProdutoPDV.Connection;
+    qrTabela.SQL.Text :=
+      'SELECT COUNT(*) FROM RDB$RELATIONS WHERE RDB$RELATION_NAME = ''ESTOQUE_COD_AUXILIAR''';
+    qrTabela.Open;
+    Result := qrTabela.Fields[0].AsInteger > 0;
+  finally
+    qrTabela.Free;
+  end;
+end;
+
+// Espelha no PDV a lista de codigos de barras auxiliares que veio da nuvem.
+// A regra e de substituicao: os auxiliares dos produtos desta carga sao
+// apagados e regravados, entao um codigo removido no cadastro tambem some do
+// PDV. Vai em lote (Array DML) porque a carga completa passa por milhares de
+// produtos e um round-trip por linha deixaria a sincronizacao lenta demais.
+procedure TdmProdutoPDV.gravarCodigosAuxiliares(listProduto:TObjectList<TProduto>);
+var
+  oProduto: TProduto;
+  produtos: TList<string>;
+  auxProduto, auxBarra: TList<string>;
+  auxiliares: TArray<string>;
+  qrAux: TFDQuery;
+  i: Integer;
+begin
+  produtos := TList<string>.Create;
+  auxProduto := TList<string>.Create;
+  auxBarra := TList<string>.Create;
+  try
+    for oProduto in listProduto do
+    begin
+      if not Assigned(oProduto) then
+        Continue;
+      if Trim(oProduto.Codigo) = '' then
+        Continue;
+
+      produtos.Add(oProduto.Codigo);
+
+      auxiliares := oProduto.CodigosAuxiliares;
+      for i := 0 to High(auxiliares) do
+      begin
+        auxProduto.Add(oProduto.Codigo);
+        auxBarra.Add(auxiliares[i]);
+      end;
+    end;
+
+    if produtos.Count = 0 then
+      Exit;
+
+    qrAux := TFDQuery.Create(nil);
+    try
+      qrAux.Connection := qrProdutoPDV.Connection;
+
+      // 1) limpa os auxiliares dos produtos que vieram nesta carga
+      qrAux.SQL.Text := 'DELETE FROM ESTOQUE_COD_AUXILIAR WHERE CODIGO = :CODIGO';
+      qrAux.Params.ArraySize := produtos.Count;
+      for i := 0 to produtos.Count - 1 do
+        qrAux.ParamByName('CODIGO').AsStrings[i] := produtos[i];
+      qrAux.Execute(qrAux.Params.ArraySize, 0);
+
+      if auxBarra.Count = 0 then
+        Exit;
+
+      // 2) auxiliar que na nuvem passou para outro produto continuaria
+      // apontando para o produto antigo aqui, porque a carga incremental so
+      // traz o produto que mudou. Apaga a sobra antes de inserir.
+      qrAux.SQL.Text :=
+        'DELETE FROM ESTOQUE_COD_AUXILIAR WHERE COD_BARRA = :COD_BARRA AND CODIGO <> :CODIGO';
+      qrAux.Params.ArraySize := auxBarra.Count;
+      for i := 0 to auxBarra.Count - 1 do
+      begin
+        qrAux.ParamByName('COD_BARRA').AsStrings[i] := auxBarra[i];
+        qrAux.ParamByName('CODIGO').AsStrings[i] := auxProduto[i];
+      end;
+      qrAux.Execute(qrAux.Params.ArraySize, 0);
+
+      // 3) grava a lista atual
+      qrAux.SQL.Text :=
+        'INSERT INTO ESTOQUE_COD_AUXILIAR (CODIGO, COD_BARRA) VALUES (:CODIGO, :COD_BARRA)';
+      qrAux.Params.ArraySize := auxBarra.Count;
+      for i := 0 to auxBarra.Count - 1 do
+      begin
+        qrAux.ParamByName('CODIGO').AsStrings[i] := auxProduto[i];
+        qrAux.ParamByName('COD_BARRA').AsStrings[i] := auxBarra[i];
+      end;
+      qrAux.Execute(qrAux.Params.ArraySize, 0);
+    finally
+      qrAux.Free;
+    end;
+  finally
+    produtos.Free;
+    auxProduto.Free;
+    auxBarra.Free;
+  end;
+end;
 
 function TdmProdutoPDV.insertProdutoPDV(listProduto:TObjectList<TProduto>): boolean;
 var
@@ -63,6 +169,28 @@ begin
     end;
   end;
   end;
+
+  // Os auxiliares so entram depois que todos os produtos ja foram gravados:
+  // se esta etapa falhar (tabela ausente, EAN invalido), a carga de produtos
+  // deste caixa ja esta feita e o erro sobe identificando a etapa.
+  if tabelaAuxiliarExiste then
+  begin
+    try
+      gravarCodigosAuxiliares(listProduto);
+    except
+      on E:Exception do
+      begin
+        raise Exception.Create('Erro ao gravar codigos auxiliares no PDV: '+E.Message);
+      end;
+    end;
+  end
+  else
+  begin
+    uLogErro.LogErro('CARGA_PRODUTO_AUX_PDV',
+      'Tabela ESTOQUE_COD_AUXILIAR nao encontrada no PDV - codigos auxiliares nao sincronizados');
+  end;
+
+  Result := True;
 end;
 
 end.

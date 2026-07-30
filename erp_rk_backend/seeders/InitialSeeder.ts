@@ -84,8 +84,13 @@ export default async function seeder(tenant: any) {
     {
       codigo: "15",
       nome: "RK",
+      fantasia: "RK",
       cnpjcpf: "08115094000156",
       password: "81eb4b2f2a50ba",
+      // sem cargo e comissao preenchidos o registro sobe null e trava a carga
+      // de funcionarios do tenant recem-criado
+      cargo: "0",
+      comissao: 0,
       tenant_id: tenant.id,
     },
   ]);

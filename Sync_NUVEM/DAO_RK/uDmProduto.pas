@@ -8,7 +8,8 @@ vcl.dialogs,
   FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Param,
   FireDAC.Stan.Error, FireDAC.DatS, FireDAC.Phys.Intf, FireDAC.DApt.Intf,
   FireDAC.Stan.Async, FireDAC.DApt, FireDAC.Comp.DataSet, FireDAC.Comp.Client,uConexao,
-  FireDAC.Phys.IBDef, FireDAC.Phys, FireDAC.Phys.IBBase, FireDAC.Phys.IB,Funcoes;
+  FireDAC.Phys.IBDef, FireDAC.Phys, FireDAC.Phys.IBBase, FireDAC.Phys.IB,Funcoes,
+  uLogErro;
 
 type
   TdmProduto = class(TDataModule)
@@ -92,76 +93,102 @@ function TdmProduto.InsertProdutoBulk(
 var
   Query:TFDquery;
   I:integer;
-  countnotnil:integer;
+  validos:TList<TProduto>;
 begin
-  Query := TConexao.GetInstance.CreateQuery;
+  Result := False;
 
-Query.SQL.Text :=
-  'UPDATE OR INSERT INTO PRODUTO (' +
-  'CODIGO, CODIGO_BARRAS, DESCRICAO, GRUPO, SUBGRUPO, FORNECEDOR, TRIBUTACAO, NCM, CEST, VALIDADE, ' +
-  'BALANCA, FRACIONADO, CUSTO, PRECO, MARGEM, ESTOQUE, UNIDADE, INATIVO, DIVERSOS, DATA_CADASTRO, ' +
-  'DATA_ALTERADO, PENDENTE, ESTOQUE_MINIMO, ESTOQUE_MAXIMO,PRECO2,PRECO2_QTD) ' +
-  'VALUES (' +
-  ':CODIGO, :CODIGO_BARRAS, :DESCRICAO, :GRUPO, :SUBGRUPO, :FORNECEDOR, :TRIBUTACAO, :NCM, :CEST, :VALIDADE, ' +
-  ':BALANCA, :FRACIONADO, :CUSTO, :PRECO, :MARGEM, :ESTOQUE, :UNIDADE, :INATIVO, :DIVERSOS, :DATA_CADASTRO, ' +
-  ':DATA_ALTERADO, :PENDENTE, :ESTOQUE_MINIMO, :ESTOQUE_MAXIMO,:PRECO2,:PRECO2_QTD) MATCHING (CODIGO);';
-
-  CountNotNil := 0;
-  for i := 0 to produtos.Count - 1 do
-    if Assigned(produtos[i]) then
-      Inc(CountNotNil);
-
-
-  query.Params.ArraySize := produtos.Count;
-
-
-  for i := 0 to query.Params.ArraySize-1 do
-  begin
-    with produtos[i] do
+  // Todo item da lista vira uma linha do lote. Se um item vier nil ou sem
+  // CODIGO, o slot correspondente do array de parametros fica sem valor e o
+  // Firebird recusa o lote INTEIRO com "validation error for column CODIGO,
+  // value *** null ***" - ou seja, um unico produto ruim derruba a carga toda.
+  // Por isso a lista e filtrada antes de montar o lote e o que sobrou de fora
+  // vai para o log, identificado.
+  validos := TList<TProduto>.Create;
+  try
+    for i := 0 to produtos.Count - 1 do
     begin
-      if produtos[i] <> nil then
+      if not Assigned(produtos[i]) then
       begin
-        Query.ParamByName('CODIGO').AsStrings[i]        := produtos[i].Codigo;
-        Query.ParamByName('CODIGO_BARRAS').AsStrings[i] := produtos[i].CodigoBarras;
-        Query.ParamByName('DESCRICAO').AsStrings[i]     := produtos[i].Descricao;
-        Query.ParamByName('GRUPO').AsStrings[i]         := produtos[i].Grupo;
-        Query.ParamByName('SUBGRUPO').AsStrings[i]      := produtos[i].Subgrupo;
-        Query.ParamByName('FORNECEDOR').AsStrings[i]    := produtos[i].Fornecedor;
-        Query.ParamByName('TRIBUTACAO').AsStrings[i]    := produtos[i].Tributacao;
-        Query.ParamByName('NCM').AsStrings[i]           := produtos[i].NCM;
-        Query.ParamByName('CEST').AsStrings[i]          := produtos[i].CEST;
-        Query.ParamByName('VALIDADE').AsStrings[i]      := produtos[i].Validade;
-
-        Query.ParamByName('BALANCA').AsIntegers[i]      := produtos[i].getBalanca;
-        Query.ParamByName('FRACIONADO').AsIntegers[i]   := produtos[i].getFracionado;
-        Query.ParamByName('INATIVO').AsIntegers[i]      := produtos[i].getInativo;
-        Query.ParamByName('DIVERSOS').AsIntegers[i]     := produtos[i].getDiversos;
-
-        Query.ParamByName('CUSTO').AsFloats[i]          := produtos[i].Custo;
-        Query.ParamByName('PRECO').AsFloats[i]          := produtos[i].Preco;
-        Query.ParamByName('MARGEM').AsFloats[i]         := produtos[i].Margem;
-        Query.ParamByName('ESTOQUE').AsFloats[i]        := produtos[i].Estoque;
-
-        Query.ParamByName('UNIDADE').AsStrings[i]       := produtos[i].Unidade;
-        Query.ParamByName('DATA_ALTERADO').AsDates[i]   := produtos[i].DataAlterado;
-        Query.ParamByName('DATA_CADASTRO').AsDates[i]  := produtos[i].DataCadastro;
-        Query.ParamByName('PENDENTE').AsIntegers[i]    := 1;
-        Query.ParamByName('ESTOQUE_MINIMO').AsFloats[i] := produtos[i].EstoqueMinimo;
-        Query.ParamByName('ESTOQUE_MAXIMO').AsFloats[i] := produtos[i].EstoqueMaximo;
-
-        Query.ParamByName('PRECO2').AsFloats[i] := produtos[i].Preco2;
-        Query.ParamByName('PRECO2_QTD').AsFloats[i] := produtos[i].Preco2_Qtd;
-
-
+        uLogErro.LogErro('CARGA_PRODUTO_BULK',
+          Format('Registro %d ignorado: produto nao foi montado a partir do json', [i]));
+        Continue;
       end;
 
+      if Trim(produtos[i].Codigo) = '' then
+      begin
+        uLogErro.LogErro('CARGA_PRODUTO_BULK',
+          Format('Registro %d ignorado: produto sem codigo | descricao: %s | barras: %s',
+            [i, produtos[i].Descricao, produtos[i].CodigoBarras]));
+        Continue;
+      end;
+
+      validos.Add(produtos[i]);
     end;
+
+    if validos.Count = 0 then
+    begin
+      if produtos.Count > 0 then
+        uLogErro.LogErro('CARGA_PRODUTO_BULK',
+          Format('Nenhum dos %d produtos recebidos tinha codigo valido', [produtos.Count]));
+      Exit;
+    end;
+
+    Query := TConexao.GetInstance.CreateQuery;
+    try
+      Query.SQL.Text :=
+        'UPDATE OR INSERT INTO PRODUTO (' +
+        'CODIGO, CODIGO_BARRAS, DESCRICAO, GRUPO, SUBGRUPO, FORNECEDOR, TRIBUTACAO, NCM, CEST, VALIDADE, ' +
+        'BALANCA, FRACIONADO, CUSTO, PRECO, MARGEM, ESTOQUE, UNIDADE, INATIVO, DIVERSOS, DATA_CADASTRO, ' +
+        'DATA_ALTERADO, PENDENTE, ESTOQUE_MINIMO, ESTOQUE_MAXIMO,PRECO2,PRECO2_QTD) ' +
+        'VALUES (' +
+        ':CODIGO, :CODIGO_BARRAS, :DESCRICAO, :GRUPO, :SUBGRUPO, :FORNECEDOR, :TRIBUTACAO, :NCM, :CEST, :VALIDADE, ' +
+        ':BALANCA, :FRACIONADO, :CUSTO, :PRECO, :MARGEM, :ESTOQUE, :UNIDADE, :INATIVO, :DIVERSOS, :DATA_CADASTRO, ' +
+        ':DATA_ALTERADO, :PENDENTE, :ESTOQUE_MINIMO, :ESTOQUE_MAXIMO,:PRECO2,:PRECO2_QTD) MATCHING (CODIGO);';
+
+      Query.Params.ArraySize := validos.Count;
+
+      for i := 0 to validos.Count - 1 do
+      begin
+        Query.ParamByName('CODIGO').AsStrings[i]        := validos[i].Codigo;
+        Query.ParamByName('CODIGO_BARRAS').AsStrings[i] := validos[i].CodigoBarras;
+        Query.ParamByName('DESCRICAO').AsStrings[i]     := validos[i].Descricao;
+        Query.ParamByName('GRUPO').AsStrings[i]         := validos[i].Grupo;
+        Query.ParamByName('SUBGRUPO').AsStrings[i]      := validos[i].Subgrupo;
+        Query.ParamByName('FORNECEDOR').AsStrings[i]    := validos[i].Fornecedor;
+        Query.ParamByName('TRIBUTACAO').AsStrings[i]    := validos[i].Tributacao;
+        Query.ParamByName('NCM').AsStrings[i]           := validos[i].NCM;
+        Query.ParamByName('CEST').AsStrings[i]          := validos[i].CEST;
+        Query.ParamByName('VALIDADE').AsStrings[i]      := validos[i].Validade;
+
+        Query.ParamByName('BALANCA').AsIntegers[i]      := validos[i].getBalanca;
+        Query.ParamByName('FRACIONADO').AsIntegers[i]   := validos[i].getFracionado;
+        Query.ParamByName('INATIVO').AsIntegers[i]      := validos[i].getInativo;
+        Query.ParamByName('DIVERSOS').AsIntegers[i]     := validos[i].getDiversos;
+
+        Query.ParamByName('CUSTO').AsFloats[i]          := validos[i].Custo;
+        Query.ParamByName('PRECO').AsFloats[i]          := validos[i].Preco;
+        Query.ParamByName('MARGEM').AsFloats[i]         := validos[i].Margem;
+        Query.ParamByName('ESTOQUE').AsFloats[i]        := validos[i].Estoque;
+
+        Query.ParamByName('UNIDADE').AsStrings[i]       := validos[i].Unidade;
+        Query.ParamByName('DATA_ALTERADO').AsDates[i]   := validos[i].DataAlterado;
+        Query.ParamByName('DATA_CADASTRO').AsDates[i]   := validos[i].DataCadastro;
+        Query.ParamByName('PENDENTE').AsIntegers[i]     := 1;
+        Query.ParamByName('ESTOQUE_MINIMO').AsFloats[i] := validos[i].EstoqueMinimo;
+        Query.ParamByName('ESTOQUE_MAXIMO').AsFloats[i] := validos[i].EstoqueMaximo;
+
+        Query.ParamByName('PRECO2').AsFloats[i]         := validos[i].Preco2;
+        Query.ParamByName('PRECO2_QTD').AsFloats[i]     := validos[i].Preco2_Qtd;
+      end;
+
+      Query.Execute(Query.Params.ArraySize, 0);
+      Result := True;
+    finally
+      Query.Free;
+    end;
+  finally
+    validos.Free;
   end;
-
-
-
-
-  query.Execute(query.Params.ArraySize,0);
 end;
 
 end.

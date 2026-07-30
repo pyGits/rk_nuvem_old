@@ -14,8 +14,10 @@ const Funcionario = db.define(
     },
     ...Pessoa,
     ...Endereco,
-    comissao: { type: DataTypes.FLOAT(15, 2) },
-    cargo: { type: DataTypes.STRING(2) },
+    // cargo e comissao nunca podem ficar nulos: a carga do PDV converte os dois
+    // para numero e quebra com null. "0" = Operador, o mesmo default do cadastro.
+    comissao: { type: DataTypes.FLOAT(15, 2), defaultValue: 0 },
+    cargo: { type: DataTypes.STRING(2), defaultValue: "0" },
     password: {
       type: DataTypes.STRING(255),
       allowNull: false,

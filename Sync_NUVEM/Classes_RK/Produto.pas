@@ -34,10 +34,12 @@ type
     FestoqueAnterior: Real;
     FPreco2: Real;
     FPreco2_Qtd: real;
+    FCodigosAuxiliares: TArray<string>;
     procedure SetDataAlterado(const Value: TDate);
     procedure SetestoqueAnterior(const Value: Real);
     procedure SetPreco2(const Value: Real);
     procedure SetPreco2_Qtd(const Value: real);
+    procedure SetCodigosAuxiliares(const Value: TArray<string>);
 
 
 
@@ -117,6 +119,10 @@ type
     property estoqueAnterior:Real read FestoqueAnterior write SetestoqueAnterior;
     property Preco2:Real read FPreco2 write SetPreco2;
     property Preco2_Qtd:real read FPreco2_Qtd write SetPreco2_Qtd;
+    // Codigos de barras extras do produto (1 produto -> N EANs). Deve ser
+    // atribuida DEPOIS de CodigoBarras: o setter descarta o auxiliar que for
+    // igual ao codigo de barras principal.
+    property CodigosAuxiliares:TArray<string> read FCodigosAuxiliares write SetCodigosAuxiliares;
 
 
     function JsonToProduto(const AJson: string): TProduto;
@@ -129,6 +135,71 @@ implementation
 
 uses
   System.SysUtils, Funcoes;
+
+// Le uma chave do json sem quebrar quando ela vem ausente ou nula.
+// Sem isso, chave ausente causa Access Violation (aborta a carga inteira) e
+// chave nula devolve a string literal 'null', que acaba gravada no PDV.
+function ValorTexto(json: TJSONObject; const chave: string; const padrao: string = ''): string;
+var
+  valor: TJSONValue;
+begin
+  Result := padrao;
+
+  if not Assigned(json) then
+    Exit;
+
+  valor := json.GetValue(chave);
+  if (not Assigned(valor)) or (valor is TJSONNull) then
+    Exit;
+
+  Result := valor.Value;
+end;
+
+// Mesma leitura, para os campos numericos: texto vazio ou invalido vira o padrao
+// em vez de derrubar a carga com um erro de conversao.
+function ValorNumero(json: TJSONObject; const chave: string; const padrao: Double = 0): Double;
+var
+  texto: string;
+begin
+  texto := Trim(ValorTexto(json, chave));
+
+  if (texto = '') or (texto = 'null') then
+    Exit(padrao);
+
+  if not TryStrToFloat(texto, Result) then
+    Result := padrao;
+end;
+
+// Le uma chave que vem como array de strings (ex: codigos_barras_auxiliares).
+// Chave ausente, nula ou de outro tipo devolve lista vazia em vez de erro.
+function ValorLista(json: TJSONObject; const chave: string): TArray<string>;
+var
+  valor: TJSONValue;
+  item: TJSONValue;
+  lista: TJSONArray;
+  i: Integer;
+begin
+  Result := nil;
+
+  if not Assigned(json) then
+    Exit;
+
+  valor := json.GetValue(chave);
+  if (not Assigned(valor)) or (not (valor is TJSONArray)) then
+    Exit;
+
+  lista := TJSONArray(valor);
+  SetLength(Result, lista.Count);
+
+  for i := 0 to lista.Count - 1 do
+  begin
+    item := lista.Items[i];
+    if (not Assigned(item)) or (item is TJSONNull) then
+      Result[i] := ''
+    else
+      Result[i] := item.Value;
+  end;
+end;
 
 { TProduto }
 
@@ -299,29 +370,33 @@ var
   JsonString: string;
 
 begin
-  if ajson = '' then Exit;
-  
-  LJsonObj := TJSONObject.ParseJSONValue(AJson) as TJSONObject;
-  try
+  Result := nil;
+
+  if AJson = '' then Exit;
+
   JsonString := StringReplace(AJson, '\', ' ', [rfReplaceAll]);
 
   LJsonObj := TJSONObject.ParseJSONValue(JsonString) as TJSONObject;
+  if not Assigned(LJsonObj) then Exit;
 
+  try
     LProduto := TJson.JsonToObject<TProduto>(AJson);
-    LProduto.codigo := LJsonObj.GetValue('codigo').Value;
-    LProduto.CodigoBarras := LJsonObj.GetValue('codigo_barras').Value;
-    LProduto.descricao := LJsonObj.GetValue('descricao').Value;
-    LProduto.grupo := LJsonObj.GetValue('secao').Value;
-    LProduto.subgrupo := LJsonObj.GetValue('grupo').Value;
-    LProduto.unidade := LJsonObj.GetValue('unidade').Value;
-    LProduto.Fracionado := getBoolFracionado(LJsonObj.GetValue('forma_venda').Value);
-    LProduto.ncm := LJsonObj.GetValue('ncm').Value;
-    LProduto.cest := LJsonObj.GetValue('cest').Value;
-    LProduto.tributacao := LJsonObj.GetValue('tributacao').Value;
-    LProduto.balanca := getBoolBalanca(LJsonObj.GetValue('balanca').Value);
-    LProduto.Validade := LJsonObj.GetValue('balanca_validade').Value;
-    LProduto.diversos := getBoolDiversos(LJsonObj.GetValue('diversos').Value);
-    LProduto.Inativo := getBoolInativo(LJsonObj.GetValue('ativo').Value);
+    LProduto.codigo := ValorTexto(LJsonObj, 'codigo');
+    LProduto.CodigoBarras := ValorTexto(LJsonObj, 'codigo_barras');
+    // depende do CodigoBarras ja preenchido (ver comentario da property)
+    LProduto.CodigosAuxiliares := ValorLista(LJsonObj, 'codigos_barras_auxiliares');
+    LProduto.descricao := ValorTexto(LJsonObj, 'descricao');
+    LProduto.grupo := ValorTexto(LJsonObj, 'secao');
+    LProduto.subgrupo := ValorTexto(LJsonObj, 'grupo');
+    LProduto.unidade := ValorTexto(LJsonObj, 'unidade', 'UN');
+    LProduto.Fracionado := getBoolFracionado(ValorTexto(LJsonObj, 'forma_venda'));
+    LProduto.ncm := ValorTexto(LJsonObj, 'ncm');
+    LProduto.cest := ValorTexto(LJsonObj, 'cest');
+    LProduto.tributacao := ValorTexto(LJsonObj, 'tributacao', 'F00');
+    LProduto.balanca := getBoolBalanca(ValorTexto(LJsonObj, 'balanca'));
+    LProduto.Validade := ValorTexto(LJsonObj, 'balanca_validade');
+    LProduto.diversos := getBoolDiversos(ValorTexto(LJsonObj, 'diversos'));
+    LProduto.Inativo := getBoolInativo(ValorTexto(LJsonObj, 'ativo'));
 
     // ajustar
 //    LProduto.DataCadastro := Iso8601ToDateOnly(LJsonObj.GetValue('created_at').Value);
@@ -329,31 +404,12 @@ begin
     LProduto.DataCadastro := now;
     LProduto.DataAlterado := now;
 
-    if Assigned(LJsonObj.GetValue('preco')) and (LJsonObj.GetValue('preco').Value <> '') then
-      LProduto.preco := StrToFloat(LJsonObj.GetValue('preco').Value)
-    else
-      LProduto.preco := 0; // valor default
+    LProduto.preco := ValorNumero(LJsonObj, 'preco');
+    LProduto.Margem := ValorNumero(LJsonObj, 'markup');
+    LProduto.custo := ValorNumero(LJsonObj, 'custo');
+    LProduto.preco2 := ValorNumero(LJsonObj, 'preco2');
+    LProduto.preco2_qtd := ValorNumero(LJsonObj, 'preco2_qtd');
 
-    if Assigned(LJsonObj.GetValue('markup')) and (LJsonObj.GetValue('markup').Value <> '') then
-      LProduto.Margem := StrToFloat(LJsonObj.GetValue('markup').Value)
-    else
-      LProduto.Margem := 0; // valor default
-
-    if Assigned(LJsonObj.GetValue('custo')) and (LJsonObj.GetValue('custo').Value <> '') then
-      LProduto.custo := StrToFloat(LJsonObj.GetValue('custo').Value)
-    else
-      LProduto.custo := 0; // valor default
-
-
-    if Assigned(LJsonObj.GetValue('preco2')) and (LJsonObj.GetValue('preco2').Value <> '') and (LJsonObj.GetValue('preco2').Value <> 'null') then
-      LProduto.preco2 := StrToFloat(LJsonObj.GetValue('preco2').Value)
-    else
-      LProduto.preco2 := 0; // valor default
-
-    if Assigned(LJsonObj.GetValue('preco2_qtd')) and (LJsonObj.GetValue('preco2_qtd').Value <> '')and (LJsonObj.GetValue('preco2_qtd').Value <> 'null') then
-      LProduto.preco2_qtd := StrToFloat(LJsonObj.GetValue('preco2_qtd').Value)
-    else
-      LProduto.preco2_qtd := 0; // valor default
     Result := LProduto;
   finally
     LJsonObj.Free;
@@ -437,6 +493,55 @@ begin
 
 //  free;
   FCodigoBarras := CodigoBarras;
+end;
+
+// Normaliza a lista de codigos auxiliares no mesmo formato do codigo de barras
+// principal (so digitos, 14 posicoes com zero a esquerda), que e como o PDV
+// grava e pesquisa em ESTOQUE.COD_BARRA.
+// Codigo invalido e descartado em silencio, sem exception: o backend ja valida
+// o formato no cadastro, e derrubar o produto inteiro por causa de um auxiliar
+// ruim faria a carga perder o produto.
+procedure TProduto.SetCodigosAuxiliares(const Value: TArray<string>);
+var
+  i, j, total: Integer;
+  codigo: string;
+  repetido: Boolean;
+  lista: TArray<string>;
+begin
+  SetLength(lista, Length(Value));
+  total := 0;
+
+  for i := 0 to High(Value) do
+  begin
+    codigo := removeLetras(Trim(Value[i]));
+
+    // vazio, so letras ou maior que a coluna do PDV
+    if (codigo = '') or (Length(codigo) > 14) then
+      Continue;
+
+    codigo := zeroEsquerda(codigo, 14);
+
+    // ja vai gravado em ESTOQUE.COD_BARRA
+    if codigo = FCodigoBarras then
+      Continue;
+
+    repetido := False;
+    for j := 0 to total - 1 do
+      if lista[j] = codigo then
+      begin
+        repetido := True;
+        Break;
+      end;
+
+    if repetido then
+      Continue;
+
+    lista[total] := codigo;
+    Inc(total);
+  end;
+
+  SetLength(lista, total);
+  FCodigosAuxiliares := lista;
 end;
 
 procedure TProduto.SetCusto(const Value: Real);

@@ -1,52 +1,212 @@
 <template>
-  <v-container>
-    <v-card>
-      <v-card-title>Carga - Loja</v-card-title>
+  <v-card flat>
+    <CabecalhoRelatorio
+      titulo="Carga para as Lojas"
+      :subtitulo="subtitulo"
+      icone="mdi-cloud-upload-outline"
+      :mostrar-atualizar="false"
+      :mostrar-exportar="false"
+    >
+      <template #acoes>
+        <v-btn
+          color="primary"
+          depressed
+          class="mr-2"
+          :disabled="!selected.length"
+          @click="enviaCargaAlterados"
+        >
+          <v-icon left>mdi-sync</v-icon>
+          Enviar alterados
+        </v-btn>
+        <v-btn
+          color="primary"
+          outlined
+          :disabled="!selected.length"
+          @click="enviaCargaCompleta"
+        >
+          <v-icon left>mdi-database-arrow-up-outline</v-icon>
+          Carga completa
+        </v-btn>
+      </template>
+    </CabecalhoRelatorio>
+
+    <EstadoVazio
+      v-if="!lojas.length"
+      icone="mdi-store-off-outline"
+      mensagem="Nenhuma loja cadastrada para enviar carga."
+    />
+
+    <template v-else>
       <v-data-table
         v-model="selected"
-        id="tableCarga"
+        class="tabela-carga"
         :headers="headers"
         :items="lojas"
         item-key="codigo"
         show-select
-        :footer-props="{
-          'items-per-page-text': 'Lojas.',
-        }"
+        :item-class="classeLinha"
+        :footer-props="{ 'items-per-page-text': 'Lojas por página' }"
         @click:row="selectRow"
       >
-        <template slot="item.status" slot-scope="{ item }">
-          {{ item.status }} %
-          <v-progress-linear :value="item.status"></v-progress-linear>
+        <template #[`item.nome`]="{ item }">
+          <div class="font-weight-medium">{{ item.nome }}</div>
+          <div
+            v-if="item.fantasia && item.fantasia !== item.nome"
+            class="text-caption grey--text text--darken-1"
+          >
+            {{ item.fantasia }}
+          </div>
+        </template>
+
+        <template #[`item.cargaStatus`]="{ item }">
+          <div class="coluna-status py-2">
+            <div class="d-flex align-center mb-1">
+              <v-icon small :color="estado(item).cor" class="mr-1">
+                {{ estado(item).icone }}
+              </v-icon>
+              <span
+                class="text-caption font-weight-medium"
+                :class="`${estado(item).cor}--text`"
+              >
+                {{ estado(item).texto }}
+              </span>
+              <v-spacer></v-spacer>
+              <span
+                v-if="estado(item).mostraPercentual"
+                class="text-caption font-weight-bold"
+                :class="`${estado(item).cor}--text`"
+              >
+                {{ estado(item).valor }}%
+              </span>
+            </div>
+            <v-progress-linear
+              rounded
+              height="6"
+              :value="estado(item).valor"
+              :color="estado(item).cor"
+              :indeterminate="estado(item).indeterminado"
+              :stream="estado(item).aguardando"
+              :buffer-value="0"
+            ></v-progress-linear>
+            <div v-if="estado(item).detalhe" class="text-caption grey--text mt-1">
+              {{ estado(item).detalhe }}
+            </div>
+          </div>
         </template>
       </v-data-table>
-      <div class="d-flex flex-row-reverse container">
-        <v-btn color="primary" @click="enviaCargaAlterados" class="mr-2"
-          >Enviar Carga Alterados</v-btn
-        >
-        <v-btn color="primary" @click="enviaCargaCompleta" class="mr-2"
-          >Enviar Carga Completa</v-btn
-        >
+
+      <v-divider></v-divider>
+      <div class="d-flex align-center px-6 py-2 text-caption grey--text text--darken-1">
+        <v-icon x-small class="mr-1">mdi-autorenew</v-icon>
+        Status atualizado automaticamente a cada 2 segundos
+        <v-spacer></v-spacer>
+        <span v-if="selected.length">
+          {{ selected.length }}
+          {{ selected.length === 1 ? "loja selecionada" : "lojas selecionadas" }}
+        </span>
       </div>
-    </v-card>
-  </v-container>
+    </template>
+  </v-card>
 </template>
 
 <script>
+import CabecalhoRelatorio from "@/components/Relatorio/CabecalhoRelatorio.vue";
+import EstadoVazio from "@/components/Relatorio/EstadoVazio.vue";
+
+// Sync que reporta etapa manda o percentual junto; o antigo nao manda nada e
+// cai na barra indeterminada. Por isso os dois caminhos convivem aqui.
+const ETAPAS = {
+  PDV: "Enviando para o PDV",
+  PRODUTOS: "Enviando produtos",
+  PRECOS: "Enviando preços",
+  TRIBUTACOES: "Enviando tributações",
+  FINALIZADORAS: "Enviando finalizadoras",
+  CLIENTES: "Enviando clientes",
+  FUNCIONARIOS: "Enviando funcionários",
+};
+
+const ESTADOS = {
+  CONCLUIDA: {
+    texto: "Concluída",
+    icone: "mdi-check-circle-outline",
+    cor: "success",
+    valor: 100,
+  },
+  EM_ANDAMENTO: {
+    texto: "Enviando...",
+    icone: "mdi-progress-upload",
+    cor: "primary",
+    valor: 0,
+    indeterminado: true,
+  },
+  PENDENTE: {
+    texto: "Aguardando sync",
+    icone: "mdi-clock-outline",
+    cor: "warning",
+    valor: 0,
+    aguardando: true,
+  },
+};
+
+const ESTADO_DESCONHECIDO = {
+  texto: "Verificando...",
+  icone: "mdi-help-circle-outline",
+  cor: "grey",
+  valor: 0,
+};
+
 export default {
+  components: { CabecalhoRelatorio, EstadoVazio },
   async mounted() {
     this.$store.commit("setContainerLoading", true);
     await this.$store.dispatch("getLojas");
     this.$store.commit("setContainerLoading", false);
+    await this.atualizaCargaStatus();
     this.verificaCargaStatus();
   },
+  beforeDestroy() {
+    this.encerrado = true;
+    clearTimeout(this.timerCarga);
+  },
   methods: {
-    async verificaCargaStatus() {
-      if (this.$route.path == "/carga/loja") {
-        setTimeout(async () => {
-          await this.$store.dispatch("verificaCargaStatus");
-          await this.verificaCargaStatus();
-        }, 2000);
+    async atualizaCargaStatus() {
+      try {
+        await this.$store.dispatch("verificaCargaStatus");
+      } catch (err) {
+        // Uma falha pontual na consulta nao pode derrubar o polling.
       }
+    },
+    verificaCargaStatus() {
+      if (this.encerrado) return;
+
+      this.timerCarga = setTimeout(async () => {
+        await this.atualizaCargaStatus();
+        this.verificaCargaStatus();
+      }, 2000);
+    },
+    estado(item) {
+      const base = ESTADOS[item.cargaStatus] || ESTADO_DESCONHECIDO;
+
+      if (item.cargaStatus !== "EM_ANDAMENTO" || item.cargaPercentual == null) {
+        return base;
+      }
+
+      return {
+        ...base,
+        texto: ETAPAS[item.cargaEtapa] || item.cargaEtapa || base.texto,
+        valor: item.cargaPercentual,
+        indeterminado: false,
+        mostraPercentual: true,
+        detalhe:
+          item.cargaIndice && item.cargaTotal
+            ? `Etapa ${item.cargaIndice} de ${item.cargaTotal}`
+            : "",
+      };
+    },
+    classeLinha(item) {
+      return this.selected.some((s) => s.codigo === item.codigo)
+        ? "linha-selecionada"
+        : "";
     },
     selectRow(item) {
       const index = this.selected.findIndex(
@@ -61,40 +221,70 @@ export default {
       }
     },
 
-    enviaCargaCompleta() {
-      this.$store.commit("setContainerLoading", true);
-      this.$store.dispatch("enviaCargaCompleta", this.selected);
-      this.$store.commit("setContainerLoading", false);
+    async enviaCargaCompleta() {
+      await this.enviaCarga("enviaCargaCompleta", "Carga completa solicitada!");
     },
 
-    enviaCargaAlterados() {
+    async enviaCargaAlterados() {
+      await this.enviaCarga("enviaCargaAlterados", "Carga de alterados solicitada!");
+    },
+
+    async enviaCarga(acao, mensagem) {
       this.$store.commit("setContainerLoading", true);
-      this.$store.dispatch("enviaCargaAlterados", this.selected);
-      this.$store.commit("setContainerLoading", false);
+      try {
+        await this.$store.dispatch(acao, this.selected);
+        this.$store.dispatch("showToastMessage", mensagem);
+      } catch (err) {
+        this.$store.dispatch("showToastMessage", "Não foi possível solicitar a carga.");
+      } finally {
+        this.$store.commit("setContainerLoading", false);
+      }
+      await this.atualizaCargaStatus();
     },
   },
   data() {
     return {
       selected: [],
+      encerrado: false,
+      timerCarga: null,
       headers: [
-        { text: "Cód.", value: "codigo" },
+        { text: "Cód.", value: "codigo", width: 90 },
         { text: "Loja", value: "nome" },
-        { text: "Status", value: "status" },
+        { text: "Status da carga", value: "cargaStatus", width: 240, sortable: false },
       ],
     };
   },
   computed: {
-    lojas: {
-      get() {
-        return this.$store.state.loja.lojaList;
-      },
+    lojas() {
+      return this.$store.state.loja.lojaList;
+    },
+    subtitulo() {
+      const emAndamento = this.lojas.filter(
+        (l) => l.cargaStatus === "EM_ANDAMENTO"
+      ).length;
+      const aguardando = this.lojas.filter((l) => l.cargaStatus === "PENDENTE").length;
+
+      const partes = [`${this.lojas.length} loja(s)`];
+      if (aguardando) partes.push(`${aguardando} aguardando o sync`);
+      if (emAndamento) partes.push(`${emAndamento} recebendo carga`);
+      if (!aguardando && !emAndamento) partes.push("nenhuma carga em andamento");
+
+      return partes.join(" · ");
     },
   },
 };
 </script>
 
 <style lang="scss" scoped>
-#tableCarga {
+.tabela-carga ::v-deep tbody tr {
   cursor: pointer;
+}
+
+.tabela-carga ::v-deep tr.linha-selecionada {
+  background-color: rgba(25, 118, 210, 0.06);
+}
+
+.coluna-status {
+  min-width: 170px;
 }
 </style>

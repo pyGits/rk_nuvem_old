@@ -12,6 +12,9 @@ function Login(user:string;password:string):Boolean;
 
 function verificaCargaPendente:string;
 function finalizaCargaPendente:boolean;
+// Alimenta a barra de progresso do painel. E opcional: a carga funciona
+// igual se a nuvem nao conhecer essa rota.
+procedure informaProgressoCarga(const etapa:string; indice, total:integer);
 
 function getLoja:TStringList;
 function getProdutos(alterados:boolean):TStringList;
@@ -318,6 +321,21 @@ begin
       'Loja ' + codLoja + ' | ' + DescreveErro(E));
   end;
 
+  end;
+end;
+
+procedure informaProgressoCarga(const etapa:string; indice, total:integer);
+var
+  jsonResponse:string;
+begin
+  try
+    jsonResponse := APIGet('/carga/progresso?loja=' + codLoja +
+                           '&etapa=' + etapa +
+                           '&indice=' + IntToStr(indice) +
+                           '&total=' + IntToStr(total));
+  except
+    // Progresso e so informativo: se a nuvem nao responder a carga segue, e o
+    // painel volta a mostrar o andamento generico.
   end;
 end;
 
