@@ -1,0 +1,14 @@
+program Store_Protheus_Server_SAT;
+
+uses
+  Forms,
+  principal in 'principal.pas' {frmPrincipal};
+
+{$R *.res}
+
+begin
+  Application.Initialize;
+  Application.Title := 'Store Protheus 7.1 - Server';
+  Application.CreateForm(TfrmPrincipal, frmPrincipal);
+  Application.Run;
+end.

@@ -24,4 +24,20 @@ npm-debug.log*
 *.swp
 
 # Configuração local do Claude Code
-.claude/settings.local.json
+**/.claude/settings.local.json
+
+# Delphi: saída de build. Só o fonte (.pas/.dfm/.dproj) vai para o repositório —
+# o GitHub rejeita arquivos acima de 100 MB (Retaguarda.dres tem 267 MB).
+Win32/
+Win64/
+__history/
+__recovery/
+*.exe
+*.dres
+*.dcu
+*.zip
+*.identcache
+*.stat
+*.local
+*.~*~
+*.FDB

@@ -1,0 +1,48 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{DAACBAE3-E868-40C2-A174-461F28BC7975}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="RK_Retaguarda.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="Retaguarda.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="RK_Retaguarda">
+        <MSBuild Projects="RK_Retaguarda.dproj"/>
+    </Target>
+    <Target Name="RK_Retaguarda:Clean">
+        <MSBuild Projects="RK_Retaguarda.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="RK_Retaguarda:Make">
+        <MSBuild Projects="RK_Retaguarda.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Retaguarda">
+        <MSBuild Projects="Retaguarda.dproj"/>
+    </Target>
+    <Target Name="Retaguarda:Clean">
+        <MSBuild Projects="Retaguarda.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="Retaguarda:Make">
+        <MSBuild Projects="Retaguarda.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="RK_Retaguarda;Retaguarda"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="RK_Retaguarda:Clean;Retaguarda:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="RK_Retaguarda:Make;Retaguarda:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>

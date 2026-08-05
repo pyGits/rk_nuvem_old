@@ -1,0 +1,48 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{4EA851DC-032A-434C-B0D7-CCA3898EA79A}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="Retaguarda.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="Infra2\Tests\TestsRetaguarda.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="Retaguarda">
+        <MSBuild Projects="Retaguarda.dproj"/>
+    </Target>
+    <Target Name="Retaguarda:Clean">
+        <MSBuild Projects="Retaguarda.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="Retaguarda:Make">
+        <MSBuild Projects="Retaguarda.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="TestsRetaguarda">
+        <MSBuild Projects="Infra2\Tests\TestsRetaguarda.dproj"/>
+    </Target>
+    <Target Name="TestsRetaguarda:Clean">
+        <MSBuild Projects="Infra2\Tests\TestsRetaguarda.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="TestsRetaguarda:Make">
+        <MSBuild Projects="Infra2\Tests\TestsRetaguarda.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="Retaguarda;TestsRetaguarda"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="Retaguarda:Clean;TestsRetaguarda:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="Retaguarda:Make;TestsRetaguarda:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>

@@ -57,6 +57,35 @@ function apagaArquivo(nome: string) {
   fs.unlink(caminho, () => undefined);
 }
 
+// Uma hora sem estar no banco e arquivo abandonado; abaixo disso pode ser um
+// upload em andamento (o multer grava antes de o registro existir).
+const IDADE_MINIMA_ORFAO = 60 * 60 * 1000;
+
+// O disco fica so com os arquivos que estao publicados: cada item guarda uma
+// unica versao, e upload interrompido ou falha na gravacao nao deixa zip
+// ocupando espaco no volume.
+async function limpaOrfaos() {
+  try {
+    if (!fs.existsSync(DIRETORIO)) return;
+
+    const registros: any[] = await Download.findAll({ attributes: ["arquivo"] });
+    const publicados = new Set(registros.map((r) => r.arquivo));
+
+    for (const nome of fs.readdirSync(DIRETORIO)) {
+      if (publicados.has(nome)) continue;
+
+      const caminho = path.join(DIRETORIO, nome);
+      const idade = Date.now() - fs.statSync(caminho).mtimeMs;
+      if (idade > IDADE_MINIMA_ORFAO) {
+        fs.unlinkSync(caminho);
+      }
+    }
+  } catch (error) {
+    // Faxina nao pode derrubar a publicacao que acabou de dar certo.
+    console.error(error);
+  }
+}
+
 export default {
   // Lista mostrada aos clientes: so o que esta publicado.
   async listarPublicados(req: Request, res: Response) {
@@ -123,11 +152,13 @@ export default {
           // Só depois de gravar a nova versão, para não ficar sem arquivo se o
           // update falhar.
           apagaArquivo(atual.arquivo);
+          await limpaOrfaos();
 
           return res.status(200).json({ message: "Nova versão publicada com sucesso" });
         }
 
         await Download.create({ ...dados, ativo: true });
+        await limpaOrfaos();
         res.status(201).json({ message: "Download publicado com sucesso" });
       } catch (error) {
         console.error(error);
@@ -166,6 +197,7 @@ export default {
 
       await Download.destroy({ where: { id } });
       apagaArquivo(download.arquivo);
+      await limpaOrfaos();
 
       res.status(200).json({ message: "Download removido com sucesso" });
     } catch (error) {
