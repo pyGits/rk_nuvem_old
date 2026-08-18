@@ -320,7 +320,9 @@ begin
 try
    with qrFechamentoFinalizadoraInserir do
       begin
-        ParamByName('ID_FECHAMENTO').AsString := oFechamentoFin.id;
+        // Mesmo prefixo usado em InserirFechamentoServidor, para o vinculo
+        // com o fechamento pai continuar valendo no servidor.
+        ParamByName('ID_FECHAMENTO').AsString := IntToStr(oFechamentoFin.codCaixa) + '.' + oFechamentoFin.id;
 
           with oFechamentoFin do
           begin
@@ -352,7 +354,9 @@ function TdmCupomServidor.InserirFechamentoServidor(
 begin
 with qrFechamentoInserir do
   begin
-      Params.ParamByName('codigo').AsString   := oFechamento.codigo;
+      // Prefixado com o caixa de origem para nao colidir com o codigo local
+      // de outro caixa ja sincronizado (evita erro de chave primaria).
+      Params.ParamByName('codigo').AsString   := IntToStr(oFechamento.codCaixa) + '.' + oFechamento.codigo;
       Params.ParamByName('OPERADOR').AsString   := oFechamento.Operador;
       Params.ParamByName('DATA_ABERTURA').AsDate:= oFechamento.dataAbertura;
       Params.ParamByName('HORA_ABERTURA').AsTime:= oFechamento.horaAbertura;

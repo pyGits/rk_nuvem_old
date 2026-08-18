@@ -1397,7 +1397,6 @@ object frmCliente: TfrmCliente
         Height = 27
         Date = 44497.456316493060000000
         Time = 44497.456316493060000000
-        Enabled = False
         TabOrder = 17
         OnKeyPress = edtDescricaoKeyPress
       end

@@ -394,6 +394,7 @@ try
       // grid
       oCliente := TCliente.Create;
       oCliente.Codigo := VariaveisSrv.oUtilsController.RetornaSequencial('Cliente','CODIGO');
+      oCliente.DataCadastro := Date;
       PreencherCampos(oCliente);
       freeandnil(oCliente);
       //

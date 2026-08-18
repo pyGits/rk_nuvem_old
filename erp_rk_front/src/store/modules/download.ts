@@ -38,6 +38,30 @@ export default {
         });
     },
 
+    // ---- Página pública (sem login), para compartilhar por link ----
+    async getDownloadsPublico({ commit, dispatch }: any) {
+      await Vue.prototype.$http
+        .get("/downloads/publico")
+        .then((res: any) => {
+          commit("setDownloadList", res.data);
+        })
+        .catch(() => {
+          dispatch("showToastMessage", "Não foi possível carregar os downloads.");
+        });
+    },
+
+    async baixarDownloadPublico({ dispatch }: any, payload: any) {
+      return await Vue.prototype.$http
+        .post(`/downloads/publico/${payload.id}/link`)
+        .then((res: any) => {
+          const baseURL = Vue.prototype.$http.defaults.baseURL || "/api";
+          window.location.href = `${baseURL}/downloads/arquivo/${res.data.token}`;
+        })
+        .catch(() => {
+          dispatch("showToastMessage", "Não foi possível iniciar o download.");
+        });
+    },
+
     // ---- Painel administrativo ----
     async getDownloadsAdmin({ commit }: any) {
       await Vue.prototype.$http.get("/admin/downloads").then((res: any) => {
