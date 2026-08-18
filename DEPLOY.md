@@ -170,6 +170,58 @@ firewall, não para container fora do ar.
 
 ---
 
+## Certificados TLS
+
+Os certificados são do Let's Encrypt e continuam sendo emitidos pelo **certbot do
+host** — não há container de certbot. O `/etc/letsencrypt` entra no container
+`web` como bind mount somente-leitura, então renovar no host basta para o
+arquivo mudar; **não basta para o site mudar**.
+
+Depois da virada, dois detalhes precisam estar corretos ou o certificado vence
+em silêncio (foi o que aconteceu em 18/08/2026):
+
+1. **`installer = nginx` nos arquivos de `/etc/letsencrypt/renewal/`.** O
+   certbot tenta recarregar o nginx do host, que foi desabilitado na virada, e
+   aborta o `renew` inteiro — nenhum domínio é renovado. Tem que ser
+   `authenticator = webroot` + `installer = None`.
+2. **Reload do nginx do container.** O nginx carrega o certificado na
+   inicialização e o mantém em memória. Sem um deploy-hook, ele continua
+   servindo o certificado velho mesmo com o novo já em disco. O hook fica em
+   `/etc/letsencrypt/renewal-hooks/deploy/10-reload-rk-web.sh` e manda um SIGHUP
+   no container.
+
+O script `cert-renovar.sh` arruma os dois pontos, garante o agendamento (timer
+do systemd ou `/etc/cron.d/certbot-rk`) e renova na hora:
+
+```bash
+scp deploy/cert-renovar.sh root@rknuvem.com.br:/opt/rk_nuvem/
+ssh root@rknuvem.com.br 'bash /opt/rk_nuvem/cert-renovar.sh'
+```
+
+Ele é idempotente e não gasta cota: o `certbot renew` só emite quando faltam
+menos de 30 dias. Para forçar (certificado já vencido, como em 18/08/2026), rode
+`FORCE=1 bash /opt/rk_nuvem/cert-renovar.sh` — aí vale lembrar do limite do
+Let's Encrypt, 5 emissões por domínio por semana.
+
+Nada disso derruba produção: a validação webroot usa a porta 80 que o container
+já atende, e o hook recarrega o nginx com SIGHUP (workers novos sobem, os
+antigos terminam o que estavam servindo). Para conferir sem emitir nada:
+
+```bash
+certbot certificates                 # datas do que está em disco
+certbot renew --dry-run              # o ciclo completo, contra o staging
+echo | openssl s_client -connect rknuvem.com.br:443 -servername rknuvem.com.br   2>/dev/null | openssl x509 -noout -dates    # o que o site realmente serve
+```
+
+Compare sempre as duas últimas: divergência entre o disco e o que o site serve
+significa que faltou o reload.
+
+A porta 3000 usa o mesmo certificado de `rknuvem.com.br`. Quando ele vence, o
+agente RKNuvem das lojas para de sincronizar junto com o site — o log da loja
+mostra erro de TLS, não `Connection refused`.
+
+---
+
 ## Pendências de segurança
 
 Nenhuma destas foi alterada — são decisões suas:

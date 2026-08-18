@@ -337,4 +337,97 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
     }
     res.status(200).json(venda[0]);
   },
+
+  // Relatório: listagem de produtos cadastrados, com filtros de seção, grupo,
+  // fornecedor, unidade e, opcionalmente, por loja (necessária para ver
+  // preço/oferta/preço2, que são valores por loja). Usa bind parameters
+  // (replacements nomeados) em vez de interpolação, diferente do restante
+  // deste arquivo, para não expor os filtros a SQL injection.
+  async relProdutoListagem(req: any, res: any) {
+    const { tenant_id } = req;
+    const { secao, grupo, fornecedor, unidade, ativo, descricao, codigoBarras } = req.query;
+    const loja = lojaFiltro(req.query);
+    const comOferta = req.query.comOferta === "true";
+    const comPreco2 = req.query.comPreco2 === "true";
+
+    const where: string[] = ["p.tenant_id = :tenant_id"];
+    const replacements: any = { tenant_id };
+
+    if (secao) {
+      where.push("p.secao = :secao");
+      replacements.secao = secao;
+    }
+    if (grupo) {
+      where.push("p.grupo = :grupo");
+      replacements.grupo = grupo;
+    }
+    if (fornecedor) {
+      where.push("p.fornecedor = :fornecedor");
+      replacements.fornecedor = fornecedor;
+    }
+    if (unidade) {
+      where.push("p.unidade = :unidade");
+      replacements.unidade = unidade;
+    }
+    if (ativo) {
+      where.push("p.ativo = :ativo");
+      replacements.ativo = ativo;
+    }
+    if (descricao) {
+      where.push("p.descricao ILIKE :descricao");
+      replacements.descricao = `%${descricao}%`;
+    }
+    if (codigoBarras) {
+      where.push("p.codigo_barras ILIKE :codigoBarras");
+      replacements.codigoBarras = `%${codigoBarras}%`;
+    }
+
+    // Sem loja selecionada não há como exibir um único preço/oferta por
+    // produto (o valor varia por loja), então o join só traz valores quando
+    // uma loja específica é informada.
+    let precoJoin = "LEFT JOIN precos pr ON pr.codigo_produto = p.codigo AND pr.tenant_id = p.tenant_id";
+    if (loja) {
+      precoJoin += " AND pr.loja = :loja";
+      replacements.loja = loja;
+    } else {
+      precoJoin += " AND false";
+    }
+
+    if (comOferta) {
+      let sub = "EXISTS (SELECT 1 FROM precos peo WHERE peo.codigo_produto = p.codigo AND peo.tenant_id = p.tenant_id AND peo.oferta > 0";
+      if (loja) sub += " AND peo.loja = :loja";
+      sub += ")";
+      where.push(sub);
+    }
+    if (comPreco2) {
+      let sub = "EXISTS (SELECT 1 FROM precos pep WHERE pep.codigo_produto = p.codigo AND pep.tenant_id = p.tenant_id AND pep.preco2 > 0";
+      if (loja) sub += " AND pep.loja = :loja";
+      sub += ")";
+      where.push(sub);
+    }
+
+    const sql = `
+      SELECT
+        p.codigo, p.codigo_barras, p.descricao, p.unidade,
+        p.secao, s.nome AS secao_nome,
+        p.grupo, g.nome AS grupo_nome,
+        p.fornecedor, f.nome AS fornecedor_nome,
+        p.ativo,
+        pr.preco, pr.oferta, pr.preco2, pr.preco2_qtd
+      FROM produtos p
+      LEFT JOIN secaos s ON s.codigo = p.secao AND s.tenant_id = p.tenant_id
+      LEFT JOIN grupos g ON g.codigo = p.grupo AND g.codigo_secao = p.secao AND g.tenant_id = p.tenant_id
+      LEFT JOIN fornecedors f ON f.codigo = p.fornecedor AND f.tenant_id = p.tenant_id
+      ${precoJoin}
+      WHERE ${where.join(" AND ")}
+      ORDER BY p.codigo ASC
+    `;
+
+    try {
+      const result = await sequelize.query(sql, { replacements, type: QueryTypes.SELECT });
+      res.status(200).json(result);
+    } catch (error: any) {
+      res.status(400).json({ message: "Erro ao gerar relatório de produtos! " + error.message });
+    }
+  },
 };

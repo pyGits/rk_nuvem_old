@@ -42,4 +42,10 @@ router.get(
 
 router.get("/relatorios/cupom", verifyJWT, RelatorioController.relCupomUnico);
 
+router.get(
+  "/relatorios/produtos/listagem",
+  verifyJWT,
+  RelatorioController.relProdutoListagem
+);
+
 export default router;

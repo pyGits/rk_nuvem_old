@@ -43,4 +43,4 @@ v3CEST.register();
 SefazScheduler.start();
 // MigrateFromSyspdvUseCase.execute(32);
 // MigrateFromSyspdvUseCase.migrateCodigosAuxiliares(32);
-// MigrateFromRKUseCase.execute(32);
+// MigrateFromRKUseCase.execute(36);

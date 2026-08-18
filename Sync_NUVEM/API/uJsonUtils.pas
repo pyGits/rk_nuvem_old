@@ -52,10 +52,14 @@ var
 begin
   Result := TStringList.Create;
   JArray := TJSONObject.ParseJSONValue(JsonArray) as TJSONArray;
+  if not Assigned(JArray) then Exit;
   try
     for I := 0 to JArray.Count - 1 do
     begin
-      Result.Add(JArray.Items[I].ToString);
+      // ToString so escapa aspas: barra invertida no texto (ex: "SLIM 35\36")
+      // saia crua e o item virava json invalido no proximo parse. ToJSON
+      // reserializa escapando \, aspas e controles.
+      Result.Add(JArray.Items[I].ToJSON);
     end;
   finally
     JArray.Free;

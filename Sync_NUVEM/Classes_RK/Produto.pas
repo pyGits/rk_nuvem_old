@@ -367,20 +367,20 @@ function TProduto.JsonToProduto(const AJson: string): TProduto;
 var
   LJsonObj: TJSONObject;
   LProduto: TProduto;
-  JsonString: string;
 
 begin
   Result := nil;
 
   if AJson = '' then Exit;
 
-  JsonString := StringReplace(AJson, '\', ' ', [rfReplaceAll]);
-
-  LJsonObj := TJSONObject.ParseJSONValue(JsonString) as TJSONObject;
+  // o json chega escapado corretamente (ParseJsonArray usa ToJSON), entao nao
+  // se mexe mais no texto: trocar '\' por espaco quebrava os escapes validos.
+  LJsonObj := TJSONObject.ParseJSONValue(AJson) as TJSONObject;
   if not Assigned(LJsonObj) then Exit;
 
   try
     LProduto := TJson.JsonToObject<TProduto>(AJson);
+    try
     LProduto.codigo := ValorTexto(LJsonObj, 'codigo');
     LProduto.CodigoBarras := ValorTexto(LJsonObj, 'codigo_barras');
     // depende do CodigoBarras ja preenchido (ver comentario da property)
@@ -409,6 +409,12 @@ begin
     LProduto.custo := ValorNumero(LJsonObj, 'custo');
     LProduto.preco2 := ValorNumero(LJsonObj, 'preco2');
     LProduto.preco2_qtd := ValorNumero(LJsonObj, 'preco2_qtd');
+    except
+      // setter que valida (codigo de barras, ncm, descricao...) derruba o
+      // registro: libera aqui, senao cada produto recusado vaza um TProduto
+      LProduto.Free;
+      raise;
+    end;
 
     Result := LProduto;
   finally

@@ -43,10 +43,24 @@ for d in rknuvem.com.br homologacao.rknuvem.com.br; do
   [ -f "$f" ] || { echo "  aviso: $f nao existe, pulando"; continue; }
   cp -n "$f" "$f.bak-pre-docker"
   sed -i 's|^authenticator = nginx|authenticator = webroot|' "$f"
+  # "installer = nginx" faria o certbot tentar recarregar o nginx do host, que
+  # acabou de sair — o renew inteiro falharia e o certificado venceria calado.
+  sed -i 's|^installer = nginx|installer = None|' "$f"
   grep -q '^webroot_path' "$f" || sed -i '/^authenticator = webroot/a webroot_path = /var/www/certbot,' "$f"
   grep -q '^\[\[webroot_map\]\]' "$f" || printf '[[webroot_map]]\n%s = /var/www/certbot\n' "$d" >> "$f"
   echo "  $d -> webroot"
 done
+
+# Quem termina TLS agora e o nginx de dentro do container. Ele mantem o
+# certificado carregado em memoria: sem este hook, renovar o arquivo em disco
+# nao muda o que o site serve ate o proximo restart do container.
+mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+cat > /etc/letsencrypt/renewal-hooks/deploy/10-reload-rk-web.sh <<'HOOK'
+#!/bin/sh
+docker kill -s HUP rk-web >/dev/null 2>&1 || \
+  docker exec rk-web nginx -s reload >/dev/null 2>&1 || true
+HOOK
+chmod +x /etc/letsencrypt/renewal-hooks/deploy/10-reload-rk-web.sh
 
 echo "==> 4/6 Ajustando o .env para producao"
 # Portas reais e agendador SEFAZ ligado (o do pm2 acabou de parar, entao agora

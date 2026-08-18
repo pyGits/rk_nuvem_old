@@ -26,6 +26,7 @@ import CadastroFinalizadora from "@/views/Finalizadora/CadastroFinalizadora.vue"
 import PainelVendas from "@/views/Relatorio/Caixa/Painel/Painel.vue";
 import PainelControle from "@/views/Relatorio/Caixa/Controle/Painel.vue";
 import PainelEstoque from "@/views/Relatorio/Estoque/Painel.vue";
+import RelatorioProdutoListagem from "@/views/Relatorio/Produto/Listagem.vue";
 import Login from "@/views/Deslogado/Login.vue";
 import RegistrarAdmin from "@/views/Deslogado/PainelAdmin/RegistrarAdmin.vue";
 import ClientesAdmin from "@/views/Deslogado/PainelAdmin/ListarClientes.vue";
@@ -324,6 +325,12 @@ const routes: Array<RouteConfig> = [
     path: "/relatorio/financeiro/balancete",
     name: "relatorio-financeiro-balancete",
     component: ListarBalancete,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/relatorio/produto/listagem",
+    name: "relatorio-produto-listagem",
+    component: RelatorioProdutoListagem,
     meta: { requiresAuth: true },
   },
 

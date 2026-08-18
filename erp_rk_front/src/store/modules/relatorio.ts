@@ -159,6 +159,11 @@ export default {
         params: parametros,
       });
     },
+    async getRelatorioProdutoListagem({ commit }: any, parametros: any) {
+      return await Vue.prototype.$http.get("/relatorios/produtos/listagem", {
+        params: parametros,
+      });
+    },
     async getCupomUnico({ commit }: any, cupom: any) {
       return await Vue.prototype.$http
         .get("/relatorios/cupom", {

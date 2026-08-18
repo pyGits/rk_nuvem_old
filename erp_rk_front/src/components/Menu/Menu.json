@@ -46,6 +46,10 @@
         "subSubItems": [{ "name": "Painel de Estoque", "to": "/relatorio/estoque/painel" }]
       },
       {
+        "name": "Produto",
+        "subSubItems": [{ "name": "Listagem", "to": "/relatorio/produto/listagem" }]
+      },
+      {
         "name": "Financeiro",
         "subSubItems": [{ "name": "Balancete", "to": "/relatorio/financeiro/balancete" }]
       }
