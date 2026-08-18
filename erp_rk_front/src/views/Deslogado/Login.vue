@@ -1,43 +1,56 @@
 <template>
-  <v-container fluid>
-    <v-row justify="center">
-      <v-col cols="12" sm="8" md="4">
-        <v-card>
-          <v-img
-            :src="require('@/assets/logo.png')"
-            height="100"
-            contain
-          ></v-img>
-          <v-card-title class="text-center">Login</v-card-title>
-          <v-card-text>
+  <v-container fluid class="login-bg fill-height pa-4">
+    <v-row justify="center" align="center" class="fill-height ma-0">
+      <v-col cols="12" sm="8" md="5" lg="4" xl="3">
+        <v-card class="login-card rounded-lg elevation-12">
+          <div class="login-topo d-flex flex-column align-center py-8 px-4">
+            <v-avatar size="72" color="white" class="elevation-3">
+              <v-img :src="require('@/assets/logo.svg')" max-width="44" contain></v-img>
+            </v-avatar>
+            <h1 class="text-h6 white--text font-weight-medium mt-4 mb-0">RK Nuvem</h1>
+            <span class="text-caption login-subtitulo">Acesse sua conta para continuar</span>
+          </div>
+
+          <v-card-text class="pt-8 px-8">
             <v-form ref="form" @submit.prevent="login">
-              <v-text-field v-model="username" label="Usuário"></v-text-field>
+              <v-text-field
+                v-model="username"
+                label="Usuário"
+                outlined
+                dense
+                autofocus
+                prepend-inner-icon="mdi-account-outline"
+                class="mb-1"
+              ></v-text-field>
               <v-text-field
                 v-model="password"
                 label="Senha"
-                type="password"
+                :type="mostrarSenha ? 'text' : 'password'"
+                outlined
+                dense
+                prepend-inner-icon="mdi-lock-outline"
+                :append-icon="mostrarSenha ? 'mdi-eye-off-outline' : 'mdi-eye-outline'"
+                @click:append="mostrarSenha = !mostrarSenha"
               ></v-text-field>
               <v-btn
                 color="primary"
                 type="submit"
                 block
+                large
+                depressed
+                class="rounded-lg mt-2"
                 :loading="loading"
                 :disabled="loading"
               >
-                <template v-if="!loading"> Login </template>
-                <template v-else>
-                  <v-progress-circular
-                    indeterminate
-                    size="24"
-                  ></v-progress-circular>
-                </template>
+                Entrar
               </v-btn>
             </v-form>
+            <!-- <router-link to="/administracao">Painel ADM</router-link> -->
           </v-card-text>
-          <!-- <v-card-actions>
-            <v-spacer></v-spacer>
-            <router-link to="/administracao">Painel ADM</router-link>
-          </v-card-actions> -->
+
+          <div class="text-center text-caption grey--text pb-5">
+            © {{ anoAtual }} RK Nuvem
+          </div>
         </v-card>
       </v-col>
     </v-row>
@@ -53,7 +66,13 @@ export default {
       username: "",
       password: "",
       loading: false,
+      mostrarSenha: false,
     };
+  },
+  computed: {
+    anoAtual() {
+      return new Date().getFullYear();
+    },
   },
   methods: {
     login() {
@@ -114,3 +133,23 @@ export default {
   },
 };
 </script>
+
+<style lang="scss" scoped>
+.login-bg {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1867c0 0%, #1697f6 55%, #7bc6ff 100%);
+}
+
+.login-card {
+  overflow: hidden;
+}
+
+.login-topo {
+  background: linear-gradient(135deg, #1867c0 0%, #1697f6 100%);
+}
+
+.login-subtitulo {
+  color: rgba(255, 255, 255, 0.85);
+  margin-top: 2px;
+}
+</style>

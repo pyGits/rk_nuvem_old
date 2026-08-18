@@ -88,14 +88,19 @@
       <v-row dense class="mt-2">
         <v-col cols="12" sm="4" md="3">
           <label class="form-label">Fornecedor:</label>
-          <input
-            @focus="$event.target.select()"
-            type="text"
-            class="form-control"
-            placeholder="Cód. Fornecedor"
-            v-model="fornecedor"
-            @blur="handleLoadFornecedor"
-          />
+          <div class="d-flex">
+            <input
+              @focus="$event.target.select()"
+              type="text"
+              class="form-control"
+              placeholder="Cód. Fornecedor"
+              v-model="fornecedor"
+              @blur="handleLoadFornecedor"
+            />
+            <v-btn icon color="primary" title="Localizar fornecedor" @click="dialogLocalizarFornecedor = true">
+              <v-icon>mdi-magnify</v-icon>
+            </v-btn>
+          </div>
         </v-col>
         <v-col cols="12" sm="8" md="6">
           <label class="form-label">Descrição Fornecedor:</label>
@@ -109,13 +114,18 @@
       <v-row dense class="mt-2">
         <v-col cols="12" sm="6" md="4">
           <label class="form-label">Código de Barras:</label>
-          <input
-            @focus="$event.target.select()"
-            type="text"
-            class="form-control"
-            placeholder="Código de Barras"
-            v-model="codigoBarras"
-          />
+          <div class="d-flex">
+            <input
+              @focus="$event.target.select()"
+              type="text"
+              class="form-control"
+              placeholder="Código de Barras"
+              v-model="codigoBarras"
+            />
+            <v-btn icon color="primary" title="Localizar produto" @click="dialogLocalizarProduto = true">
+              <v-icon>mdi-magnify</v-icon>
+            </v-btn>
+          </div>
         </v-col>
         <v-col cols="12" sm="6" md="5">
           <label class="form-label">Descrição do Produto:</label>
@@ -154,21 +164,33 @@
       <EstadoVazio v-if="!carregando && semDados" />
       <v-data-table v-else :headers="headers" :items="produtos" :items-per-page="15" :loading="carregando" class="elevation-1"></v-data-table>
     </v-container>
+
+    <v-dialog v-model="dialogLocalizarFornecedor" max-width="800">
+      <LocalizarFornecedor @selecionar="selecionarFornecedor"></LocalizarFornecedor>
+    </v-dialog>
+
+    <v-dialog v-model="dialogLocalizarProduto" max-width="800">
+      <LocalizarProduto @selecionar="selecionarProduto"></LocalizarProduto>
+    </v-dialog>
   </v-card>
 </template>
 
 <script>
 import CabecalhoRelatorio from "@/components/Relatorio/CabecalhoRelatorio.vue";
 import EstadoVazio from "@/components/Relatorio/EstadoVazio.vue";
+import LocalizarFornecedor from "@/views/Fornecedor/LocalizarFornecedor.vue";
+import LocalizarProduto from "@/views/ProdutoRefact/LocalizarProduto.vue";
 import { gerarExcel, gerarPDF } from "@/utils/exports";
 
 export default {
   name: "RelatorioProdutoListagem",
-  components: { CabecalhoRelatorio, EstadoVazio },
+  components: { CabecalhoRelatorio, EstadoVazio, LocalizarFornecedor, LocalizarProduto },
   data() {
     return {
       carregando: false,
       carregandoLojas: false,
+      dialogLocalizarFornecedor: false,
+      dialogLocalizarProduto: false,
       produtos: [],
       unidades: ["UN", "KG", "GR", "CX", "FD", "PCT", "PC", "DZ", "LT", "ML", "MT", "M2", "M3", "SC", "ROL", "PAR", "TON"],
       opcoesAtivo: [
@@ -279,6 +301,17 @@ export default {
     async handleLoadFornecedor() {
       if (!this.fornecedor) return;
       await this.$store.dispatch("getFornecedor", this.fornecedor);
+    },
+    async selecionarFornecedor(fornecedor) {
+      this.dialogLocalizarFornecedor = false;
+      this.fornecedor = fornecedor.codigo || "";
+      await this.handleLoadFornecedor();
+    },
+    selecionarProduto(produto) {
+      this.dialogLocalizarProduto = false;
+      if (!produto || !produto.codigo) return;
+      this.codigoBarras = produto.codigo_barras || "";
+      this.descricao = produto.descricao || "";
     },
     async pesquisar() {
       const parametros = {
