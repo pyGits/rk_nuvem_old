@@ -68,7 +68,7 @@
       :headers="headers"
       :items="itens"
       :search="search"
-      sort-by="codigo"
+      sort-by="codigo_barras"
       :footer-props="{
         'items-per-page-text': 'Produtos por pág.',
       }"

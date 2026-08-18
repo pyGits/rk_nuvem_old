@@ -20,6 +20,8 @@ import UsuarioRouter from "./src/routes/usuarios";
 import VendaRouter from "./src/routes/venda";
 import CompraRouter from "./src/routes/compra";
 import DownloadRouter from "./src/routes/downloads";
+import NotificacaoRouter from "./src/routes/notificacoes";
+import FeedbackRouter from "./src/routes/feedback";
 
 const router = Router();
 router.use(ProdutosRouter);
@@ -43,5 +45,7 @@ router.use(TenantRouter);
 router.use(UsuarioRouter);
 router.use(CompraRouter);
 router.use(DownloadRouter);
+router.use(NotificacaoRouter);
+router.use(FeedbackRouter);
 
 export default router;

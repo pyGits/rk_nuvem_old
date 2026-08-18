@@ -57,6 +57,13 @@ export default {
           icon: "mdi-cloud-download-outline",
           route: "/administracao/downloads",
         },
+        // Feature de feedback está desativada por enquanto (ver Header.vue,
+        // featureFeedbackAtivo). Reativar os dois juntos.
+        // {
+        //   title: "Feedbacks",
+        //   icon: "mdi-message-text-outline",
+        //   route: "/administracao/feedbacks",
+        // },
       ],
     };
   },

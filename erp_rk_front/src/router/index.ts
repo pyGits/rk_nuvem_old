@@ -21,6 +21,7 @@ import ListaImpFederal from "@/views/Fiscal/Federais/ListaImpFederais.vue";
 import CadastroImpFderal from "@/views/Fiscal/Federais/CadastroImpFederal.vue";
 import CargaLoja from "@/views/Carga/Loja.vue";
 import Downloads from "@/views/Downloads/Downloads.vue";
+import Inicio from "@/views/Home/Inicio.vue";
 import ListaFinalizadora from "@/views/Finalizadora/ListaFinalizadora.vue";
 import CadastroFinalizadora from "@/views/Finalizadora/CadastroFinalizadora.vue";
 import PainelVendas from "@/views/Relatorio/Caixa/Painel/Painel.vue";
@@ -31,6 +32,7 @@ import Login from "@/views/Deslogado/Login.vue";
 import RegistrarAdmin from "@/views/Deslogado/PainelAdmin/RegistrarAdmin.vue";
 import ClientesAdmin from "@/views/Deslogado/PainelAdmin/ListarClientes.vue";
 import DownloadsAdmin from "@/views/Deslogado/PainelAdmin/Downloads.vue";
+import FeedbacksAdmin from "@/views/Deslogado/PainelAdmin/Feedbacks.vue";
 import DownloadsPublico from "@/views/Deslogado/DownloadsPublico.vue";
 import LoginAdmin from "@/views/Deslogado/LoginAdmin.vue";
 import Configuracoes from "@/views/Configuracoes/Configuracoes.vue";
@@ -96,6 +98,16 @@ const routes: Array<RouteConfig> = [
     },
   },
   {
+    path: "/administracao/feedbacks",
+    name: "admin-feedbacks",
+    components: {
+      "rotas-deslogado": FeedbacksAdmin,
+    },
+    meta: {
+      requiresAuthAdmin: true,
+    },
+  },
+  {
     // Link publico para compartilhar (sem login) — mesma listagem de quem
     // esta logado, ver DownloadController.listarPublicados.
     path: "/downloads/publico",
@@ -108,6 +120,7 @@ const routes: Array<RouteConfig> = [
   {
     path: "/",
     name: "home",
+    component: Inicio,
     meta: {
       requiresAuth: true,
     },
