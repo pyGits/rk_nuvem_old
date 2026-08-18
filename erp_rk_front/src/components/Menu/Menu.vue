@@ -17,29 +17,22 @@
     </div>
     <v-divider></v-divider>
 
-    <v-list nav dense color="primary" class="menu-lista">
-      <v-list-item to="/" exact>
+    <v-list nav dense>
+      <v-list-item to="/">
         <v-list-item-icon>
-          <v-icon>mdi-home-outline</v-icon>
+          <v-icon>mdi-home</v-icon>
         </v-list-item-icon>
+
         <v-list-item-title>Início</v-list-item-title>
       </v-list-item>
-
       <!--Main category list-->
       <v-list-group v-for="item in filterMenu" :key="item.text" :prepend-icon="item.icon" no-action>
         <template v-slot:activator>
           <v-list-item-title>{{ item.text }}</v-list-item-title>
         </template>
-
         <!--Sub category item-->
         <!--if 2nd lvl child available-->
-        <v-list-group
-          v-for="subItems in item.subItems"
-          v-if="subItems.subSubItems ? subItems.subSubItems.length > 0 : false"
-          :key="subItems.name"
-          :value="true"
-          sub-group
-        >
+        <v-list-group :key="subItems.name" v-if="subItems.subSubItems ? subItems.subSubItems.length > 0 : false" v-for="subItems in item.subItems" :value="true" sub-group>
           <template v-slot:activator>
             <v-list-item-content>
               <v-list-item-title>{{ subItems.name }}</v-list-item-title>
@@ -47,28 +40,24 @@
           </template>
           <!--subsubitem category list-->
           <v-list-item v-for="subSubItem in subItems.subSubItems" :key="subSubItem.name" :to="subSubItem.to">
+            <v-list-item-icon>
+              <v-icon></v-icon>
+            </v-list-item-icon>
             <v-list-item-title>
               {{ subSubItem.name }}
             </v-list-item-title>
           </v-list-item>
         </v-list-group>
         <!--if not 2nd lvl child available-->
-        <v-list-item
-          v-for="subItems in item.subItems"
-          v-if="subItems.subSubItems ? subItems.subSubItems.length === 0 : true"
-          :to="subItems.to"
-          :key="subItems.name"
-        >
+        <v-list-item v-for="subItems in item.subItems" v-if="subItems.subSubItems ? subItems.subSubItems.length === 0 : true" :prepend-icon="'mdi-sync'" :to="subItems.to" :key="subItems.name">
           <v-list-item-title>{{ subItems.name }}</v-list-item-title>
         </v-list-item>
       </v-list-group>
-
-      <v-divider class="my-2"></v-divider>
-
       <v-list-item to="/configuracoes">
         <v-list-item-icon>
-          <v-icon>mdi-cog-outline</v-icon>
+          <v-icon>mdi-cog</v-icon>
         </v-list-item-icon>
+
         <v-list-item-title>Configurações</v-list-item-title>
       </v-list-item>
     </v-list>
@@ -155,11 +144,6 @@ export default {
 
 .tenant-nome {
   text-transform: uppercase;
-}
-
-.menu-lista ::v-deep .v-list-item--active {
-  border-radius: 8px;
-  font-weight: 500;
 }
 
 .rodape-contato {
