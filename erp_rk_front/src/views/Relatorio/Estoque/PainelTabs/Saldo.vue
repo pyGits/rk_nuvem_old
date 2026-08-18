@@ -1,170 +1,148 @@
 <template>
-  <v-container>
-    <v-row>
-      <v-col cols="12" sm="3">
-        Seção:
-        <v-autocomplete
-          :items="secaoList"
-          v-model="secao"
-          id="secao"
-          item-text="nome"
-          item-value="codigo"
-        ></v-autocomplete>
-      </v-col>
-      <v-col cols="12" sm="3">
-        Grupo:
-        <v-autocomplete
-          id="grupo"
-          item-text="nome"
-          item-value="codigo"
-          v-model="grupo"
-          :items="grupoList"
-        ></v-autocomplete>
-      </v-col>
-      <v-col cols="12" sm="2">
-        Unidade:
-        <v-autocomplete
-          :items="unidades"
-          item-text="nome"
-          item-value="codigo"
-          v-model="unidade"
-        ></v-autocomplete>
-      </v-col>
-      <v-col cols="12" sm="2">
-        Tipo:
-        <v-checkbox
-          v-model="positivo"
-          label="Positivo"
-          class="mt-0"
-          @change="handleCheckboxChange"
-        ></v-checkbox>
-        <v-checkbox
-          v-model="negativo"
-          label="Negativo"
-          class="mt-0"
-          @change="handleCheckboxChange"
-        ></v-checkbox>
-      </v-col>
-      <v-col cols="12" sm="2">
-        ---
-        <v-checkbox
-          v-model="zerado"
-          label="Zerado"
-          class="mt-0"
-          @change="handleCheckboxChange"
-        ></v-checkbox>
-        <v-checkbox
-          v-model="reposicao"
-          label="Reposição"
-          class="mt-0"
-          @change="handleReposicaoCheckboxChange"
-        ></v-checkbox>
-      </v-col>
-    </v-row>
-    <v-row>
-      <v-col cols="12" sm="2">
-        <label class="form-label" for="input-example">Fornecedor:</label>
-        <input
-          @focus="$event.target.select()"
-          type="text"
-          class="form-control"
-          placeholder="Cód Fornecedor"
-          v-model="fornecedor"
-          @blur="handleLoadFornecedor"
-        />
-      </v-col>
-      <v-col cols="12" sm="8">
-        <label class="form-label" for="input-example"
-          >Descrição Fornecedor:</label
-        >
-        <div class="input-group">
+  <v-container fluid>
+    <v-sheet class="pa-4 mb-4" elevation="1" rounded color="grey lighten-4">
+      <v-row dense>
+        <v-col cols="12" sm="6" md="3">
+          <v-autocomplete
+            :items="secaoList"
+            v-model="secao"
+            id="secao"
+            item-text="nome"
+            item-value="codigo"
+            label="Seção"
+            clearable
+            dense
+            outlined
+            hide-details
+          ></v-autocomplete>
+        </v-col>
+        <v-col cols="12" sm="6" md="3">
+          <v-autocomplete
+            id="grupo"
+            item-text="nome"
+            item-value="codigo"
+            v-model="grupo"
+            :items="grupoList"
+            label="Grupo"
+            clearable
+            dense
+            outlined
+            hide-details
+          ></v-autocomplete>
+        </v-col>
+        <v-col cols="12" sm="6" md="2">
+          <v-autocomplete
+            :items="unidades"
+            item-text="nome"
+            item-value="codigo"
+            v-model="unidade"
+            label="Unidade"
+            clearable
+            dense
+            outlined
+            hide-details
+          ></v-autocomplete>
+        </v-col>
+        <v-col cols="12" md="4" class="d-flex align-center flex-wrap">
+          <v-checkbox v-model="positivo" label="Positivo" class="mt-0 mr-4" dense hide-details @change="handleCheckboxChange"></v-checkbox>
+          <v-checkbox v-model="negativo" label="Negativo" class="mt-0 mr-4" dense hide-details @change="handleCheckboxChange"></v-checkbox>
+          <v-checkbox v-model="zerado" label="Zerado" class="mt-0 mr-4" dense hide-details @change="handleCheckboxChange"></v-checkbox>
+          <v-checkbox v-model="reposicao" label="Reposição" class="mt-0" dense hide-details @change="handleReposicaoCheckboxChange"></v-checkbox>
+        </v-col>
+      </v-row>
+
+      <v-row dense class="mt-2">
+        <v-col cols="12" sm="4" md="3">
+          <label class="form-label">Fornecedor:</label>
           <input
+            @focus="$event.target.select()"
             type="text"
             class="form-control"
-            placeholder="Descrição do Fornecedor"
-            v-model="fornecedorDescricao"
-            readonly
+            placeholder="Cód. Fornecedor"
+            v-model="fornecedor"
+            @blur="handleLoadFornecedor"
           />
-          <v-btn icon color="primary" @click="openFornecedorDialog">
-            <v-icon>mdi-magnify</v-icon>
+        </v-col>
+        <v-col cols="12" sm="8" md="6">
+          <label class="form-label">Descrição Fornecedor:</label>
+          <input type="text" class="form-control" placeholder="Descrição do Fornecedor" v-model="fornecedorDescricao" readonly />
+        </v-col>
+        <v-col cols="12" md="3" class="d-flex align-end">
+          <v-btn text small color="primary" @click="openFornecedorDialog">
+            <v-icon left small>mdi-magnify</v-icon>
+            Localizar fornecedor
           </v-btn>
-        </div>
-      </v-col>
-    </v-row>
-    <v-row>
-      <v-col cols="12" sm="2">
-        <label class="form-label" for="input-example">Loja:</label>
-        <input
-          @focus="$event.target.select()"
-          v-model="loja"
-          type="text"
-          class="form-control"
-          placeholder="Nome da Tributação"
-          @blur="handleLoadLoja"
-        />
-      </v-col>
-      <v-col cols="12" sm="8">
-        <label class="form-label" for="input-example">Descrição Loja:</label>
-        <div class="input-group">
+        </v-col>
+      </v-row>
+
+      <v-row dense class="mt-2">
+        <v-col cols="12" sm="4" md="3">
+          <label class="form-label">Loja:</label>
           <input
+            @focus="$event.target.select()"
+            v-model="loja"
             type="text"
             class="form-control"
-            placeholder="Descrição da Loja"
-            v-model="lojaDescricao"
-            readonly
+            placeholder="Código da Loja"
+            @blur="handleLoadLoja"
           />
-          <v-btn icon color="primary" @click="openLojaDialog">
-            <v-icon>mdi-magnify</v-icon>
+        </v-col>
+        <v-col cols="12" sm="8" md="6">
+          <label class="form-label">Descrição Loja:</label>
+          <input type="text" class="form-control" placeholder="Descrição da Loja" v-model="lojaDescricao" readonly />
+        </v-col>
+        <v-col cols="12" md="3" class="d-flex align-end">
+          <v-btn text small color="primary" @click="openLojaDialog">
+            <v-icon left small>mdi-magnify</v-icon>
+            Localizar loja
           </v-btn>
-        </div>
-      </v-col>
-      <v-col cols="12" sm="2">
-        <label class="form-label" for="input-example">Gerar:</label>
-        <v-btn color="primary" class="mr-2" @click="handleGerarRelatorio(false)"
-          >Atualizar</v-btn
-        >
-        <v-btn
-          color="seccondary"
-          style="margin-top: 10px"
-          class="mr-2"
-          @click="handleGerarRelatorio(true)"
-          >Gerar Excel</v-btn
-        >
-      </v-col>
-    </v-row>
-    <v-divider></v-divider>
-    <v-row>
-      <v-col cols="12" sm="2">
-        <label class="form-label" for="input-example">Código de Barras:</label>
-        <input
-          @focus="$event.target.select()"
-          type="text"
-          class="form-control"
-          placeholder="Código de Barras"
-          v-model="codigoBarras"
-        />
-      </v-col>
-      <v-col cols="12" sm="8">
-        <label class="form-label" for="input-example"
-          >Descrição do Produto:</label
-        >
-        <input
-          @focus="$event.target.select()"
-          type="text"
-          class="form-control"
-          placeholder="Descrição do Produto"
-          v-model="descricaoProduto"
-        />
-      </v-col>
-    </v-row>
-    <v-row>
-      <v-data-table
-        :headers="headers"
-        :items="filteredRelSaldoEstoque"
-        :items-per-page="10"
-        class="elevation-1"
-      ></v-data-table>
-    </v-row>
+        </v-col>
+      </v-row>
+
+      <v-row dense class="mt-2">
+        <v-col cols="12" sm="6" md="4">
+          <label class="form-label">Código de Barras:</label>
+          <input
+            @focus="$event.target.select()"
+            type="text"
+            class="form-control"
+            placeholder="Código de Barras"
+            v-model="codigoBarras"
+          />
+        </v-col>
+        <v-col cols="12" sm="6" md="8">
+          <label class="form-label">Descrição do Produto:</label>
+          <input
+            @focus="$event.target.select()"
+            type="text"
+            class="form-control"
+            placeholder="Descrição do Produto"
+            v-model="descricaoProduto"
+          />
+        </v-col>
+      </v-row>
+
+      <v-row dense class="mt-2">
+        <v-col cols="12" class="d-flex justify-end">
+          <v-btn color="primary" depressed class="mr-2" @click="handleGerarRelatorio(false)">
+            <v-icon left>mdi-magnify</v-icon>
+            Atualizar
+          </v-btn>
+          <v-btn color="success" outlined @click="handleGerarRelatorio(true)">
+            <v-icon left>mdi-file-excel-outline</v-icon>
+            Gerar Excel
+          </v-btn>
+        </v-col>
+      </v-row>
+    </v-sheet>
+
+    <v-data-table
+      :headers="headers"
+      :items="filteredRelSaldoEstoque"
+      :items-per-page="10"
+      class="elevation-1"
+    ></v-data-table>
+
     <ModalFornecedor />
     <ModalLoja />
   </v-container>
