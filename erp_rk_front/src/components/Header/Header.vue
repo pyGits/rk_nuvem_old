@@ -34,7 +34,7 @@
       </v-btn>
       <v-menu offset-y left :close-on-content-click="false" max-width="380">
         <template v-slot:activator="{ on }">
-          <v-btn icon v-on="on">
+          <v-btn icon class="mr-2" v-on="on">
             <v-badge :value="notificacoes.length > 0" :content="notificacoes.length" color="error" overlap>
               <v-icon>mdi-bell</v-icon>
             </v-badge>
@@ -69,7 +69,7 @@
         <v-icon>mdi-message-draw</v-icon>
       </v-btn>
 
-      <div class="d-flex flex-column align-end mr-3 usuario-logado">
+      <div class="d-flex flex-column align-end mx-3 usuario-logado">
         <span class="text-body-2 font-weight-medium">{{ tenant.name || "Cliente" }}</span>
         <span v-if="tenant.cnpjcpf" class="text-caption">{{ tenant.cnpjcpf }}</span>
       </div>
@@ -250,6 +250,13 @@ export default {
 }
 .v-input .v-label {
   color: white !important ;
+}
+.max-width ::v-deep input {
+  color: white !important;
+  caret-color: white !important;
+}
+.max-width ::v-deep .v-icon {
+  color: white !important;
 }
 .usuario-logado {
   line-height: 1.1;

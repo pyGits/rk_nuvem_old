@@ -63,6 +63,25 @@
         <v-list-item-title>Configurações</v-list-item-title>
       </v-list-item>
     </v-list>
+
+    <template v-slot:append>
+      <v-divider></v-divider>
+      <div class="pa-3 text-caption rodape-contato">
+        <div class="font-weight-medium mb-1">CONTATO</div>
+        <div class="d-flex align-start mb-1">
+          <v-icon x-small class="mr-1 mt-1">mdi-map-marker-outline</v-icon>
+          <span>Rua Doutor Olavo Egídio, 655</span>
+        </div>
+        <div class="d-flex align-start mb-1">
+          <v-icon x-small class="mr-1 mt-1">mdi-phone-outline</v-icon>
+          <span>(11) 2628-1356 ou (11) 2506-1348</span>
+        </div>
+        <div class="d-flex align-start">
+          <v-icon x-small class="mr-1 mt-1">mdi-clock-outline</v-icon>
+          <span>Seg - Sex: 9:00 - 18:00</span>
+        </div>
+      </div>
+    </template>
   </v-navigation-drawer>
 </template>
 
@@ -121,5 +140,10 @@ export default {
 .tenant-subtitle {
   font-size: 16px;
   color: #666;
+}
+
+.rodape-contato {
+  color: #666;
+  line-height: 1.3;
 }
 </style>
