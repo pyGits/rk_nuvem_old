@@ -4,12 +4,10 @@
       <v-col cols="12" sm="8" md="5" lg="4" xl="3">
         <v-card class="login-card rounded-lg elevation-12">
           <div class="login-topo d-flex flex-column align-center py-8 px-4">
-            <v-avatar size="72" color="white" class="elevation-3">
-              <v-img :src="require('@/assets/logo.svg')" max-width="44" contain></v-img>
-            </v-avatar>
-            <h1 class="text-h6 white--text font-weight-medium mt-4 mb-0">RK Nuvem</h1>
-            <span class="text-caption login-subtitulo">Acesse sua conta para continuar</span>
+            <v-img :src="require('@/assets/logo.png')" height="90" contain></v-img>
+            <span class="text-caption grey--text text--darken-1 mt-2">Acesse sua conta para continuar</span>
           </div>
+          <v-divider></v-divider>
 
           <v-card-text class="pt-8 px-8">
             <v-form ref="form" @submit.prevent="login">
@@ -145,11 +143,6 @@ export default {
 }
 
 .login-topo {
-  background: linear-gradient(135deg, #1867c0 0%, #1697f6 100%);
-}
-
-.login-subtitulo {
-  color: rgba(255, 255, 255, 0.85);
-  margin-top: 2px;
+  background-color: #fff;
 }
 </style>
