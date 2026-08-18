@@ -49,7 +49,6 @@
 
     <v-row>
       <v-col cols="12" sm="3">
-        Seção:
         <v-autocomplete
           id="secao"
           ref="secao"
@@ -58,10 +57,14 @@
           item-text="nome"
           item-value="codigo"
           :items="secaoList"
+          label="Seção"
+          clearable
+          dense
+          outlined
+          hide-details
         ></v-autocomplete>
       </v-col>
       <v-col cols="12" sm="3">
-        Grupo:
         <v-autocomplete
           ref="grupo"
           @keyup.enter="focusNextInput($event, 'fornecedor')"
@@ -69,6 +72,11 @@
           :items="grupoList"
           item-text="nome"
           item-value="codigo"
+          label="Grupo"
+          clearable
+          dense
+          outlined
+          hide-details
         ></v-autocomplete>
       </v-col>
       <v-col cols="12" sm="4">

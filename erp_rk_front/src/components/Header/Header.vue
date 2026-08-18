@@ -248,8 +248,8 @@ export default {
 .max-width {
   max-width: 300px; // Define a largura máxima do campo de pesquisa
 }
-.v-input .v-label {
-  color: white !important ;
+.max-width ::v-deep .v-label {
+  color: rgba(255, 255, 255, 0.85) !important;
 }
 .max-width ::v-deep input {
   color: white !important;
