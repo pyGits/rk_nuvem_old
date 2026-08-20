@@ -30,7 +30,7 @@ export default {
     relatorioPainelVendasFinalizadoras: [],
     relatorioPainelVendasSecoes: [],
     relatorioPainelVendasCupom: [],
-    relatorioCupomUnico: [],
+    relatorioCupomUnico: { itens: [], formasPagamento: [] },
   }),
 
   mutations: {
@@ -71,7 +71,7 @@ export default {
       state.relatorioPainelVendasFinalizadoras = [];
       state.relatorioPainelVendasSecoes = [];
       state.relatorioPainelVendasCupom = [];
-      state.relatorioCupomUnico = [];
+      state.relatorioCupomUnico = { itens: [], formasPagamento: [] };
     },
   },
   actions: {

@@ -317,25 +317,41 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
   async relCupomUnico(req: any, res: any) {
     const { tenant_id } = req;
     const { data, codigo, caixa, loja } = req.query;
-    // const venda = await VendaItem.findAll({
-    //   where: { tenant_id, data, codigo_cupom: codigo, caixa, loja },
-    // });
+    const replacements = { tenant_id, data, codigo, caixa, loja };
 
-    const venda = await sequelize.query(`
+    const venda = await sequelize.query(
+      `
     select vi.item,p.codigo_barras,p.descricao,
     vi.unidade,vi.qtde,vi.valor_unitario,vi.valor_desconto,vi.valor_acrescimo,vi.valor_total,
     vi.cancelado
     from venda_items vi
     join produtos p on vi.codigo_produto = p.codigo
-    where p.tenant_id=${tenant_id} and vi.tenant_id=${tenant_id}
-    and vi.data='${data}' and vi.codigo_cupom='${codigo}'
-    and vi.caixa='${caixa}' and vi.loja='${loja}'
-    `);
+    where p.tenant_id=:tenant_id and vi.tenant_id=:tenant_id
+    and vi.data=:data and vi.codigo_cupom=:codigo
+    and vi.caixa=:caixa and vi.loja=:loja
+    order by vi.item
+    `,
+      { replacements }
+    );
+
+    const formasPagamento = await sequelize.query(
+      `
+    select vf.finalizadora as codigo_finalizadora, f.nome as descricao,
+    vf.valor, vf.valor_troco, vf.prestacao, vf.cancelado
+    from venda_formas vf
+    left join finalizadoras f on f.codigo = vf.finalizadora and f.tenant_id = :tenant_id
+    where vf.tenant_id=:tenant_id
+    and vf.data=:data and vf.codigo_cupom=:codigo
+    and vf.caixa=:caixa and vf.loja=:loja
+    order by vf.prestacao
+    `,
+      { replacements }
+    );
 
     if (!venda) {
       res.status(400).json({ message: "Venda não encontrada" });
     }
-    res.status(200).json(venda[0]);
+    res.status(200).json({ itens: venda[0], formasPagamento: formasPagamento[0] });
   },
 
   // Relatório: listagem de produtos cadastrados, com filtros de seção, grupo,
