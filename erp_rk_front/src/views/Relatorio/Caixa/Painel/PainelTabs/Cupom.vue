@@ -44,6 +44,28 @@
                 <v-text-field v-model="filterValues.xml_venda" label="Chave XML" outlined dense clearable></v-text-field>
               </v-col>
             </v-row>
+
+            <v-row dense class="mt-2">
+              <v-col cols="12" sm="4" md="3">
+                <label class="form-label">Finalizadora:</label>
+                <input type="text" class="form-control" placeholder="Cód. Finalizadora" :value="finalizadoraFiltro" readonly />
+              </v-col>
+              <v-col cols="12" sm="8" md="6">
+                <label class="form-label">Descrição Finalizadora:</label>
+                <input type="text" class="form-control" placeholder="Todas" :value="finalizadoraFiltroDescricao" readonly />
+              </v-col>
+              <v-col cols="12" md="3" class="d-flex align-end">
+                <v-btn text small color="primary" @click="abrirDialogFinalizadora">
+                  <v-icon left small>mdi-magnify</v-icon>
+                  Localizar finalizadora
+                </v-btn>
+                <v-btn v-if="finalizadoraFiltro" text small color="grey darken-1" class="ml-1" @click="limparFinalizadora">
+                  <v-icon left small>mdi-close</v-icon>
+                  Limpar
+                </v-btn>
+              </v-col>
+            </v-row>
+
             <v-row dense align="center">
               <v-col cols="12" sm="6">
                 <v-subheader class="pl-0">Situação</v-subheader>
@@ -182,6 +204,30 @@
         </div>
       </div>
     </v-container>
+
+    <!-- Modal para localizar finalizadora -->
+    <v-dialog v-model="dialogFinalizadora" max-width="500">
+      <v-card>
+        <v-card-title>
+          <span class="headline">Localizar Finalizadora</span>
+        </v-card-title>
+        <v-card-text>
+          <v-text-field v-model="searchFinalizadora" label="Pesquisar" prepend-inner-icon="mdi-magnify" outlined dense clearable autofocus></v-text-field>
+          <v-list dense class="finalizadora-lista">
+            <v-list-item v-for="fin in filteredFinalizadoraList" :key="fin.codigo" @click="selecionarFinalizadora(fin)">
+              <v-list-item-content>
+                <v-list-item-title>{{ fin.codigo }} - {{ fin.nome }}</v-list-item-title>
+              </v-list-item-content>
+            </v-list-item>
+            <v-list-item v-if="!filteredFinalizadoraList.length">
+              <v-list-item-content>
+                <span class="grey--text">Nenhuma finalizadora encontrada</span>
+              </v-list-item-content>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
 
     <!-- Modal com o detalhamento completo do cupom -->
     <v-dialog v-model="dialogCupom" max-width="900" scrollable>
@@ -348,17 +394,22 @@ export default {
       carregandoAnalitico: false,
       paginaAnalitico: 1,
       itensPorPaginaAnalitico: 10,
+      finalizadoraFiltro: "",
+      finalizadoraFiltroDescricao: "",
+      dialogFinalizadora: false,
+      searchFinalizadora: "",
     };
   },
   mounted() {
     this.$store.dispatch("getLojas");
     this.$store.dispatch("getClientes");
     this.$store.dispatch("getFuncionarios");
+    this.$store.dispatch("getFinalizadoras");
   },
   watch: {
     relatorio() {
       this.applyFilter();
-      if (this.tipoRelatorio === "analitico") this.carregarAnalitico();
+      if (this.tipoRelatorio === "analitico" || this.finalizadoraFiltro) this.carregarAnalitico();
     },
     tipoRelatorio(valor) {
       this.paginaAnalitico = 1;
@@ -424,6 +475,24 @@ export default {
     },
     funcionarioList() {
       return this.$store.state.funcionario.funcionarioList;
+    },
+    finalizadoraList() {
+      return this.$store.state.finalizadora.finalizadoraList || [];
+    },
+    filteredFinalizadoraList() {
+      if (!this.searchFinalizadora) return this.finalizadoraList;
+      const termo = this.searchFinalizadora.toLowerCase();
+      return this.finalizadoraList.filter((fin) => fin.codigo.toLowerCase().includes(termo) || (fin.nome || "").toLowerCase().includes(termo));
+    },
+    cuponsComFinalizadoraSelecionada() {
+      if (!this.finalizadoraFiltro) return null;
+      const set = new Set();
+      (this.relatorioAnalitico.formasPagamento || []).forEach((forma) => {
+        if (String(forma.codigo_finalizadora) === String(this.finalizadoraFiltro)) {
+          set.add(this.chaveCupom(forma));
+        }
+      });
+      return set;
     },
     relatorioAnalitico() {
       return this.$store.state.relatorio.relatorioPainelVendasCupomAnalitico || { itens: [], formasPagamento: [] };
@@ -494,6 +563,9 @@ export default {
       this.carregandoAnalitico = true;
       this.$store.dispatch("getPainelVendasCupomAnalitico").finally(() => {
         this.carregandoAnalitico = false;
+        // Se o usuário aplicou o filtro de finalizadora antes dos dados
+        // carregarem, o resultado ficaria vazio até reaplicar o filtro aqui.
+        if (this.finalizadoraFiltro) this.applyFilter();
       });
     },
     carregarCupom(cupom) {
@@ -512,9 +584,25 @@ export default {
       }
       return maskQtd(total);
     },
+    abrirDialogFinalizadora() {
+      this.searchFinalizadora = "";
+      this.dialogFinalizadora = true;
+      if (!this.finalizadoraList.length) this.$store.dispatch("getFinalizadoras");
+    },
+    selecionarFinalizadora(finalizadora) {
+      this.finalizadoraFiltro = finalizadora.codigo;
+      this.finalizadoraFiltroDescricao = finalizadora.nome;
+      this.dialogFinalizadora = false;
+      if (!this.relatorioAnalitico.formasPagamento.length && !this.carregandoAnalitico) this.carregarAnalitico();
+    },
+    limparFinalizadora() {
+      this.finalizadoraFiltro = "";
+      this.finalizadoraFiltroDescricao = "";
+    },
     applyFilter() {
       this.$store.commit("setRelatorioCupomUnico", { itens: [], formasPagamento: [] });
       this.filteredPrecosMascarados = this.precosMascarados.filter((item) => {
+        if (this.cuponsComFinalizadoraSelecionada && !this.cuponsComFinalizadoraSelecionada.has(this.chaveCupom(item))) return false;
         for (let key in this.filterValues) {
           const filtro = this.filterValues[key];
           if (filtro === "" || filtro === null || filtro === undefined) continue;
@@ -532,6 +620,7 @@ export default {
       for (let key in this.filterValues) {
         this.filterValues[key] = "";
       }
+      this.limparFinalizadora();
       this.applyFilter();
     },
   },
@@ -559,5 +648,12 @@ export default {
 .cupom-cancelado-card {
   border-color: #ef9a9a !important;
   background-color: #fff5f5;
+}
+.finalizadora-lista {
+  max-height: 300px;
+  overflow-y: auto;
+}
+.finalizadora-lista .v-list-item {
+  cursor: pointer;
 }
 </style>
