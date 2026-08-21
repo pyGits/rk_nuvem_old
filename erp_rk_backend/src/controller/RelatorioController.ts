@@ -228,6 +228,45 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
     res.status(200).json(result[0]);
   },
 
+  // Relatório analítico: itens e formas de pagamento de todos os cupons do
+  // período, para montar o cupom a cupom na tela sem uma chamada por cupom.
+  // O front agrupa pelo par (data, caixa, codigo_cupom, loja).
+  async relPainelCupomAnalitico(req: any, res: any) {
+    const { tenant_id } = req;
+    const dtInicio = req.query.dtInicio;
+    const dtFim = req.query.dtFim;
+    const loja = lojaFiltro(req.query);
+    const filtroLojaItens = loja ? `and vi.loja = ${loja}` : "";
+    const filtroLojaFormas = loja ? `and vf.loja = ${loja}` : "";
+
+    const itens = await sequelize.query(`select vi.data, vi.codigo_cupom, vi.caixa, vi.loja,
+    vi.item, p.codigo_barras, p.descricao,
+    vi.unidade, vi.qtde, vi.valor_unitario, vi.valor_desconto, vi.valor_acrescimo, vi.valor_total,
+    vi.cancelado
+    from venda_items vi
+    join produtos p on p.codigo = vi.codigo_produto and p.tenant_id = vi.tenant_id
+    where vi.tenant_id = ${tenant_id}
+    and vi.data >= '${dtInicio}'
+    and vi.data <= '${dtFim}'
+    ${filtroLojaItens}
+    order by vi.data, vi.caixa, vi.codigo_cupom, vi.item
+    `);
+
+    const formasPagamento = await sequelize.query(`select vf.data, vf.codigo_cupom, vf.caixa, vf.loja,
+    vf.finalizadora as codigo_finalizadora, f.nome as descricao,
+    vf.valor, vf.valor_troco, vf.prestacao, vf.cancelado
+    from venda_formas vf
+    left join finalizadoras f on f.codigo = vf.finalizadora and f.tenant_id = vf.tenant_id
+    where vf.tenant_id = ${tenant_id}
+    and vf.data >= '${dtInicio}'
+    and vf.data <= '${dtFim}'
+    ${filtroLojaFormas}
+    order by vf.data, vf.caixa, vf.codigo_cupom, vf.prestacao
+    `);
+
+    res.status(200).json({ itens: itens[0], formasPagamento: formasPagamento[0] });
+  },
+
   async relPainelSaldoEstoque(req: any, res: any) {
     const { tenant_id } = req;
     const { positivo, negativo, zerado, reposicao } = req.query;

@@ -35,6 +35,11 @@ router.get(
   RelatorioController.relPainelCupom
 );
 router.get(
+  "/relatorios/painel/cupom/analitico",
+  verifyJWT,
+  RelatorioController.relPainelCupomAnalitico
+);
+router.get(
   "/relatorios/estoque/saldo",
   verifyJWT,
   RelatorioController.relPainelSaldoEstoque

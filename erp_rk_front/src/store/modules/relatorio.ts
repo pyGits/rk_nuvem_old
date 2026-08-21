@@ -21,6 +21,7 @@ export default {
     relatorioPainelVendasFinalizadoras: any;
     relatorioPainelVendasSecoes: any;
     relatorioPainelVendasCupom: any;
+    relatorioPainelVendasCupomAnalitico: any;
     relatorioCupomUnico: any;
   } => ({
     filtro: { ...initialRelatorio },
@@ -30,6 +31,7 @@ export default {
     relatorioPainelVendasFinalizadoras: [],
     relatorioPainelVendasSecoes: [],
     relatorioPainelVendasCupom: [],
+    relatorioPainelVendasCupomAnalitico: { itens: [], formasPagamento: [] },
     relatorioCupomUnico: { itens: [], formasPagamento: [] },
   }),
 
@@ -61,6 +63,9 @@ export default {
     setRelatorioPainelVendasCupom(state: any, payload: any) {
       state.relatorioPainelVendasCupom = payload;
     },
+    setRelatorioPainelVendasCupomAnalitico(state: any, payload: any) {
+      state.relatorioPainelVendasCupomAnalitico = payload;
+    },
     setRelatorioCupomUnico(state: any, payload: any) {
       state.relatorioCupomUnico = payload;
     },
@@ -71,6 +76,7 @@ export default {
       state.relatorioPainelVendasFinalizadoras = [];
       state.relatorioPainelVendasSecoes = [];
       state.relatorioPainelVendasCupom = [];
+      state.relatorioPainelVendasCupomAnalitico = { itens: [], formasPagamento: [] };
       state.relatorioCupomUnico = { itens: [], formasPagamento: [] };
     },
   },
@@ -152,6 +158,19 @@ export default {
         })
         .then((res: any) => {
           commit("setRelatorioPainelVendasCupom", res.data);
+        });
+    },
+    async getPainelVendasCupomAnalitico({ state, commit }: any) {
+      await Vue.prototype.$http
+        .get("/relatorios/painel/cupom/analitico", {
+          params: {
+            dtInicio: state.filtro.dtInicio,
+            dtFim: state.filtro.dtFim,
+            loja: state.filtro.loja,
+          },
+        })
+        .then((res: any) => {
+          commit("setRelatorioPainelVendasCupomAnalitico", res.data);
         });
     },
     async getPainelEstoqueSaldo({ commit }: any, parametros: any) {

@@ -71,7 +71,6 @@ export function zeroEsquerda(str: string, max: number) {
 }
 
 export function maskDateBR(date: any) {
-  console.log(date);
   const parsedDate = parseISO(date); // Converte a string para objeto Date
   const formattedDate = format(parsedDate, "dd/MM/yyyy");
   return formattedDate;
