@@ -16,6 +16,7 @@ type TDatabaseRepositoryFirebird = class(TInterfacedObject,IDatabaseRepository)
   private
     function TableExists(tableName:string):boolean;
     function CreateColumn(tableName:string;columnName:string;columnType:string;isNull:string):string;
+    function AlterColumnLength(tableName:string;columnName:string;newLength:integer):string;
     function CreateTable(tableName:string;colunaDefault:string):string;
 
     function CreateProcedure(const ProcName:string): string;
@@ -710,7 +711,8 @@ result.Add(CreateColumn('CLIENTE','UTILIZA_PRECO2','INTEGER',''),451);
 
 result.Add(CreateIndex('CONTAS_RECEBER', 'IDX_CONTAS_RECEBER_CANCELADO', 'CANCELADO'),452);
 
-// GARANTIR COLUNA OPERADOR DA TABELA FECHAMENTO VARCHAR60 TEM CLIENTE COM 6
+// GARANTIR COLUNA OPERADOR DA TABELA FECHAMENTO VARCHAR60 -> VARCHAR70 (cliente ultrapassou 60 caracteres)
+result.Add(AlterColumnLength('FECHAMENTO','OPERADOR',70),453);
 end;
 
 
@@ -832,7 +834,47 @@ begin
 end;
 
 
+function TDatabaseRepositoryFirebird.AlterColumnLength(tableName, columnName: string; newLength: integer): string;
+var
+  qry: TFDQuery;
+  currentLength: integer;
+  fieldType: integer;
+begin
+  Result := '';
+  qry := TConexao.GetInstance.CreateQuery('');
+  try
+    qry.SQL.Text :=
+      'SELECT F.RDB$CHARACTER_LENGTH, F.RDB$FIELD_LENGTH, F.RDB$FIELD_TYPE ' +
+      'FROM RDB$RELATION_FIELDS RF ' +
+      'JOIN RDB$FIELDS F ON RF.RDB$FIELD_SOURCE = F.RDB$FIELD_NAME ' +
+      'WHERE RF.RDB$RELATION_NAME = :TABELA ' +
+      '  AND RF.RDB$FIELD_NAME = :CAMPO';
+    qry.ParamByName('TABELA').AsString := UpperCase(tableName);
+    qry.ParamByName('CAMPO').AsString := UpperCase(columnName);
+    qry.Open;
 
+    if qry.IsEmpty then Exit; // coluna nao existe ainda, quem cria e o CreateColumn
+
+    fieldType := qry.FieldByName('RDB$FIELD_TYPE').AsInteger;
+
+    // RDB$FIELD_LENGTH e em bytes (varia com o charset); RDB$CHARACTER_LENGTH e a
+    // contagem de caracteres declarada no VARCHAR(n)/CHAR(n) e e o que precisa ser
+    // comparado com newLength. Se vier NULL (charset NONE em bancos antigos), cai
+    // para RDB$FIELD_LENGTH, que nesse caso equivale a 1 byte por caractere.
+    if not qry.FieldByName('RDB$CHARACTER_LENGTH').IsNull then
+      currentLength := qry.FieldByName('RDB$CHARACTER_LENGTH').AsInteger
+    else
+      currentLength := qry.FieldByName('RDB$FIELD_LENGTH').AsInteger;
+
+    if (fieldType <> 14) and (fieldType <> 37) then Exit; // nao e CHAR/VARCHAR
+
+    if currentLength >= newLength then Exit; // ja esta no tamanho igual ou maior
+
+    Result := Format('ALTER TABLE %s ALTER COLUMN %s TYPE VARCHAR(%d);', [tableName, columnName, newLength]);
+  finally
+    qry.Free;
+  end;
+end;
 
 function TDatabaseRepositoryFirebird.CreateProcedure(const ProcName: string): string;
 var

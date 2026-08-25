@@ -93,7 +93,7 @@ export default {
       const downloads = await Download.findAll({
         where: { ativo: true },
         attributes: ["id", "titulo", "descricao", "versao", "tamanho", "arquivo_original", "updated_at"],
-        order: [["titulo", "ASC"]],
+        order: [["updated_at", "DESC"]],
       });
       res.status(200).json(downloads);
     } catch (error) {
