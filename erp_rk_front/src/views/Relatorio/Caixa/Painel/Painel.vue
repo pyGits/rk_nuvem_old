@@ -6,12 +6,12 @@
       icone="mdi-chart-box-outline"
       :carregando="carregando"
       :sem-dados="semDados"
-      @atualizar="gerarRelatorio(false)"
-      @exportar="gerarRelatorio(true)"
+      @atualizar="gerarRelatorio()"
+      @exportar="exportarExcel"
     />
 
     <div class="px-6">
-      <FiltroPeriodo :dt-inicio.sync="dtInicio" :dt-fim.sync="dtFim" @alterado="gerarRelatorio(false)">
+      <FiltroPeriodo :dt-inicio.sync="dtInicio" :dt-fim.sync="dtFim" @alterado="gerarRelatorio()">
         <v-col cols="12" md="4">
           <v-autocomplete
             v-model="loja"
@@ -47,7 +47,7 @@
     <v-tabs-items v-model="activeTab" touchless>
       <v-tab-item v-for="(tab, index) in tabs" :key="index" :value="index">
         <EstadoVazio v-if="!carregando && semDados" />
-        <component v-else :is="tab.content"></component>
+        <component v-else :is="tab.content" @filtrado="registrarFiltrados(tab.chave, $event)"></component>
       </v-tab-item>
     </v-tabs-items>
   </v-card>
@@ -74,6 +74,9 @@ export default {
       activeTab: 0,
       carregando: false,
       carregandoLojas: false,
+      // Abas com filtro próprio (Cupom) avisam o que sobrou na tela; é essa
+      // lista que vai para o Excel, e não o resultado bruto da consulta.
+      dadosFiltrados: {},
       // Cada aba declara a action que busca os dados e a chave do state onde
       // eles ficam, para o Atualizar/Excel funcionarem sem encadear ifs.
       tabs: [
@@ -109,7 +112,7 @@ export default {
       },
       set(valor) {
         this.$store.commit("setRelatorioLoja", valor || 0);
-        this.gerarRelatorio(false);
+        this.gerarRelatorio();
       },
     },
     lojaList() {
@@ -141,7 +144,7 @@ export default {
   watch: {
     // Trocar de aba busca os dados daquela aba, sem precisar clicar em Atualizar.
     activeTab() {
-      this.gerarRelatorio(false);
+      this.gerarRelatorio();
     },
   },
   async mounted() {
@@ -151,7 +154,7 @@ export default {
     } finally {
       this.carregandoLojas = false;
     }
-    this.gerarRelatorio(false);
+    this.gerarRelatorio();
   },
   methods: {
     formatarData(data) {
@@ -159,7 +162,7 @@ export default {
       const [ano, mes, dia] = String(data).split("-");
       return `${dia}/${mes}/${ano}`;
     },
-    async gerarRelatorio(excel) {
+    async gerarRelatorio() {
       if (this.periodoInvalido) return;
 
       const tab = this.tabs[this.activeTab];
@@ -167,19 +170,24 @@ export default {
       this.$store.commit("setContainerLoading", true);
       try {
         await this.$store.dispatch(tab.action);
-        if (excel) {
-          gerarExcel(this.$store.state.relatorio[tab.chave]);
-        }
       } finally {
         this.$store.commit("setContainerLoading", false);
         this.carregando = false;
       }
     },
+    registrarFiltrados(chave, linhas) {
+      this.$set(this.dadosFiltrados, chave, linhas);
+    },
+    exportarExcel() {
+      const tab = this.tabs[this.activeTab];
+      const linhas = this.dadosFiltrados[tab.chave] || this.$store.state.relatorio[tab.chave] || [];
+      gerarExcel(linhas);
+    },
     limparFiltros() {
       this.$store.commit("setRelatorioDtInicio", getCurrentDate());
       this.$store.commit("setRelatorioDtFim", getCurrentDate());
       this.$store.commit("setRelatorioLoja", 0);
-      this.gerarRelatorio(false);
+      this.gerarRelatorio();
     },
   },
 };

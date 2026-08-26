@@ -405,6 +405,7 @@ export default {
     this.$store.dispatch("getClientes");
     this.$store.dispatch("getFuncionarios");
     this.$store.dispatch("getFinalizadoras");
+    this.applyFilter();
   },
   watch: {
     relatorio() {
@@ -612,6 +613,20 @@ export default {
         }
         return true;
       });
+      this.emitirFiltrados();
+    },
+    // Os campos *_original/*_format existem só para a tela; o Excel leva o
+    // cupom como veio da consulta, mas apenas os que passaram pelos filtros.
+    emitirFiltrados() {
+      const camposTela = ["valor_total_original", "qtde_item_original", "valor_total_format", "qtde_item_format"];
+      this.$emit(
+        "filtrado",
+        this.filteredPrecosMascarados.map((item) => {
+          const cupom = { ...item };
+          camposTela.forEach((campo) => delete cupom[campo]);
+          return cupom;
+        })
+      );
     },
     toggleFilters() {
       this.showFilters = !this.showFilters;
