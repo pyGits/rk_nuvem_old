@@ -110,8 +110,11 @@ jobs:
           docker compose ps
           EOF
 
+      # Sem condicional de proposito: o migrate:latest so roda o que ainda nao
+      # esta em knex_migrations, entao um deploy sem migration nova imprime
+      # "Already up to date" e sai. Depender de uma variavel so abria espaco
+      # para o codigo subir sem o banco acompanhar.
       - name: Rodar migrations do knex
-        if: vars.RUN_MIGRATIONS == 'true'
         run: |
           ssh -i ~/.ssh/id_deploy -p "$SSH_PORT" \
             "${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }}" \

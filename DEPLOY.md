@@ -101,9 +101,13 @@ Em **Settings → Secrets and variables → Actions**:
 | Secret   | `VPS_USER`       | `deploy`                                 |
 | Secret   | `VPS_SSH_KEY`    | chave privada gerada em `/root/rk_deploy` |
 | Variable | `VPS_PATH`       | `/opt/rk_nuvem` (opcional, é o padrão)   |
-| Variable | `RUN_MIGRATIONS` | `true` para rodar o knex a cada deploy   |
 
 O push das imagens usa o `GITHUB_TOKEN` do próprio job — não é preciso PAT.
+
+As migrations do knex rodam em **todo** deploy, sem variável de controle: o
+`migrate:latest` só executa o que ainda não está em `knex_migrations`, então um deploy sem
+migration nova apenas imprime "Already up to date". A antiga `RUN_MIGRATIONS` foi removida
+porque, desligada, deixava o código novo subir sem as tabelas que ele usa.
 
 ---
 
