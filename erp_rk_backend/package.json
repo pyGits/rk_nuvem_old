@@ -6,7 +6,9 @@
   "scripts": {
     "start": "nodemon ./index.ts",
     "test": "jest --watch",
-    "build": "tsc"
+    "build": "tsc",
+    "db:baseline": "ts-node scripts/baselineKnex.ts",
+    "db:migrate": "npm run db:baseline && knex migrate:latest --knexfile knexfile.ts"
   },
   "keywords": [],
   "author": "",

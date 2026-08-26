@@ -104,10 +104,21 @@ Em **Settings → Secrets and variables → Actions**:
 
 O push das imagens usa o `GITHUB_TOKEN` do próprio job — não é preciso PAT.
 
-As migrations do knex rodam em **todo** deploy, sem variável de controle: o
-`migrate:latest` só executa o que ainda não está em `knex_migrations`, então um deploy sem
-migration nova apenas imprime "Already up to date". A antiga `RUN_MIGRATIONS` foi removida
-porque, desligada, deixava o código novo subir sem as tabelas que ele usa.
+As migrations do knex rodam em **todo** deploy, em dois passos:
+
+1. `npx ts-node scripts/baselineKnex.ts` — as tabelas antigas deste banco foram criadas à
+   mão, sem passar pelo knex, então a `knex_migrations` não registra nenhuma delas. Sem esse
+   passo o `migrate:latest` tentaria reexecutar o histórico inteiro desde 2025 — inclusive um
+   `DROP CONSTRAINT` na PK de `nao_fiscals` e um `UPDATE` em `funcionarios`. O script marca
+   as sete legadas como aplicadas e não toca em nenhum dado.
+2. `npx knex migrate:latest` — aplica o que é realmente novo.
+
+Os dois são idempotentes: em deploy sem migration nova o baseline não insere nada e o
+migrate imprime "Already up to date". A antiga variável `RUN_MIGRATIONS` foi removida.
+
+Se um dia for preciso aplicar de fato uma das migrations legadas, é decisão consciente:
+remova o nome da lista `LEGADO` em `erp_rk_backend/scripts/baselineKnex.ts` ou rode
+`npx knex migrate:up <arquivo>` na VPS.
 
 ---
 
