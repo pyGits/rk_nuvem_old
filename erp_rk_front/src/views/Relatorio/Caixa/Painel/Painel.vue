@@ -47,7 +47,7 @@
     <v-tabs-items v-model="activeTab" touchless>
       <v-tab-item v-for="(tab, index) in tabs" :key="index" :value="index">
         <EstadoVazio v-if="!carregando && semDados" />
-        <component v-else :is="tab.content" @filtrado="registrarFiltrados(tab.chave, $event)"></component>
+        <component v-else :is="tab.content" :ref="'conteudoAba' + index"></component>
       </v-tab-item>
     </v-tabs-items>
   </v-card>
@@ -74,9 +74,6 @@ export default {
       activeTab: 0,
       carregando: false,
       carregandoLojas: false,
-      // Abas com filtro próprio (Cupom) avisam o que sobrou na tela; é essa
-      // lista que vai para o Excel, e não o resultado bruto da consulta.
-      dadosFiltrados: {},
       // Cada aba declara a action que busca os dados e a chave do state onde
       // eles ficam, para o Atualizar/Excel funcionarem sem encadear ifs.
       tabs: [
@@ -175,12 +172,17 @@ export default {
         this.carregando = false;
       }
     },
-    registrarFiltrados(chave, linhas) {
-      this.$set(this.dadosFiltrados, chave, linhas);
-    },
-    exportarExcel() {
+    // O Excel sai com os mesmos dados da tela: reconsulta com o período/loja
+    // atuais e, se a aba tiver filtros próprios (Cupom), pede a ela a lista já
+    // filtrada em vez de exportar o resultado bruto da consulta.
+    async exportarExcel() {
+      if (this.periodoInvalido) return;
+
       const tab = this.tabs[this.activeTab];
-      const linhas = this.dadosFiltrados[tab.chave] || this.$store.state.relatorio[tab.chave] || [];
+      await this.gerarRelatorio();
+
+      const [aba] = this.$refs["conteudoAba" + this.activeTab] || [];
+      const linhas = aba && aba.linhasParaExportar ? await aba.linhasParaExportar() : this.$store.state.relatorio[tab.chave] || [];
       gerarExcel(linhas);
     },
     limparFiltros() {

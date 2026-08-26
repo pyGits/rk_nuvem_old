@@ -562,7 +562,7 @@ export default {
     },
     carregarAnalitico() {
       this.carregandoAnalitico = true;
-      this.$store.dispatch("getPainelVendasCupomAnalitico").finally(() => {
+      return this.$store.dispatch("getPainelVendasCupomAnalitico").finally(() => {
         this.carregandoAnalitico = false;
         // Se o usuário aplicou o filtro de finalizadora antes dos dados
         // carregarem, o resultado ficaria vazio até reaplicar o filtro aqui.
@@ -613,20 +613,21 @@ export default {
         }
         return true;
       });
-      this.emitirFiltrados();
     },
-    // Os campos *_original/*_format existem só para a tela; o Excel leva o
-    // cupom como veio da consulta, mas apenas os que passaram pelos filtros.
-    emitirFiltrados() {
+    // Chamado pelo Painel na exportação. O filtro de finalizadora depende do
+    // analítico, então ele é recarregado antes de reaplicar os filtros, para a
+    // planilha sair com os cupons do período que está na tela.
+    async linhasParaExportar() {
+      if (this.finalizadoraFiltro) await this.carregarAnalitico();
+      this.applyFilter();
+      // Os campos *_original/*_format existem só para a tela; no Excel o cupom
+      // vai como veio da consulta.
       const camposTela = ["valor_total_original", "qtde_item_original", "valor_total_format", "qtde_item_format"];
-      this.$emit(
-        "filtrado",
-        this.filteredPrecosMascarados.map((item) => {
-          const cupom = { ...item };
-          camposTela.forEach((campo) => delete cupom[campo]);
-          return cupom;
-        })
-      );
+      return this.filteredPrecosMascarados.map((item) => {
+        const cupom = { ...item };
+        camposTela.forEach((campo) => delete cupom[campo]);
+        return cupom;
+      });
     },
     toggleFilters() {
       this.showFilters = !this.showFilters;
