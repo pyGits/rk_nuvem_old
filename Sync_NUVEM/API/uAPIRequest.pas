@@ -3,7 +3,7 @@ unit uAPIRequest;
 interface
 
 uses
-  System.SysUtils, System.Classes, IdHTTP, VCL.dialogs,uJsonUtils,utils,IdSSLOpenSSL,Cupom,Estoque,NaoFiscal,Fechamento,uLogErro;
+  System.SysUtils, System.Classes, IdHTTP, VCL.dialogs,uJsonUtils,utils,IdSSLOpenSSL,Cupom,Estoque,NaoFiscal,Fechamento,ContaReceber,uLogErro;
 
 function APIGet(route:string): string;
 function APIPost(const route:string;const AJSON: string): string;
@@ -27,6 +27,9 @@ function getClientes(alterados:boolean):TStringList;
 function postVenda(cupom:TCupom):Boolean;
 function postVendaItem(cupomItem:TCupomItem):Boolean;
 function postVendaForma(cupomForma:TCupomForma):Boolean;
+
+// Titulo de convenio lido do CUPOM_CREDIARIO de cada PDV.
+function postContaReceber(contaReceber:TContaReceber):Boolean;
 
 function postEstoqueMovimentacao(estoqueMovimentacao:TEstoqueMovimentacao):Boolean;
 function postNaoFiscal(naoFiscal:TNaoFiscal):Boolean;
@@ -436,6 +439,42 @@ begin
   LogFalhaEnvio('POST_VENDA_FORMA',
       Format('Cupom %s forma %s caixa %s', [cupomForma.codigo_cupom, cupomForma.finalizadora, cupomForma.caixa]),
       venda, DescreveErro(E));
+  end;
+
+  end;
+end;
+
+function postContaReceber(contaReceber:TContaReceber):Boolean;
+var
+  titulo:string;
+  jsonResponse:string;
+begin
+  try
+  contaReceber.loja := codLoja;
+  titulo := uJsonUtils.DelphiObjectToJson(contaReceber);
+
+  jsonResponse := APIPost('/contaReceber',titulo);
+
+  if jsonResponse = '{"message":"SINCRONIZADO"}' then
+  begin
+  result := true;
+  end
+  else
+  begin
+    result := false;
+    LogFalhaEnvio('POST_CONTA_RECEBER',
+        Format('Titulo %s cupom %s prestacao %d caixa %s',
+          [contaReceber.codigo, contaReceber.codigo_cupom, contaReceber.prestacao, contaReceber.caixa]),
+        titulo, 'resposta inesperada: ' + jsonResponse);
+  end;
+  except
+  on E:Exception do
+  begin
+  result := false;
+  LogFalhaEnvio('POST_CONTA_RECEBER',
+      Format('Titulo %s cupom %s prestacao %d caixa %s',
+        [contaReceber.codigo, contaReceber.codigo_cupom, contaReceber.prestacao, contaReceber.caixa]),
+      titulo, DescreveErro(E));
   end;
 
   end;

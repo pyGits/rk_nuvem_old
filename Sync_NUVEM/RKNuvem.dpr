@@ -47,7 +47,10 @@ uses
   ClienteAPIRepository in 'Infra\Repository\API\ClienteAPIRepository.pas',
   ClienteModel in 'Infra\Entity\ClienteModel.pas',
   ClientePDVRepository in 'Infra\Repository\PDV\ClientePDVRepository.pas',
-  uConexaoPDV in 'Infra\Repository\PDV\uConexaoPDV.pas';
+  uConexaoPDV in 'Infra\Repository\PDV\uConexaoPDV.pas',
+  ContaReceber in 'Classes_RK\ContaReceber.pas',
+  ContaReceberPDVRepository in 'Infra\Repository\PDV\ContaReceberPDVRepository.pas',
+  SubidaContaReceberUseCase in 'Infra\UseCase\SubidaContaReceberUseCase.pas';
 
 {$R *.res}
  var

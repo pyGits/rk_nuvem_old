@@ -13,6 +13,7 @@ import v2CategoriaFinanceira from "./src/routes/v2/v2.categoriaFinanceira";
 import v2SubCategoriaFinanceira from "./src/routes/v2/v2.subCategoriaFinanceira";
 import v2FormaPagamento from "./src/routes/v2/v2.formaPagamento";
 import v2ContaPagarTitulo from "./src/routes/v2/v2.contaPagarTitulo";
+import v2ContaReceber from "./src/routes/v2/v2.contaReceber";
 import v3Produto from "./src/routes/v3/v3.produto";
 import v3NCM from "./src/routes/v3/v3.ncm";
 import v3CEST from "./src/routes/v3/v3.cest";
@@ -34,6 +35,7 @@ v2CategoriaFinanceira.register();
 v2SubCategoriaFinanceira.register();
 v2FormaPagamento.register();
 v2ContaPagarTitulo.register();
+v2ContaReceber.register();
 
 v3Produto.register();
 v3NCM.register();

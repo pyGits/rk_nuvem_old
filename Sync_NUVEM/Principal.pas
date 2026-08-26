@@ -38,6 +38,9 @@ type
   public
     caixaList:TStringList;
     primeiraInicializacao:Boolean;
+    // A subida dos titulos abre conexao com cada PDV e a conexao e um
+    // singleton: dois ciclos ao mesmo tempo brigariam pelo IP.
+    subindoContaReceber:Boolean;
   end;
 
 var
@@ -600,6 +603,23 @@ begin
 try
   if not uDmVenda.dmVenda.sincronizaVenda then
     memLog.Lines.Add('[ERRO] Subida de vendas com falhas - ver ' + uLogErro.ArquivoLogErro);
+
+  // Titulo de convenio nao passa pela retaguarda: e lido direto do banco de
+  // cada PDV, entao fica fora do sincronizaVenda, que so conhece o banco.fdb.
+  if not subindoContaReceber then
+  begin
+    subindoContaReceber := true;
+    try
+      try
+        Global.SubidaContaReceberUseCase.Executar;
+      except
+      on E:Exception do
+        LogFalha('SUBIDA_CONTA_RECEBER', E);
+      end;
+    finally
+      subindoContaReceber := false;
+    end;
+  end;
 except
 on E:Exception do
 begin

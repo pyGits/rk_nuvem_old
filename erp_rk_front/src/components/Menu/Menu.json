@@ -64,6 +64,10 @@
         "to": "/financeiro/contas-a-pagar"
       },
       {
+        "name": "Contas a Receber",
+        "to": "/financeiro/contas-a-receber"
+      },
+      {
         "name": "Categoria Financeira",
         "to": "/financeiro/categoria"
       },

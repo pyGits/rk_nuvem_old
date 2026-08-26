@@ -47,6 +47,7 @@ import ListarCategoriaFinanceira from "@/views/Financeiro/Categoria/ListarCatego
 import CadastrarFormaPagamento from "@/views/Financeiro/FormaPagamento/CadastrarFormaPagamento.vue";
 import LiquidarContasAPagar from "@/views/Financeiro/ContasAPagar/LiquidarContasAPagar.vue";
 import EditarTitulo from "@/views/Financeiro/ContasAPagar/EditarTitulo.vue";
+import ListarContasReceber from "@/views/Financeiro/ContasAReceber/ListarContasReceber.vue";
 import LocalizarFornecedor from "@/views/Fornecedor/LocalizarFornecedor.vue";
 import ListarBalancete from "@/views/Relatorio/Financeiro/ListarBalancete.vue";
 import ImportarXMLChave from "@/views/Compra/Recebimento/ImportarXMLChave.vue";
@@ -251,6 +252,12 @@ const routes: Array<RouteConfig> = [
     path: "/financeiro/contas-a-pagar",
     name: "contas-pagar-lista",
     component: ListarContasPagar,
+    meta: { requiresAuth: true },
+  },
+  {
+    path: "/financeiro/contas-a-receber",
+    name: "contas-receber-lista",
+    component: ListarContasReceber,
     meta: { requiresAuth: true },
   },
   {

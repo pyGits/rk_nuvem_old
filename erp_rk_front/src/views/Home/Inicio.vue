@@ -64,6 +64,7 @@ export default {
         { name: "Painel de Vendas", to: "/relatorio/caixa/painel", icon: "mdi-chart-bar" },
         { name: "Painel de Estoque", to: "/relatorio/estoque/painel", icon: "mdi-warehouse" },
         { name: "Contas a Pagar", to: "/financeiro/contas-a-pagar", icon: "mdi-credit-card-outline" },
+        { name: "Contas a Receber", to: "/financeiro/contas-a-receber", icon: "mdi-cash-multiple" },
         { name: "Carga", to: "/carga/loja", icon: "mdi-cloud-upload-outline" },
         { name: "Fornecedores", to: "/cadastro/fornecedor", icon: "mdi-truck-outline" },
         { name: "Downloads", to: "/downloads", icon: "mdi-cloud-download-outline" },
