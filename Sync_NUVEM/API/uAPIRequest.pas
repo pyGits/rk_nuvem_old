@@ -3,7 +3,7 @@ unit uAPIRequest;
 interface
 
 uses
-  System.SysUtils, System.Classes, IdHTTP, VCL.dialogs,uJsonUtils,utils,IdSSLOpenSSL,Cupom,Estoque,NaoFiscal,Fechamento,ContaReceber,uLogErro;
+  System.SysUtils, System.Classes, System.Generics.Collections, IdHTTP, VCL.dialogs,uJsonUtils,utils,IdSSLOpenSSL,Cupom,Estoque,NaoFiscal,Fechamento,ContaReceber,uLogErro;
 
 function APIGet(route:string): string;
 function APIPost(const route:string;const AJSON: string): string;
@@ -36,6 +36,22 @@ function postNaoFiscal(naoFiscal:TNaoFiscal):Boolean;
 function postFechamento(fechamento:TFechamento):boolean;
 function postFechamentoForma(fechamentoForma:TFechamentoFin):boolean;
 
+// Subida em lote. Um cupom com 15 itens custa hoje mais de 45 requisicoes
+// HTTPS, cada uma com seu handshake TLS; em lote sao 3. Cada funcao devolve em
+// 'aceitos' os indices (na lista recebida) que a nuvem confirmou - o agente so
+// marca NUVEM = 1 desses.
+//
+// Result = false significa que o servidor ainda nao tem a rota de lote (404) e
+// o chamador deve usar o envio unitario, que continua valendo. E o que permite
+// atualizar o agente antes do backend, ou o contrario.
+function postVendaLote(cupons:TObjectList<TCupom>; aceitos:TList<Integer>):Boolean;
+function postVendaItemLote(itens:TObjectList<TCupomItem>; aceitos:TList<Integer>):Boolean;
+function postVendaFormaLote(formas:TObjectList<TCupomForma>; aceitos:TList<Integer>):Boolean;
+function postEstoqueMovimentacaoLote(movimentacoes:TObjectList<TEstoqueMovimentacao>; aceitos:TList<Integer>):Boolean;
+function postNaoFiscalLote(documentos:TObjectList<TNaoFiscal>; aceitos:TList<Integer>):Boolean;
+function postFechamentoLote(fechamentos:TObjectList<TFechamento>; aceitos:TList<Integer>):Boolean;
+function postFechamentoFormaLote(formas:TObjectList<TFechamentoFin>; aceitos:TList<Integer>):Boolean;
+
 const
 //  API_URL = 'http://localhost:3000/api';
 //  API_URL = 'http://vps47862.publiccloud.com.br:3000/api';
@@ -52,57 +68,113 @@ var
 
 implementation
 
-function APIGet(route:string): string;
+const
+  // registros por requisicao nas rotas de lote
+  LOTE_ENVIO = 200;
+
 var
-  IdHTTP: TIdHTTP;
+  // Cliente reaproveitado entre as chamadas. Criar e destruir um TIdHTTP por
+  // requisicao, como era feito antes, obriga a um handshake TCP+TLS a cada
+  // registro - o que custa centenas de milissegundos por linha e e a maior
+  // parte do tempo de subida de uma venda. Mantendo a instancia viva, a
+  // conexao TLS e negociada uma vez e reusada.
+  FClienteHTTP: TIdHTTP = nil;
+
+  // Servidor que ainda nao tem as rotas de lote responde 404. Uma vez
+  // detectado, o agente para de tentar e vai direto ao envio unitario, senao
+  // seriam sete requisicoes inuteis a cada ciclo do timer.
+  FSemRotaDeLote: Boolean = false;
+
+function ObterCliente: TIdHTTP;
+var
   IdSSL: TIdSSLIOHandlerSocketOpenSSL;
 begin
-  IdHTTP := TIdHTTP.Create(nil);
+  if not Assigned(FClienteHTTP) then
+  begin
+    FClienteHTTP := TIdHTTP.Create(nil);
+    // O IdSSL pertence ao IdHTTP (Create(FClienteHTTP)), entao sai junto com ele.
+    IdSSL := TIdSSLIOHandlerSocketOpenSSL.Create(FClienteHTTP);
+    IdSSL.SSLOptions.Method := sslvTLSv1_2;
+    FClienteHTTP.IOHandler := IdSSL;
+    FClienteHTTP.Request.ContentType := 'application/json';
+    FClienteHTTP.Request.Connection := 'keep-alive';
+    FClienteHTTP.ConnectTimeout := 15000;
+    FClienteHTTP.ReadTimeout := 120000;
+  end;
 
-  try
-    IdHTTP.Request.ContentType := 'application/json';
-    IdSSL := TIdSSLIOHandlerSocketOpenSSL.Create(IdHTTP);
-    IdSSL.SSLOptions.Method := sslvTLSv1_2; // configura para usar a versão 1.2 do protocolo TLS
-    IdHTTP.IOHandler := IdSSL; // atribui o handler SSL/TLS para o TIdHTTP
+  // Values, e nao Add: numa instancia reaproveitada o Add empilharia um
+  // x-access-token novo a cada requisicao.
+  FClienteHTTP.Request.CustomHeaders.Values['x-access-token'] := TOKEN;
 
-    IdHTTP.Request.CustomHeaders.Add('x-access-token: '+TOKEN);
-    Result := IdHTTP.Get(API_URL+route);
-  finally
-    IdHTTP.Free;
+  Result := FClienteHTTP;
+end;
+
+procedure DescartarCliente;
+begin
+  FreeAndNil(FClienteHTTP);
+end;
+
+function APIGet(route:string): string;
+var
+  tentativa: integer;
+begin
+  tentativa := 0;
+
+  while true do
+  begin
+    try
+      Result := ObterCliente.Get(API_URL+route);
+      Exit;
+    except
+    on E: EIdHTTPProtocolException do
+      raise;
+    on E: Exception do
+    begin
+      // A conexao reaproveitada pode ter sido fechada do outro lado enquanto
+      // estava ociosa. Descarta o cliente e refaz uma unica vez.
+      DescartarCliente;
+      Inc(tentativa);
+      if tentativa > 1 then
+        raise;
+    end;
+    end;
   end;
 end;
 
 function APIPost(const route:string;const AJSON: string): string;
 var
-  IdSSL: TIdSSLIOHandlerSocketOpenSSL;
-  IdHTTP: TIdHTTP;
   RequestBody: TStringStream;
+  tentativa: integer;
 begin
-  IdHTTP := TIdHTTP.Create(nil);
-  try
+  tentativa := 0;
+
+  while true do
+  begin
     RequestBody := TStringStream.Create(AJSON, TEncoding.UTF8);
     try
-      // O IdSSL pertence ao IdHTTP (Create(IdHTTP)), entao sai junto com ele.
-      IdSSL := TIdSSLIOHandlerSocketOpenSSL.Create(IdHTTP);
-      IdHTTP.Request.ContentType := 'application/json';
-      IdSSL.SSLOptions.Method := sslvTLSv1_2; // configura para usar a versão 1.2 do protocolo TLS
-      IdHTTP.IOHandler := IdSSL; // atribui o handler SSL/TLS para o TIdHTTP
-      IdHTTP.Request.CustomHeaders.Add('x-access-token: '+TOKEN);
-
-      // A excecao original sobe intacta de proposito. O "raise Exception.Create
-      // (E.Message)" que existia aqui trocava a EIdHTTPProtocolException por uma
-      // Exception generica e descartava o ErrorMessage - que e onde vem o corpo
-      // da resposta. Num 400 o corpo e o proprio motivo da recusa ({"error":...}
-      // devolvido pela API), a unica informacao util para saber por que o
-      // registro nao subiu.
-      Result := IdHTTP.Post(API_URL+route, RequestBody);
+      try
+        // A excecao original sobe intacta de proposito. O "raise Exception.Create
+        // (E.Message)" que existia aqui trocava a EIdHTTPProtocolException por uma
+        // Exception generica e descartava o ErrorMessage - que e onde vem o corpo
+        // da resposta. Num 400 o corpo e o proprio motivo da recusa ({"error":...}
+        // devolvido pela API), a unica informacao util para saber por que o
+        // registro nao subiu.
+        Result := ObterCliente.Post(API_URL+route, RequestBody);
+        Exit;
+      except
+      on E: EIdHTTPProtocolException do
+        raise;
+      on E: Exception do
+      begin
+        DescartarCliente;
+        Inc(tentativa);
+        if tentativa > 1 then
+          raise;
+      end;
+      end;
     finally
       RequestBody.Free;
     end;
-  finally
-    // O codigo anterior nao liberava nem o stream nem o IdHTTP: cada POST
-    // vazava os dois, e o agente fica postando o dia inteiro.
-    IdHTTP.Free;
   end;
 end;
 
@@ -331,6 +403,11 @@ procedure informaProgressoCarga(const etapa:string; indice, total:integer);
 var
   jsonResponse:string;
 begin
+  // Todas as etapas da carga passam por aqui, entao e o ponto unico para a
+  // tela do agente acompanhar tambem - nao so o painel da nuvem.
+  uLogErro.Progresso(Format('CARGA %d/%d: %s', [indice, total, etapa]));
+  uLogErro.Atividade(Format('Carga %d/%d: %s...', [indice, total, etapa]));
+
   try
     jsonResponse := APIGet('/carga/progresso?loja=' + codLoja +
                            '&etapa=' + etapa +
@@ -613,5 +690,267 @@ begin
 
   end;
 end;
+
+// ---------------------------------------------------------------------------
+// Subida em lote
+// ---------------------------------------------------------------------------
+
+// Envia um bloco ja serializado. Preenche 'aceitos' com os indices confirmados
+// (relativos ao bloco) e informa em 'houveFalha' se o bloco nao chegou.
+// Result = false apenas quando o servidor nao conhece a rota (404).
+function enviarBloco(const rota, corpo, contexto: string; aceitos: TList<Integer>;
+  var houveFalha: Boolean): Boolean;
+var
+  jsonResponse: string;
+  rejeitados: string;
+begin
+  Result := true;
+  houveFalha := false;
+
+  try
+    jsonResponse := APIPost(rota, corpo);
+
+    if not uJsonUtils.GetJsonIndices(jsonResponse, 'aceitos', aceitos) then
+    begin
+      // a rota existe mas nao respondeu no formato combinado: nada pode ser
+      // marcado como enviado, ou a venda se perde em silencio
+      houveFalha := true;
+      LogFalhaEnvio(contexto, 'lote', corpo, 'resposta inesperada: ' + jsonResponse);
+      Exit;
+    end;
+
+    rejeitados := uJsonUtils.GetJsonRaw(jsonResponse, 'rejeitados');
+    if (rejeitados <> '') and (rejeitados <> '[]') then
+    begin
+      houveFalha := true;
+      uLogErro.LogErro(contexto, 'recusados pela nuvem: ' + Copy(rejeitados, 1, 1000));
+    end;
+  except
+  on E: EIdHTTPProtocolException do
+  begin
+    if E.ErrorCode = 404 then
+    begin
+      if not FSemRotaDeLote then
+      begin
+        FSemRotaDeLote := true;
+        uLogErro.LogErro('SUBIDA_LOTE',
+          'Servidor sem a rota ' + rota + ': a subida segue registro a registro. ' +
+          'Atualize a nuvem para ganhar o envio em lote.');
+      end;
+
+      Result := false;
+      Exit;
+    end;
+
+    houveFalha := true;
+    LogFalhaEnvio(contexto, 'lote', corpo, DescreveErro(E));
+  end;
+  on E: Exception do
+  begin
+    houveFalha := true;
+    LogFalhaEnvio(contexto, 'lote', corpo, DescreveErro(E));
+  end;
+  end;
+end;
+
+// Quebra a lista em blocos e devolve os indices confirmados, ja convertidos
+// para a posicao na lista original.
+function postLote(const rota: string; itens: TStringList; aceitos: TList<Integer>;
+  const contexto: string): Boolean;
+var
+  inicio, fim, i: integer;
+  bloco: TStringList;
+  aceitosBloco: TList<Integer>;
+  houveFalha: Boolean;
+begin
+  if FSemRotaDeLote then
+  begin
+    Result := false;
+    Exit;
+  end;
+
+  Result := true;
+  inicio := 0;
+
+  while inicio < itens.Count do
+  begin
+    fim := inicio + LOTE_ENVIO - 1;
+    if fim > itens.Count - 1 then
+      fim := itens.Count - 1;
+
+    bloco := TStringList.Create;
+    aceitosBloco := TList<Integer>.Create;
+    try
+      for i := inicio to fim do
+        bloco.Add(itens[i]);
+
+      uLogErro.Progresso(Format('   enviando %d-%d de %d para %s ...',
+        [inicio + 1, fim + 1, itens.Count, rota]));
+
+      if not enviarBloco(rota, uJsonUtils.JuntarJsonArray(bloco), contexto, aceitosBloco, houveFalha) then
+      begin
+        // servidor sem a rota de lote: o chamador refaz tudo pelo caminho
+        // unitario, entao nada do que veio ate aqui pode ser aproveitado
+        aceitos.Clear;
+        Result := false;
+        Exit;
+      end;
+
+      for i := 0 to aceitosBloco.Count - 1 do
+        aceitos.Add(inicio + aceitosBloco[i]);
+
+      // Bloco inteiro sem nenhum aceite e sinal de nuvem fora do ar ou
+      // recusando: insistir nos blocos seguintes so gasta o ciclo. O que
+      // sobrou continua com NUVEM = 0 e volta no proximo.
+      if houveFalha and (aceitosBloco.Count = 0) then
+        Exit;
+    finally
+      aceitosBloco.Free;
+      bloco.Free;
+    end;
+
+    inicio := fim + 1;
+  end;
+end;
+
+function postVendaLote(cupons:TObjectList<TCupom>; aceitos:TList<Integer>):Boolean;
+var
+  itens: TStringList;
+  i: integer;
+begin
+  itens := TStringList.Create;
+  try
+    for i := 0 to cupons.Count - 1 do
+    begin
+      cupons[i].loja := codLoja;
+      itens.Add(uJsonUtils.DelphiObjectToJson(cupons[i]));
+    end;
+
+    Result := postLote('/venda/lote', itens, aceitos, 'POST_VENDA_LOTE');
+  finally
+    itens.Free;
+  end;
+end;
+
+function postVendaItemLote(itens:TObjectList<TCupomItem>; aceitos:TList<Integer>):Boolean;
+var
+  corpos: TStringList;
+  i: integer;
+begin
+  corpos := TStringList.Create;
+  try
+    for i := 0 to itens.Count - 1 do
+    begin
+      itens[i].loja := codLoja;
+      corpos.Add(uJsonUtils.DelphiObjectToJson(itens[i]));
+    end;
+
+    Result := postLote('/vendaItem/lote', corpos, aceitos, 'POST_VENDA_ITEM_LOTE');
+  finally
+    corpos.Free;
+  end;
+end;
+
+function postVendaFormaLote(formas:TObjectList<TCupomForma>; aceitos:TList<Integer>):Boolean;
+var
+  corpos: TStringList;
+  i: integer;
+begin
+  corpos := TStringList.Create;
+  try
+    for i := 0 to formas.Count - 1 do
+    begin
+      formas[i].loja := codLoja;
+      corpos.Add(uJsonUtils.DelphiObjectToJson(formas[i]));
+    end;
+
+    Result := postLote('/vendaForma/lote', corpos, aceitos, 'POST_VENDA_FORMA_LOTE');
+  finally
+    corpos.Free;
+  end;
+end;
+
+function postEstoqueMovimentacaoLote(movimentacoes:TObjectList<TEstoqueMovimentacao>; aceitos:TList<Integer>):Boolean;
+var
+  corpos: TStringList;
+  i: integer;
+begin
+  corpos := TStringList.Create;
+  try
+    for i := 0 to movimentacoes.Count - 1 do
+    begin
+      movimentacoes[i].loja := codLoja;
+      corpos.Add(uJsonUtils.DelphiObjectToJson(movimentacoes[i]));
+    end;
+
+    Result := postLote('/estoqueMovimentacao/lote', corpos, aceitos, 'POST_ESTOQUE_MOVIMENTACAO_LOTE');
+  finally
+    corpos.Free;
+  end;
+end;
+
+function postNaoFiscalLote(documentos:TObjectList<TNaoFiscal>; aceitos:TList<Integer>):Boolean;
+var
+  corpos: TStringList;
+  i: integer;
+begin
+  corpos := TStringList.Create;
+  try
+    for i := 0 to documentos.Count - 1 do
+    begin
+      documentos[i].loja := codLoja;
+      corpos.Add(uJsonUtils.DelphiObjectToJson(documentos[i]));
+    end;
+
+    Result := postLote('/naoFiscal/lote', corpos, aceitos, 'POST_NAO_FISCAL_LOTE');
+  finally
+    corpos.Free;
+  end;
+end;
+
+function postFechamentoLote(fechamentos:TObjectList<TFechamento>; aceitos:TList<Integer>):Boolean;
+var
+  corpos: TStringList;
+  i: integer;
+begin
+  corpos := TStringList.Create;
+  try
+    for i := 0 to fechamentos.Count - 1 do
+    begin
+      fechamentos[i].loja := codLoja;
+      corpos.Add(uJsonUtils.DelphiObjectToJson(fechamentos[i]));
+    end;
+
+    Result := postLote('/fechamento/lote', corpos, aceitos, 'POST_FECHAMENTO_LOTE');
+  finally
+    corpos.Free;
+  end;
+end;
+
+function postFechamentoFormaLote(formas:TObjectList<TFechamentoFin>; aceitos:TList<Integer>):Boolean;
+var
+  corpos: TStringList;
+  i: integer;
+begin
+  corpos := TStringList.Create;
+  try
+    for i := 0 to formas.Count - 1 do
+    begin
+      formas[i].loja := codLoja;
+      corpos.Add(uJsonUtils.DelphiObjectToJson(formas[i]));
+    end;
+
+    Result := postLote('/fechamentoForma/lote', corpos, aceitos, 'POST_FECHAMENTO_FORMA_LOTE');
+  finally
+    corpos.Free;
+  end;
+end;
+
+initialization
+
+finalization
+  // fecha a conexao reaproveitada quando o agente encerra
+  DescartarCliente;
+
 end.
 

@@ -3,7 +3,9 @@ unit uDmVenda;
 interface
 
 uses
-  System.SysUtils, System.Classes,Conexao, Data.DB, MemDS, DBAccess, Uni,Cupom,VCL.dialogs,Estoque,NaoFiscal,Fechamento;
+  Winapi.Windows, System.SysUtils, System.Classes, System.Generics.Collections,
+  Conexao, Data.DB, MemDS, DBAccess, Uni, Cupom, VCL.dialogs, Estoque, NaoFiscal,
+  Fechamento;
 
 type
   TEtapaSincronizacao = function: Boolean of object;
@@ -11,16 +13,31 @@ type
   TdmVenda = class(TDataModule)
     qrCupomSincroniza: TUniQuery;
     qrCupomUpdate: TUniQuery;
+    qrCupomItemSincroniza: TUniQuery;
     qrCupomItemUpdate: TUniQuery;
+    qrCupomFormaSincroniza: TUniQuery;
     qrCupomFormaUpdate: TUniQuery;
+    qrEstoqueSincroniza: TUniQuery;
+    qrEstoqueUpdate: TUniQuery;
     qrNaoFiscalSincroniza: TUniQuery;
     qrNaoFiscalUpdate: TUniQuery;
     qrFechamentoSincroniza: TUniQuery;
     qrFechamentoUpdate: TUniQuery;
+    qrFechamentoFormaSincroniza: TUniQuery;
+    qrFechamentoFormaUpdate: TUniQuery;
   private
     FHouveFalha: Boolean;
+    // se alguma etapa do ciclo tinha registro para subir
+    FTeveTrabalho: Boolean;
 
     procedure executaEtapa(const nomeEtapa: string; etapa: TEtapaSincronizacao);
+    procedure prepararSQL(qr: TUniQuery; const sql: string);
+    procedure emTransacaoCurta(const nomeEtapa: string; total: integer;
+      const marcar: TFunc<Integer>);
+    function enviarPendentes(const nomeEtapa: string; total: integer;
+      const enviarLote: TFunc<TList<Integer>, Boolean>;
+      const enviarUm: TFunc<Integer, Boolean>;
+      aceitos: TList<Integer>): Boolean;
 
     function sincronizaCupom:Boolean;
     function sincronizaCupomItem:boolean;
@@ -30,15 +47,13 @@ type
     function sincronizaFechamento:Boolean;
     function sincronizaFechamentoForma:boolean;
 
-
-
-    function encerrarSubidaCupom(oCupom:TCupom):boolean;
-    function encerrarSubidaCupomItem(oCupomItem:TCupomItem):boolean;
-    function encerrarSubidaCupomForma(oCupomForma:TCupomForma):boolean;
-    function encerrarSubidaEstoqueMovimentacao(oEstoqueMovimentacao:TEstoqueMovimentacao):boolean;
-    function encerrarSubidaNaoFiscal(oNaoFiscal:TNaoFiscal):boolean;
-    function encerrarSubidaFechamento(oFechamento:TFechamento):boolean;
-    function encerrarSubidaFechamentoForma(oFechamentoForma:TFechamentoFin):Boolean;
+    function encerrarSubidaCupom(oCupom:TCupom):Integer;
+    function encerrarSubidaCupomItem(oCupomItem:TCupomItem):Integer;
+    function encerrarSubidaCupomForma(oCupomForma:TCupomForma):Integer;
+    function encerrarSubidaEstoqueMovimentacao(oEstoqueMovimentacao:TEstoqueMovimentacao):Integer;
+    function encerrarSubidaNaoFiscal(oNaoFiscal:TNaoFiscal):Integer;
+    function encerrarSubidaFechamento(oFechamento:TFechamento):Integer;
+    function encerrarSubidaFechamentoForma(oFechamentoForma:TFechamentoFin):Integer;
   public
     function sincronizaVenda:Boolean;
   end;
@@ -52,556 +67,786 @@ uses uAPIRequest, uLogErro;
 
 {$R *.dfm}
 
+const
+  // Registros lidos por etapa em cada ciclo do timer. O que sobrar continua
+  // com NUVEM = 0 e volta no ciclo seguinte: um cliente com meses de backlog
+  // nao pode segurar o agente num unico ciclo interminavel.
+  LOTE_LEITURA = 500;
+
+  // Tentativas da fase de marcacao quando o Firebird devolve conflito de lock.
+  // Com a transacao curta isso praticamente nao acontece; fica como rede de
+  // seguranca para o instante em que o PDV grava exatamente a mesma linha.
+  TENTATIVAS_MARCACAO = 3;
+
+  // De quantos em quantos registros o envio unitario avisa a tela. Sem isso o
+  // caminho registro a registro passa minutos sem dar sinal de vida.
+  PASSO_PROGRESSO = 25;
+
 { TdmVenda }
 
-function TdmVenda.encerrarSubidaCupom(oCupom: TCupom): boolean;
+// O SQL de cada query e fixo. Trocar o texto invalida o prepared statement, e
+// o codigo anterior refazia isso a cada linha - a cada 5 segundos, o dia todo.
+procedure TdmVenda.prepararSQL(qr: TUniQuery; const sql: string);
 begin
-  with qrCupomUpdate do
+  if qr.SQL.Text = sql then Exit;
+
+  qr.Close;
+  qr.SQL.Text := sql;
+end;
+
+function ehConflitoDeLock(E: Exception): Boolean;
+var
+  msg: string;
+begin
+  msg := LowerCase(E.Message);
+  Result := (Pos('deadlock', msg) > 0) or
+            (Pos('lock conflict', msg) > 0) or
+            (Pos('update conflicts', msg) > 0);
+end;
+
+// Abre uma transacao apenas para marcar o que ja subiu e a fecha em seguida.
+//
+// E aqui que o deadlock morre. Antes, o UPDATE ... NUVEM = 1 acontecia dentro
+// do laco, com o cursor do SELECT ainda aberto e um POST HTTPS entre uma linha
+// e outra: a transacao de escrita ficava viva por minutos segurando as linhas
+// de CUPOM, e o RK_Sync/PDV, que grava na mesma tabela em paralelo, batia
+// nesses locks. Como efeito colateral a OAT do Firebird tambem ficava presa e
+// o garbage collection parava, degradando a base.
+//
+// Agora a conversa com a nuvem acontece sem nenhuma transacao aberta, e a
+// janela em que as linhas ficam travadas passa a ser de milissegundos.
+// 'marcar' devolve quantas linhas o UPDATE realmente afetou. Esse numero e a
+// unica prova de que o registro nao vai voltar no proximo ciclo: um UPDATE que
+// nao casa com nenhuma linha, ou uma transacao que nao commita, nao levantam
+// excecao nenhuma - a subida simplesmente refaz os mesmos registros para
+// sempre.
+procedure TdmVenda.emTransacaoCurta(const nomeEtapa: string; total: integer;
+  const marcar: TFunc<Integer>);
+var
+  conexao: TUniConnection;
+  tentativa: integer;
+  marcados: integer;
+begin
+  conexao := dmConexao.ConexaoServer;
+  tentativa := 0;
+
+  uLogErro.Atividade(Format('Marcando %s como enviado...', [nomeEtapa]));
+
+  while true do
   begin
-    Close;
-    SQL.Clear;
-    SQL.Add('UPDATE CUPOM SET NUVEM = 1 WHERE CODIGO = :CODIGO AND COD_CAIXA = :COD_CAIXA');
-    ParamByName('CODIGO').AsString := oCupom.codigo;
-    ParamByName('COD_CAIXA').AsString := oCupom.caixa;
     try
-      ExecSQL;
-      result := true;
+      if not conexao.InTransaction then
+        conexao.StartTransaction;
+
+      try
+        marcados := marcar();
+        // Commit incondicional: o UniDAC costuma deixar uma transacao
+        // implicita viva depois de um Open, e condicionar o commit a "fui eu
+        // que abri" deixava os UPDATE ... NUVEM = 1 sem nunca serem gravados.
+        // O agente e uma thread so, com os timers desligados durante o ciclo,
+        // entao nao existe transacao de outra rotina nesta conexao.
+        conexao.Commit;
+      except
+        if conexao.InTransaction then
+          conexao.Rollback;
+        raise;
+      end;
+
+      if marcados < total then
+      begin
+        FHouveFalha := true;
+        uLogErro.Progresso(Format(
+          '%s: ATENCAO - %d de %d subiram mas nao foram marcados; vao ser reenviados',
+          [nomeEtapa, total - marcados, total]));
+        uLogErro.LogErro('MARCA_NUVEM',
+          Format('Etapa %s | UPDATE afetou %d de %d linhas - conferir a chave da tabela',
+            [nomeEtapa, marcados, total]));
+      end;
+
+      Exit;
     except
-    on E:Exception do
+    on E: Exception do
     begin
-      result := false;
-      uLogErro.LogErro('MARCA_CUPOM_SINCRONIZADO',
-        Format('Cupom %s caixa %s subiu para a nuvem mas nao foi marcado como NUVEM=1 | %s',
-          [oCupom.codigo, oCupom.caixa, E.Message]));
+      Inc(tentativa);
+
+      if (tentativa >= TENTATIVAS_MARCACAO) or (not ehConflitoDeLock(E)) then
+      begin
+        FHouveFalha := true;
+        // O registro subiu mas nao foi marcado: volta no proximo ciclo e a
+        // nuvem reconhece pela chave, sem duplicar.
+        uLogErro.LogErro('MARCA_NUVEM',
+          Format('Etapa %s | %s: %s', [nomeEtapa, E.ClassName, E.Message]));
+        Exit;
+      end;
+
+      Sleep(200 * tentativa);
     end;
     end;
-
-
   end;
 end;
 
-function TdmVenda.encerrarSubidaCupomForma(oCupomForma: TCupomForma): boolean;
+// Envio comum as sete etapas: tenta o lote e, se o servidor ainda nao tiver a
+// rota, refaz registro a registro. Concentra tambem o que e mostrado na tela.
+function TdmVenda.enviarPendentes(const nomeEtapa: string; total: integer;
+  const enviarLote: TFunc<TList<Integer>, Boolean>;
+  const enviarUm: TFunc<Integer, Boolean>;
+  aceitos: TList<Integer>): Boolean;
+var
+  i: integer;
 begin
-  with qrCupomFormaUpdate do
+  FTeveTrabalho := true;
+
+  uLogErro.Progresso(Format('%s: %d pendente(s)', [nomeEtapa, total]));
+  uLogErro.Atividade(Format('Enviando %s (%d)...', [nomeEtapa, total]));
+
+  if not enviarLote(aceitos) then
   begin
-    Close;
-    SQL.Clear;
-    SQL.Add('UPDATE CUPOM_FORMA SET NUVEM = 1 WHERE CODIGO = :CODIGO AND COD_CAIXA = :COD_CAIXA');
-    ParamByName('CODIGO').AsString := oCupomForma.codigo;
-    ParamByName('COD_CAIXA').AsString := oCupomForma.caixa;
-    try
-      ExecSQL;
-      result := true;
-    except
-    on E:Exception do
+    uLogErro.Progresso(Format('%s: nuvem sem a rota de lote, enviando registro a registro', [nomeEtapa]));
+
+    for i := 0 to total - 1 do
     begin
-      result := false;
-      uLogErro.LogErro('MARCA_CUPOM_FORMA_SINCRONIZADO',
-        Format('Forma %s do cupom %s caixa %s subiu para a nuvem mas nao foi marcada como NUVEM=1 | %s',
-          [oCupomForma.codigo, oCupomForma.codigo_cupom, oCupomForma.caixa, E.Message]));
-    end;
-    end;
+      if enviarUm(i) then
+        aceitos.Add(i);
 
-
+      if (((i + 1) mod PASSO_PROGRESSO) = 0) or (i = total - 1) then
+      begin
+        uLogErro.Progresso(Format('   %s: %d de %d', [nomeEtapa, i + 1, total]));
+        uLogErro.Atividade(Format('Enviando %s: %d de %d...', [nomeEtapa, i + 1, total]));
+      end;
+    end;
   end;
+
+  Result := aceitos.Count = total;
+
+  if aceitos.Count < total then
+    uLogErro.Progresso(Format('%s: %d de %d aceito(s) - o restante volta no proximo ciclo',
+      [nomeEtapa, aceitos.Count, total]))
+  else
+    uLogErro.Progresso(Format('%s: %d enviado(s)', [nomeEtapa, aceitos.Count]));
 end;
 
-function TdmVenda.encerrarSubidaCupomItem(oCupomItem: TCupomItem): boolean;
+function TdmVenda.encerrarSubidaCupom(oCupom: TCupom): Integer;
 begin
-  with qrCupomItemUpdate do
-  begin
-    Close;
-    SQL.Clear;
-    SQL.Add('UPDATE CUPOM_ITEM SET NUVEM = 1 WHERE CODIGO = :CODIGO AND COD_CAIXA = :COD_CAIXA');
-    ParamByName('CODIGO').AsString := oCupomItem.codigo;
-    ParamByName('COD_CAIXA').AsString := oCupomItem.caixa;
-    try
-      ExecSQL;
-      result := true;
-    except
-    on E:Exception do
-    begin
-      result := false;
-      uLogErro.LogErro('MARCA_CUPOM_ITEM_SINCRONIZADO',
-        Format('Item %d do cupom %s caixa %s subiu para a nuvem mas nao foi marcado como NUVEM=1 | %s',
-          [oCupomItem.item, oCupomItem.codigo_cupom, oCupomItem.caixa, E.Message]));
-    end;
-    end;
+  prepararSQL(qrCupomUpdate,
+    'UPDATE CUPOM SET NUVEM = 1 WHERE CODIGO = :CODIGO AND COD_CAIXA = :COD_CAIXA');
 
+  qrCupomUpdate.ParamByName('CODIGO').AsString := oCupom.codigo;
+  qrCupomUpdate.ParamByName('COD_CAIXA').AsString := oCupom.caixa;
+  qrCupomUpdate.ExecSQL;
 
-  end;
+  Result := qrCupomUpdate.RowsAffected;
+end;
+
+function TdmVenda.encerrarSubidaCupomForma(oCupomForma: TCupomForma): Integer;
+begin
+  prepararSQL(qrCupomFormaUpdate,
+    'UPDATE CUPOM_FORMA SET NUVEM = 1 WHERE CODIGO = :CODIGO AND COD_CAIXA = :COD_CAIXA');
+
+  qrCupomFormaUpdate.ParamByName('CODIGO').AsString := oCupomForma.codigo;
+  qrCupomFormaUpdate.ParamByName('COD_CAIXA').AsString := oCupomForma.caixa;
+  qrCupomFormaUpdate.ExecSQL;
+
+  Result := qrCupomFormaUpdate.RowsAffected;
+end;
+
+function TdmVenda.encerrarSubidaCupomItem(oCupomItem: TCupomItem): Integer;
+begin
+  prepararSQL(qrCupomItemUpdate,
+    'UPDATE CUPOM_ITEM SET NUVEM = 1 WHERE CODIGO = :CODIGO AND COD_CAIXA = :COD_CAIXA');
+
+  qrCupomItemUpdate.ParamByName('CODIGO').AsString := oCupomItem.codigo;
+  qrCupomItemUpdate.ParamByName('COD_CAIXA').AsString := oCupomItem.caixa;
+  qrCupomItemUpdate.ExecSQL;
+
+  Result := qrCupomItemUpdate.RowsAffected;
 end;
 
 function TdmVenda.encerrarSubidaEstoqueMovimentacao(
-  oEstoqueMovimentacao: TEstoqueMovimentacao): boolean;
+  oEstoqueMovimentacao: TEstoqueMovimentacao): Integer;
 begin
-    with qrCupomItemUpdate do
-  begin
-    Close;
-    SQL.Clear;
-    SQL.Add('UPDATE ESTOQUE_MOVIMENTACAO SET NUVEM = 1 WHERE COD_CUPOM = :CODIGO AND ITEM = :ITEM');
-    ParamByName('CODIGO').AsString := oEstoqueMovimentacao.codigo_cupom;
-    ParamByName('ITEM').AsInteger := oEstoqueMovimentacao.item;
-    try
-      ExecSQL;
-      result := true;
-    except
-    on E:Exception do
-    begin
-      result := false;
-      uLogErro.LogErro('MARCA_ESTOQUE_SINCRONIZADO',
-        Format('Movimentacao do cupom %s item %d subiu para a nuvem mas nao foi marcada como NUVEM=1 | %s',
-          [oEstoqueMovimentacao.codigo_cupom, oEstoqueMovimentacao.item, E.Message]));
-    end;
-    end;
+  prepararSQL(qrEstoqueUpdate,
+    'UPDATE ESTOQUE_MOVIMENTACAO SET NUVEM = 1 WHERE COD_CUPOM = :CODIGO AND ITEM = :ITEM');
 
+  qrEstoqueUpdate.ParamByName('CODIGO').AsString := oEstoqueMovimentacao.codigo_cupom;
+  qrEstoqueUpdate.ParamByName('ITEM').AsInteger := oEstoqueMovimentacao.item;
+  qrEstoqueUpdate.ExecSQL;
 
-  end;
+  Result := qrEstoqueUpdate.RowsAffected;
 end;
 
-function TdmVenda.encerrarSubidaFechamento(oFechamento: TFechamento): boolean;
+function TdmVenda.encerrarSubidaFechamento(oFechamento: TFechamento): Integer;
 begin
-  with qrFechamentoUpdate do
-  begin
-    Close;
-    SQL.Clear;
-    SQL.Add('UPDATE FECHAMENTO SET NUVEM = 1 WHERE CODIGO = :CODIGO AND COD_CAIXA = :CAIXA');
-    ParamByName('CODIGO').AsString := oFechamento.codigo;
-    ParamByName('CAIXA').AsInteger := oFechamento.codCaixa;
-    try
-      ExecSQL;
-      result := true;
-    except
-    on E:Exception do
-    begin
-      result := false;
-      uLogErro.LogErro('MARCA_FECHAMENTO_SINCRONIZADO',
-        Format('Fechamento %s caixa %d subiu para a nuvem mas nao foi marcado como NUVEM=1 | %s',
-          [oFechamento.codigo, oFechamento.codCaixa, E.Message]));
-    end;
-    end;
+  prepararSQL(qrFechamentoUpdate,
+    'UPDATE FECHAMENTO SET NUVEM = 1 WHERE CODIGO = :CODIGO AND COD_CAIXA = :CAIXA');
 
+  qrFechamentoUpdate.ParamByName('CODIGO').AsString := oFechamento.codigo;
+  qrFechamentoUpdate.ParamByName('CAIXA').AsInteger := oFechamento.codCaixa;
+  qrFechamentoUpdate.ExecSQL;
 
-  end;
-
+  Result := qrFechamentoUpdate.RowsAffected;
 end;
 
 function TdmVenda.encerrarSubidaFechamentoForma(
-  oFechamentoForma: TFechamentoFin): Boolean;
+  oFechamentoForma: TFechamentoFin): Integer;
 begin
-  with qrFechamentoUpdate do
-  begin
-    Close;
-    SQL.Clear;
-    SQL.Add('UPDATE FECHAMENTO_FINALIZADORA SET NUVEM = 1 WHERE ID_FECHAMENTO = :CODIGO AND COD_CAIXA = :CAIXA AND FZCOD=:FZCOD');
-    ParamByName('CODIGO').AsString := oFechamentoForma.id;
-    ParamByName('CAIXA').AsInteger := oFechamentoForma.codCaixa;
-    ParamByName('FZCOD').AsString := oFechamentoForma.Finalizadora;
-    try
-      ExecSQL;
-      result := true;
-    except
-    on E:Exception do
-    begin
-      result := false;
-      uLogErro.LogErro('MARCA_FECHAMENTO_FORMA_SINCRONIZADO',
-        Format('Finalizadora %s do fechamento %s caixa %d subiu para a nuvem mas nao foi marcada como NUVEM=1 | %s',
-          [oFechamentoForma.Finalizadora, oFechamentoForma.id, oFechamentoForma.codCaixa, E.Message]));
-    end;
-    end;
+  prepararSQL(qrFechamentoFormaUpdate,
+    'UPDATE FECHAMENTO_FINALIZADORA SET NUVEM = 1 ' +
+    ' WHERE ID_FECHAMENTO = :CODIGO AND COD_CAIXA = :CAIXA AND FZCOD = :FZCOD');
 
+  qrFechamentoFormaUpdate.ParamByName('CODIGO').AsString := oFechamentoForma.id;
+  qrFechamentoFormaUpdate.ParamByName('CAIXA').AsInteger := oFechamentoForma.codCaixa;
+  qrFechamentoFormaUpdate.ParamByName('FZCOD').AsString := oFechamentoForma.Finalizadora;
+  qrFechamentoFormaUpdate.ExecSQL;
 
-  end;
+  Result := qrFechamentoFormaUpdate.RowsAffected;
 end;
 
-
-function TdmVenda.encerrarSubidaNaoFiscal(oNaoFiscal: TNaoFiscal): boolean;
+function TdmVenda.encerrarSubidaNaoFiscal(oNaoFiscal: TNaoFiscal): Integer;
 begin
-    with qrNaoFiscalUpdate do
-  begin
-    Close;
-    SQL.Clear;
-    SQL.Add('UPDATE NAO_FISCAL SET NUVEM = 1 WHERE CODIGO = :CODIGO AND COD_CAIXA = :CAIXA');
-    ParamByName('CODIGO').AsString := oNaoFiscal.codigo;
-    ParamByName('CAIXA').AsInteger := oNaoFiscal.caixa;
-    try
-      ExecSQL;
-      result := true;
-    except
-    on E:Exception do
-    begin
-      result := false;
-      uLogErro.LogErro('MARCA_NAO_FISCAL_SINCRONIZADO',
-        Format('Documento %s caixa %d subiu para a nuvem mas nao foi marcado como NUVEM=1 | %s',
-          [oNaoFiscal.codigo, oNaoFiscal.caixa, E.Message]));
-    end;
-    end;
+  prepararSQL(qrNaoFiscalUpdate,
+    'UPDATE NAO_FISCAL SET NUVEM = 1 WHERE CODIGO = :CODIGO AND COD_CAIXA = :CAIXA');
 
+  qrNaoFiscalUpdate.ParamByName('CODIGO').AsString := oNaoFiscal.codigo;
+  qrNaoFiscalUpdate.ParamByName('CAIXA').AsInteger := oNaoFiscal.caixa;
+  qrNaoFiscalUpdate.ExecSQL;
 
-  end;
+  Result := qrNaoFiscalUpdate.RowsAffected;
 end;
+
+// As sete etapas seguem o mesmo contrato de tres fases:
+//   1. le os pendentes para memoria e FECHA o cursor;
+//   2. envia, sem nenhum dataset ou transacao aberta no Firebird;
+//   3. marca NUVEM = 1 numa transacao curta, so do que a nuvem confirmou.
+// A ordenacao do SELECT tambem importa: deadlock exige duas transacoes pegando
+// locks em ordens opostas, e uma ordem fixa elimina esse cenario.
 
 function TdmVenda.sincronizaCupom: Boolean;
 var
-  oCupom:TCupom;
-
+  pendentes: TObjectList<TCupom>;
+  aceitos: TList<Integer>;
+  oCupom: TCupom;
 begin
-with qrCupomSincroniza do
-begin
-  Close;
-  SQL.Clear;
-  SQL.Add('SELECT * FROM CUPOM where NUVEM = 0');
-  Open;
+  Result := true;
 
-  if qrCupomSincroniza.RecordCount > 0 then
-  begin
-    while not qrCupomSincroniza.Eof do
-    begin
-      oCupom := TCupom.Create;
-      try
-      try
-        oCupom.codigo := FieldByName('CODIGO').AsString;
-        oCupom.numero := FieldByName('NUMERO').AsString;
-        oCupom.data := FieldByName('data').AsDateTime;
-        oCupom.hora := FieldByName('hora').AsDateTime;
-        oCupom.caixa := FieldByName('COD_CAIXA').AsString;
-        oCupom.qtde_item := FieldByName('qtde_item').AsInteger;
-        oCupom.valor_desconto := FieldByName('valor_desconto').AsFloat;
-        oCupom.valor_acrescimo := FieldByName('valor_acrescimo').AsFloat;
-        oCupom.valor_total := FieldByName('valor_total').AsFloat;
-        oCupom.codigo_cliente := FieldByName('COD_CLIENTE').AsString;
-        oCupom.cancelado := FieldByName('cancelado').AsInteger;
-        oCupom.cpf_consumidor := FieldByName('cpf_consumidor').AsString;
-        oCupom.nome_consumidor := FieldByName('nome_consumidor').AsString;
-        oCupom.vendedor := FieldByName('COD_VENDEDOR').AsString;
-        oCupom.xml_venda := FieldByName('XML_CHAVE').AsString;
-        oCupom.xml_cancelamento := FieldByName('XML_CHAVE_CANCELAMENTO').AsString;
-        oCupom.valor_custo := FieldByName('VALOR_CUSTO').AsFloat;
+  pendentes := TObjectList<TCupom>.Create(true);
+  aceitos := TList<Integer>.Create;
+  try
+    prepararSQL(qrCupomSincroniza,
+      'SELECT FIRST ' + IntToStr(LOTE_LEITURA) + ' * FROM CUPOM ' +
+      ' WHERE NUVEM = 0 ORDER BY COD_CAIXA, CODIGO');
 
-        if (uAPIRequest.postVenda(oCupom)) then
-        begin
-          encerrarSubidaCupom(oCupom);
-        end;
-
-
-      except
-      on E:Exception do
+    uLogErro.Atividade('Procurando pendentes em CUPOM...');
+    qrCupomSincroniza.Open;
+    try
+      while not qrCupomSincroniza.Eof do
       begin
-        uLogErro.LogErro('SINCRONIZA_CUPOM',
-          Format('Cupom %s caixa %s | %s',
-            [oCupom.codigo, oCupom.caixa, E.Message]));
+        oCupom := TCupom.Create;
+        pendentes.Add(oCupom);
+
+        with qrCupomSincroniza do
+        begin
+          oCupom.codigo := FieldByName('CODIGO').AsString;
+          oCupom.numero := FieldByName('NUMERO').AsString;
+          oCupom.data := FieldByName('data').AsDateTime;
+          oCupom.hora := FieldByName('hora').AsDateTime;
+          oCupom.caixa := FieldByName('COD_CAIXA').AsString;
+          oCupom.qtde_item := FieldByName('qtde_item').AsInteger;
+          oCupom.valor_desconto := FieldByName('valor_desconto').AsFloat;
+          oCupom.valor_acrescimo := FieldByName('valor_acrescimo').AsFloat;
+          oCupom.valor_total := FieldByName('valor_total').AsFloat;
+          oCupom.codigo_cliente := FieldByName('COD_CLIENTE').AsString;
+          oCupom.cancelado := FieldByName('cancelado').AsInteger;
+          oCupom.cpf_consumidor := FieldByName('cpf_consumidor').AsString;
+          oCupom.nome_consumidor := FieldByName('nome_consumidor').AsString;
+          oCupom.vendedor := FieldByName('COD_VENDEDOR').AsString;
+          oCupom.xml_venda := FieldByName('XML_CHAVE').AsString;
+          oCupom.xml_cancelamento := FieldByName('XML_CHAVE_CANCELAMENTO').AsString;
+          oCupom.valor_custo := FieldByName('VALOR_CUSTO').AsFloat;
+
+          Next;
+        end;
       end;
-      end;
-      finally
-        oCupom.Free;
-        qrCupomSincroniza.Next;
-      end;
+    finally
+      qrCupomSincroniza.Close;
     end;
 
+    if pendentes.Count = 0 then Exit;
 
-  end;
-end;
-end;
-
-function TdmVenda.sincronizaCupomForma: boolean;
-var
-  oCupomForma:TCupomForma;
-begin
-  with qrCupomSincroniza do
-  begin
-    Close;
-    SQL.Clear;
-    SQL.Add('SELECT * FROM CUPOM_FORMA where NUVEM = 0');
-    Open;
-
-    while not qrCupomSincroniza.Eof do
-    begin
-      oCupomForma := TCupomForma.Create;
-      try
-      try
-        oCupomForma.codigo := FieldByName('CODIGO').AsString;
-        oCupomForma.codigo_cupom := FieldByName('COD_CUPOM').AsString;
-        oCupomForma.prestacao := FieldByName('PRESTACAO').asinteger;
-        oCupomForma.data := FieldByName('DATA').AsDateTime;
-        oCupomForma.caixa := FieldByName('COD_CAIXA').ASString;
-        oCupomForma.valor := FieldByName('VALOR').AsFloat;
-        oCupomForma.finalizadora := FieldByName('FORMA').AsString;
-        oCupomForma.tipo := FieldByName('TIPO').AsInteger;
-        oCupomForma.valor_troco := FieldByName('VALOR_TROCO').AsFloat;
-        oCupomForma.cancelado:= FieldByName('CANCELADO').AsInteger;
-
-        if (uAPIRequest.postVendaForma(oCupomForma)) then
-        begin
-          encerrarSubidaCupomForma(oCupomForma);
-        end;
-
-      except
-      on E:Exception do
+    Result := enviarPendentes('CUPOM', pendentes.Count,
+      function(confirmados: TList<Integer>): Boolean
       begin
-        uLogErro.LogErro('SINCRONIZA_CUPOM_FORMA',
-          Format('Forma %s do cupom %s caixa %s | %s',
-            [oCupomForma.codigo, oCupomForma.codigo_cupom, oCupomForma.caixa, E.Message]));
-      end;
-      end;
-      finally
-      oCupomForma.Free;
-      qrCupomSincroniza.Next;
-      end;
-    end;
+        Result := uAPIRequest.postVendaLote(pendentes, confirmados);
+      end,
+      function(indice: Integer): Boolean
+      begin
+        Result := uAPIRequest.postVenda(pendentes[indice]);
+      end,
+      aceitos);
+
+    if aceitos.Count = 0 then Exit;
+
+    emTransacaoCurta('CUPOM', aceitos.Count,
+      function: Integer
+      var
+        j: integer;
+      begin
+        Result := 0;
+        for j := 0 to aceitos.Count - 1 do
+          Inc(Result, encerrarSubidaCupom(pendentes[aceitos[j]]));
+      end);
+  finally
+    aceitos.Free;
+    pendentes.Free;
   end;
 end;
 
 function TdmVenda.sincronizaCupomItem: boolean;
 var
-  oCupomItem:TCupomItem;
+  pendentes: TObjectList<TCupomItem>;
+  aceitos: TList<Integer>;
+  oCupomItem: TCupomItem;
 begin
-  with qrCupomSincroniza do
-  begin
-    Close;
-    SQL.Clear;
-    SQL.Add('SELECT * FROM CUPOM_ITEM where NUVEM = 0');
-    Open;
+  Result := true;
 
-    while not qrCupomSincroniza.Eof do
-    begin
-      oCupomItem := TCupomItem.Create;
-      try
-      try
-        oCupomItem.codigo := FieldByName('CODIGO').AsString;
-        oCupomItem.codigo_cupom := FieldByName('COD_CUPOM').AsString;
-        oCupomItem.item := FieldByName('ITEM').asinteger;
-        oCupomItem.unidade := FieldByName('UNIDADE').AsString;
-        oCupomItem.qtde := FieldByName('QTDE').AsFloat;
-        oCupomItem.valor_unitario := FieldByName('VALOR_UNITARIO').AsFloat;
-        oCupomItem.valor_desconto := FieldByName('VALOR_DESCONTO').asfloat;
-        oCupomItem.valor_acrescimo := FieldByName('VALOR_ACRESCIMO').AsFloat;
-        oCupomItem.valor_total:= FieldByName('VALOR_TOTAL').AsFloat;
-        oCupomItem.cancelado:= FieldByName('CANCELADO').AsInteger;
-        oCupomItem.data:= FieldByName('DATA').AsDateTime;
-        oCupomItem.caixa:= FieldByName('COD_CAIXA').AsString;
-        oCupomItem.codigo_produto := FieldByName('COD_PRODUTO').AsString;
-        oCupomItem.valor_custo := FieldByName('VALOR_CUSTO').AsFloat;
-        oCupomItem.valor_custo_total := FieldByName('VALOR_CUSTO_TOTAL').AsFloat;
+  pendentes := TObjectList<TCupomItem>.Create(true);
+  aceitos := TList<Integer>.Create;
+  try
+    prepararSQL(qrCupomItemSincroniza,
+      'SELECT FIRST ' + IntToStr(LOTE_LEITURA) + ' * FROM CUPOM_ITEM ' +
+      ' WHERE NUVEM = 0 ORDER BY COD_CAIXA, CODIGO');
 
-        if (uAPIRequest.postVendaItem(oCupomItem)) then
-        begin
-          encerrarSubidaCupomItem(oCupomItem);
-        end;
-
-      except
-      on E:Exception do
+    uLogErro.Atividade('Procurando pendentes em CUPOM_ITEM...');
+    qrCupomItemSincroniza.Open;
+    try
+      while not qrCupomItemSincroniza.Eof do
       begin
-        uLogErro.LogErro('SINCRONIZA_CUPOM_ITEM',
-          Format('Item %d do cupom %s caixa %s | %s',
-            [oCupomItem.item, oCupomItem.codigo_cupom, oCupomItem.caixa, E.Message]));
+        oCupomItem := TCupomItem.Create;
+        pendentes.Add(oCupomItem);
+
+        with qrCupomItemSincroniza do
+        begin
+          oCupomItem.codigo := FieldByName('CODIGO').AsString;
+          oCupomItem.codigo_cupom := FieldByName('COD_CUPOM').AsString;
+          oCupomItem.item := FieldByName('ITEM').AsInteger;
+          oCupomItem.unidade := FieldByName('UNIDADE').AsString;
+          oCupomItem.qtde := FieldByName('QTDE').AsFloat;
+          oCupomItem.valor_unitario := FieldByName('VALOR_UNITARIO').AsFloat;
+          oCupomItem.valor_desconto := FieldByName('VALOR_DESCONTO').AsFloat;
+          oCupomItem.valor_acrescimo := FieldByName('VALOR_ACRESCIMO').AsFloat;
+          oCupomItem.valor_total := FieldByName('VALOR_TOTAL').AsFloat;
+          oCupomItem.cancelado := FieldByName('CANCELADO').AsInteger;
+          oCupomItem.data := FieldByName('DATA').AsDateTime;
+          oCupomItem.caixa := FieldByName('COD_CAIXA').AsString;
+          oCupomItem.codigo_produto := FieldByName('COD_PRODUTO').AsString;
+          oCupomItem.valor_custo := FieldByName('VALOR_CUSTO').AsFloat;
+          oCupomItem.valor_custo_total := FieldByName('VALOR_CUSTO_TOTAL').AsFloat;
+
+          Next;
+        end;
       end;
-      end;
-      finally
-      oCupomItem.Free;
-      qrCupomSincroniza.Next;
-      end;
+    finally
+      qrCupomItemSincroniza.Close;
     end;
+
+    if pendentes.Count = 0 then Exit;
+
+    Result := enviarPendentes('CUPOM_ITEM', pendentes.Count,
+      function(confirmados: TList<Integer>): Boolean
+      begin
+        Result := uAPIRequest.postVendaItemLote(pendentes, confirmados);
+      end,
+      function(indice: Integer): Boolean
+      begin
+        Result := uAPIRequest.postVendaItem(pendentes[indice]);
+      end,
+      aceitos);
+
+    if aceitos.Count = 0 then Exit;
+
+    emTransacaoCurta('CUPOM_ITEM', aceitos.Count,
+      function: Integer
+      var
+        j: integer;
+      begin
+        Result := 0;
+        for j := 0 to aceitos.Count - 1 do
+          Inc(Result, encerrarSubidaCupomItem(pendentes[aceitos[j]]));
+      end);
+  finally
+    aceitos.Free;
+    pendentes.Free;
+  end;
+end;
+
+function TdmVenda.sincronizaCupomForma: boolean;
+var
+  pendentes: TObjectList<TCupomForma>;
+  aceitos: TList<Integer>;
+  oCupomForma: TCupomForma;
+begin
+  Result := true;
+
+  pendentes := TObjectList<TCupomForma>.Create(true);
+  aceitos := TList<Integer>.Create;
+  try
+    prepararSQL(qrCupomFormaSincroniza,
+      'SELECT FIRST ' + IntToStr(LOTE_LEITURA) + ' * FROM CUPOM_FORMA ' +
+      ' WHERE NUVEM = 0 ORDER BY COD_CAIXA, CODIGO');
+
+    uLogErro.Atividade('Procurando pendentes em CUPOM_FORMA...');
+    qrCupomFormaSincroniza.Open;
+    try
+      while not qrCupomFormaSincroniza.Eof do
+      begin
+        oCupomForma := TCupomForma.Create;
+        pendentes.Add(oCupomForma);
+
+        with qrCupomFormaSincroniza do
+        begin
+          oCupomForma.codigo := FieldByName('CODIGO').AsString;
+          oCupomForma.codigo_cupom := FieldByName('COD_CUPOM').AsString;
+          oCupomForma.prestacao := FieldByName('PRESTACAO').AsInteger;
+          oCupomForma.data := FieldByName('DATA').AsDateTime;
+          oCupomForma.caixa := FieldByName('COD_CAIXA').AsString;
+          oCupomForma.valor := FieldByName('VALOR').AsFloat;
+          oCupomForma.finalizadora := FieldByName('FORMA').AsString;
+          oCupomForma.tipo := FieldByName('TIPO').AsInteger;
+          oCupomForma.valor_troco := FieldByName('VALOR_TROCO').AsFloat;
+          oCupomForma.cancelado := FieldByName('CANCELADO').AsInteger;
+
+          Next;
+        end;
+      end;
+    finally
+      qrCupomFormaSincroniza.Close;
+    end;
+
+    if pendentes.Count = 0 then Exit;
+
+    Result := enviarPendentes('CUPOM_FORMA', pendentes.Count,
+      function(confirmados: TList<Integer>): Boolean
+      begin
+        Result := uAPIRequest.postVendaFormaLote(pendentes, confirmados);
+      end,
+      function(indice: Integer): Boolean
+      begin
+        Result := uAPIRequest.postVendaForma(pendentes[indice]);
+      end,
+      aceitos);
+
+    if aceitos.Count = 0 then Exit;
+
+    emTransacaoCurta('CUPOM_FORMA', aceitos.Count,
+      function: Integer
+      var
+        j: integer;
+      begin
+        Result := 0;
+        for j := 0 to aceitos.Count - 1 do
+          Inc(Result, encerrarSubidaCupomForma(pendentes[aceitos[j]]));
+      end);
+  finally
+    aceitos.Free;
+    pendentes.Free;
   end;
 end;
 
 function TdmVenda.sincronizaEstoqueMovimentacao: Boolean;
 var
-  oEstoqueMovimentacao:TEstoqueMovimentacao;
+  pendentes: TObjectList<TEstoqueMovimentacao>;
+  aceitos: TList<Integer>;
+  oMovimentacao: TEstoqueMovimentacao;
 begin
-  with qrCupomSincroniza do
-  begin
-    Close;
-    SQL.Clear;
-    SQL.Add('SELECT * FROM ESTOQUE_MOVIMENTACAO where NUVEM = 0');
-    Open;
+  Result := true;
 
-    while not qrCupomSincroniza.Eof do
-    begin
-      oEstoqueMovimentacao := TEstoqueMovimentacao.Create;
-      try
-      try
-        oEstoqueMovimentacao.codigo_produto := FieldByName('CODPRODUTO').AsString;
-        oEstoqueMovimentacao.qtde := FieldByName('QTDE').AsFloat;
-        oEstoqueMovimentacao.data  := FieldByName('DATA').AsDateTime;
-        oEstoqueMovimentacao.hora := FieldByName('HORA').AsDateTime;
-        oEstoqueMovimentacao.codigo_cupom := FieldByName('COD_CUPOM').AsString;
-        oEstoqueMovimentacao.item := FieldByName('ITEM').asinteger;
-        oEstoqueMovimentacao.codigo_funcionario  := FieldByName('COD_FUNCIONARIO').AsString;
-        oEstoqueMovimentacao.origem := FieldByName('ORIGEM').AsString;
+  pendentes := TObjectList<TEstoqueMovimentacao>.Create(true);
+  aceitos := TList<Integer>.Create;
+  try
+    prepararSQL(qrEstoqueSincroniza,
+      'SELECT FIRST ' + IntToStr(LOTE_LEITURA) + ' * FROM ESTOQUE_MOVIMENTACAO ' +
+      ' WHERE NUVEM = 0 ORDER BY COD_CUPOM, ITEM');
 
-        if (uAPIRequest.postEstoqueMovimentacao(oEstoqueMovimentacao)) then
-        begin
-          encerrarSubidaEstoqueMovimentacao(oEstoqueMovimentacao);
-        end;
-
-      except
-      on E:Exception do
+    uLogErro.Atividade('Procurando pendentes em ESTOQUE_MOVIMENTACAO...');
+    qrEstoqueSincroniza.Open;
+    try
+      while not qrEstoqueSincroniza.Eof do
       begin
-        uLogErro.LogErro('SINCRONIZA_ESTOQUE_MOVIMENTACAO',
-          Format('Cupom %s item %d produto %s | %s',
-            [oEstoqueMovimentacao.codigo_cupom, oEstoqueMovimentacao.item,
-             oEstoqueMovimentacao.codigo_produto, E.Message]));
+        oMovimentacao := TEstoqueMovimentacao.Create;
+        pendentes.Add(oMovimentacao);
+
+        with qrEstoqueSincroniza do
+        begin
+          oMovimentacao.codigo_produto := FieldByName('CODPRODUTO').AsString;
+          oMovimentacao.qtde := FieldByName('QTDE').AsFloat;
+          oMovimentacao.data := FieldByName('DATA').AsDateTime;
+          oMovimentacao.hora := FieldByName('HORA').AsDateTime;
+          oMovimentacao.codigo_cupom := FieldByName('COD_CUPOM').AsString;
+          oMovimentacao.item := FieldByName('ITEM').AsInteger;
+          oMovimentacao.codigo_funcionario := FieldByName('COD_FUNCIONARIO').AsString;
+          oMovimentacao.origem := FieldByName('ORIGEM').AsString;
+
+          Next;
+        end;
       end;
-      end;
-      finally
-      oEstoqueMovimentacao.Free;
-      qrCupomSincroniza.Next;
-      end;
-    end;
-  end;
-end;
-
-function TdmVenda.sincronizaFechamento: Boolean;
-var
-oFechamento: TFechamento;
-begin
-with qrFechamentoSincroniza do
-begin
-Close;
-SQL.Clear;
-SQL.Add('SELECT * FROM FECHAMENTO where NUVEM = 0');
-Open;
-
-while not qrFechamentoSincroniza.Eof do
-begin
-  oFechamento := TFechamento.Create;
-  try
-  try
-    oFechamento.codigo := FieldByName('CODIGO').AsString;
-    oFechamento.operador := FieldByName('OPERADOR').AsString;
-    oFechamento.dataAbertura := FieldByName('DATA_ABERTURA').AsDateTime;
-    oFechamento.dataFechamento := FieldByName('DATA_FECHAMENTO').AsDateTime;
-    oFechamento.horaAbertura := FieldByName('HORA_ABERTURA').AsDateTime;
-    oFechamento.horaFechamento := FieldByName('HORA_FECHAMENTO').AsDateTime;
-    oFechamento.codOperador := FieldByName('COD_OPERADOR').AsInteger;
-    oFechamento.codCaixa := FieldByName('COD_CAIXA').AsInteger;
-
-    oFechamento.vendaBruta := FieldByName('VENDA_BRUTA').AsFloat;
-    oFechamento.cancelamentoCupom := FieldByName('CANCELAMENTO_CUPOM').AsFloat;
-    oFechamento.cancelamentoItem := FieldByName('CANCELAMENTO_ITEM').AsFloat;
-    oFechamento.descontoItem := FieldByName('DESCONTO_ITEM').AsFloat;
-    oFechamento.descontoCupom := FieldByName('DESCONTO_CUPOM').AsFloat;
-    oFechamento.acrescimoCupom := FieldByName('ACRESCIMO_CUPOM').AsFloat;
-    oFechamento.vendaLiquida := FieldByName('VENDA_LIQUIDA').AsFloat;
-    oFechamento.fundoCaixa := FieldByName('FUNDO_CAIXA').AsFloat;
-    oFechamento.sangria := FieldByName('SANGRIA').AsFloat;
-    oFechamento.totais := FieldByName('TOTAIS').AsFloat;
-
-    oFechamento.qtdCuponsEfetivados := FieldByName('QTD_CUPONS_EFETIVADOS').AsInteger;
-    oFechamento.qtdCuponsCancelados := FieldByName('QTD_CUPONS_CANCELADOS').AsInteger;
-
-    if (uAPIRequest.postFechamento(oFechamento)) then
-    begin
-      encerrarSubidaFechamento(oFechamento);
+    finally
+      qrEstoqueSincroniza.Close;
     end;
 
-  except
-  on E:Exception do
-  begin
-    uLogErro.LogErro('SINCRONIZA_FECHAMENTO',
-      Format('Fechamento %s caixa %d | %s',
-        [oFechamento.codigo, oFechamento.codCaixa, E.Message]));
-  end;
-  end;
+    if pendentes.Count = 0 then Exit;
+
+    Result := enviarPendentes('ESTOQUE_MOVIMENTACAO', pendentes.Count,
+      function(confirmados: TList<Integer>): Boolean
+      begin
+        Result := uAPIRequest.postEstoqueMovimentacaoLote(pendentes, confirmados);
+      end,
+      function(indice: Integer): Boolean
+      begin
+        Result := uAPIRequest.postEstoqueMovimentacao(pendentes[indice]);
+      end,
+      aceitos);
+
+    if aceitos.Count = 0 then Exit;
+
+    emTransacaoCurta('ESTOQUE_MOVIMENTACAO', aceitos.Count,
+      function: Integer
+      var
+        j: integer;
+      begin
+        Result := 0;
+        for j := 0 to aceitos.Count - 1 do
+          Inc(Result, encerrarSubidaEstoqueMovimentacao(pendentes[aceitos[j]]));
+      end);
   finally
-    oFechamento.Free;
-    qrFechamentoSincroniza.Next;
-  end;
-end;
-end;
-end;
-
-function TdmVenda.sincronizaFechamentoForma: boolean;
-var
-  oFechamentoForma: TFechamentoFin;
-begin
-with qrFechamentoSincroniza do
-  begin
-    Close;
-    SQL.Clear;
-    SQL.Add('SELECT * FROM FECHAMENTO_FINALIZADORA where NUVEM = 0');
-    Open;
-
-    while not qrFechamentoSincroniza.Eof do
-    begin
-      oFechamentoForma := TFechamentoFin.Create;
-      try
-      try
-        oFechamentoForma.id := FieldByName('ID_FECHAMENTO').AsString;
-        oFechamentoForma.Finalizadora := FieldByName('FZCOD').AsString;
-        oFechamentoForma.valorLiquido := FieldByName('VALOR_LIQUIDO').AsFloat;
-        oFechamentoForma.valorEntrada := FieldByName('VALOR_ENTRADA').AsFloat;
-        oFechamentoForma.valorTroco := FieldByName('VALOR_TROCO').AsFloat;
-        oFechamentoForma.valorReforco := FieldByName('VALOR_REFORCO').AsFloat;
-        oFechamentoForma.valorSangria := FieldByName('VALOR_SANGRIA').AsFloat;
-        oFechamentoForma.codCaixa := FieldByName('COD_CAIXA').AsInteger;
-
-        if (uAPIRequest.postFechamentoForma(oFechamentoForma)) then
-        begin
-          encerrarSubidaFechamentoForma(oFechamentoForma);
-        end;
-
-      except
-      on E:Exception do
-      begin
-        uLogErro.LogErro('SINCRONIZA_FECHAMENTO_FORMA',
-          Format('Finalizadora %s do fechamento %s caixa %d | %s',
-            [oFechamentoForma.Finalizadora, oFechamentoForma.id, oFechamentoForma.codCaixa, E.Message]));
-      end;
-      end;
-      finally
-      oFechamentoForma.Free;
-      qrFechamentoSincroniza.Next;
-      end;
-    end;
+    aceitos.Free;
+    pendentes.Free;
   end;
 end;
 
 function TdmVenda.sincronizaNaoFiscal: Boolean;
 var
-  oNaoFiscal:TNaoFiscal;
+  pendentes: TObjectList<TNaoFiscal>;
+  aceitos: TList<Integer>;
+  oNaoFiscal: TNaoFiscal;
 begin
-with qrNaoFiscalSincroniza do
-  begin
-    Close;
-    SQL.Clear;
-    SQL.Add('SELECT * FROM NAO_FISCAL where NUVEM = 0');
-    Open;
+  Result := true;
 
-    while not qrNaoFiscalSincroniza.Eof do
-    begin
-      oNaoFiscal := TNaoFiscal.Create;
-      try
-      try
+  pendentes := TObjectList<TNaoFiscal>.Create(true);
+  aceitos := TList<Integer>.Create;
+  try
+    prepararSQL(qrNaoFiscalSincroniza,
+      'SELECT FIRST ' + IntToStr(LOTE_LEITURA) + ' * FROM NAO_FISCAL ' +
+      ' WHERE NUVEM = 0 ORDER BY COD_CAIXA, CODIGO');
 
-        oNaoFiscal.codigo := FieldByName('CODIGO').AsString;
-        oNaoFiscal.data := FieldByName('DATA').AsDateTime;
-        oNaoFiscal.indice  := FieldByName('INDICE').AsString;
-        oNaoFiscal.Descricao := FieldByName('DESCRICAO').AsString;
-        oNaoFiscal.Valor := FieldByName('VALOR').AsFloat;
-        oNaoFiscal.Hora := FieldByName('HORA').AsDateTime;
-        oNaoFiscal.Vendedor  := FieldByName('CODVENDEDOR').AsInteger;
-        oNaoFiscal.fzcod := FieldByName('FZCOD').AsString;
-        oNaoFiscal.caixa := FieldByName('COD_CAIXA').AsInteger;
-
-        if (uAPIRequest.postNaoFiscal(oNaoFiscal)) then
-        begin
-          encerrarSubidaNaoFiscal(oNaoFiscal);
-        end;
-
-      except
-      on E:Exception do
+    uLogErro.Atividade('Procurando pendentes em NAO_FISCAL...');
+    qrNaoFiscalSincroniza.Open;
+    try
+      while not qrNaoFiscalSincroniza.Eof do
       begin
-        uLogErro.LogErro('SINCRONIZA_NAO_FISCAL',
-          Format('Documento %s caixa %d | %s',
-            [oNaoFiscal.codigo, oNaoFiscal.caixa, E.Message]));
+        oNaoFiscal := TNaoFiscal.Create;
+        pendentes.Add(oNaoFiscal);
+
+        with qrNaoFiscalSincroniza do
+        begin
+          oNaoFiscal.codigo := FieldByName('CODIGO').AsString;
+          oNaoFiscal.data := FieldByName('DATA').AsDateTime;
+          oNaoFiscal.indice := FieldByName('INDICE').AsString;
+          oNaoFiscal.Descricao := FieldByName('DESCRICAO').AsString;
+          oNaoFiscal.Valor := FieldByName('VALOR').AsFloat;
+          oNaoFiscal.Hora := FieldByName('HORA').AsDateTime;
+          oNaoFiscal.Vendedor := FieldByName('CODVENDEDOR').AsInteger;
+          oNaoFiscal.fzcod := FieldByName('FZCOD').AsString;
+          oNaoFiscal.caixa := FieldByName('COD_CAIXA').AsInteger;
+
+          Next;
+        end;
       end;
-      end;
-      finally
-      oNaoFiscal.Free;
-      qrNaoFiscalSincroniza.Next;
-      end;
+    finally
+      qrNaoFiscalSincroniza.Close;
     end;
+
+    if pendentes.Count = 0 then Exit;
+
+    Result := enviarPendentes('NAO_FISCAL', pendentes.Count,
+      function(confirmados: TList<Integer>): Boolean
+      begin
+        Result := uAPIRequest.postNaoFiscalLote(pendentes, confirmados);
+      end,
+      function(indice: Integer): Boolean
+      begin
+        Result := uAPIRequest.postNaoFiscal(pendentes[indice]);
+      end,
+      aceitos);
+
+    if aceitos.Count = 0 then Exit;
+
+    emTransacaoCurta('NAO_FISCAL', aceitos.Count,
+      function: Integer
+      var
+        j: integer;
+      begin
+        Result := 0;
+        for j := 0 to aceitos.Count - 1 do
+          Inc(Result, encerrarSubidaNaoFiscal(pendentes[aceitos[j]]));
+      end);
+  finally
+    aceitos.Free;
+    pendentes.Free;
+  end;
+end;
+
+function TdmVenda.sincronizaFechamento: Boolean;
+var
+  pendentes: TObjectList<TFechamento>;
+  aceitos: TList<Integer>;
+  oFechamento: TFechamento;
+begin
+  Result := true;
+
+  pendentes := TObjectList<TFechamento>.Create(true);
+  aceitos := TList<Integer>.Create;
+  try
+    prepararSQL(qrFechamentoSincroniza,
+      'SELECT FIRST ' + IntToStr(LOTE_LEITURA) + ' * FROM FECHAMENTO ' +
+      ' WHERE NUVEM = 0 ORDER BY COD_CAIXA, CODIGO');
+
+    uLogErro.Atividade('Procurando pendentes em FECHAMENTO...');
+    qrFechamentoSincroniza.Open;
+    try
+      while not qrFechamentoSincroniza.Eof do
+      begin
+        oFechamento := TFechamento.Create;
+        pendentes.Add(oFechamento);
+
+        with qrFechamentoSincroniza do
+        begin
+          oFechamento.codigo := FieldByName('CODIGO').AsString;
+          oFechamento.operador := FieldByName('OPERADOR').AsString;
+          oFechamento.dataAbertura := FieldByName('DATA_ABERTURA').AsDateTime;
+          oFechamento.dataFechamento := FieldByName('DATA_FECHAMENTO').AsDateTime;
+          oFechamento.horaAbertura := FieldByName('HORA_ABERTURA').AsDateTime;
+          oFechamento.horaFechamento := FieldByName('HORA_FECHAMENTO').AsDateTime;
+          oFechamento.codOperador := FieldByName('COD_OPERADOR').AsInteger;
+          oFechamento.codCaixa := FieldByName('COD_CAIXA').AsInteger;
+
+          oFechamento.vendaBruta := FieldByName('VENDA_BRUTA').AsFloat;
+          oFechamento.cancelamentoCupom := FieldByName('CANCELAMENTO_CUPOM').AsFloat;
+          oFechamento.cancelamentoItem := FieldByName('CANCELAMENTO_ITEM').AsFloat;
+          oFechamento.descontoItem := FieldByName('DESCONTO_ITEM').AsFloat;
+          oFechamento.descontoCupom := FieldByName('DESCONTO_CUPOM').AsFloat;
+          oFechamento.acrescimoCupom := FieldByName('ACRESCIMO_CUPOM').AsFloat;
+          oFechamento.vendaLiquida := FieldByName('VENDA_LIQUIDA').AsFloat;
+          oFechamento.fundoCaixa := FieldByName('FUNDO_CAIXA').AsFloat;
+          oFechamento.sangria := FieldByName('SANGRIA').AsFloat;
+          oFechamento.totais := FieldByName('TOTAIS').AsFloat;
+
+          oFechamento.qtdCuponsEfetivados := FieldByName('QTD_CUPONS_EFETIVADOS').AsInteger;
+          oFechamento.qtdCuponsCancelados := FieldByName('QTD_CUPONS_CANCELADOS').AsInteger;
+
+          Next;
+        end;
+      end;
+    finally
+      qrFechamentoSincroniza.Close;
+    end;
+
+    if pendentes.Count = 0 then Exit;
+
+    Result := enviarPendentes('FECHAMENTO', pendentes.Count,
+      function(confirmados: TList<Integer>): Boolean
+      begin
+        Result := uAPIRequest.postFechamentoLote(pendentes, confirmados);
+      end,
+      function(indice: Integer): Boolean
+      begin
+        Result := uAPIRequest.postFechamento(pendentes[indice]);
+      end,
+      aceitos);
+
+    if aceitos.Count = 0 then Exit;
+
+    emTransacaoCurta('FECHAMENTO', aceitos.Count,
+      function: Integer
+      var
+        j: integer;
+      begin
+        Result := 0;
+        for j := 0 to aceitos.Count - 1 do
+          Inc(Result, encerrarSubidaFechamento(pendentes[aceitos[j]]));
+      end);
+  finally
+    aceitos.Free;
+    pendentes.Free;
+  end;
+end;
+
+function TdmVenda.sincronizaFechamentoForma: boolean;
+var
+  pendentes: TObjectList<TFechamentoFin>;
+  aceitos: TList<Integer>;
+  oFechamentoForma: TFechamentoFin;
+begin
+  Result := true;
+
+  pendentes := TObjectList<TFechamentoFin>.Create(true);
+  aceitos := TList<Integer>.Create;
+  try
+    prepararSQL(qrFechamentoFormaSincroniza,
+      'SELECT FIRST ' + IntToStr(LOTE_LEITURA) + ' * FROM FECHAMENTO_FINALIZADORA ' +
+      ' WHERE NUVEM = 0 ORDER BY COD_CAIXA, ID_FECHAMENTO, FZCOD');
+
+    uLogErro.Atividade('Procurando pendentes em FECHAMENTO_FINALIZADORA...');
+    qrFechamentoFormaSincroniza.Open;
+    try
+      while not qrFechamentoFormaSincroniza.Eof do
+      begin
+        oFechamentoForma := TFechamentoFin.Create;
+        pendentes.Add(oFechamentoForma);
+
+        with qrFechamentoFormaSincroniza do
+        begin
+          oFechamentoForma.id := FieldByName('ID_FECHAMENTO').AsString;
+          oFechamentoForma.Finalizadora := FieldByName('FZCOD').AsString;
+          oFechamentoForma.valorLiquido := FieldByName('VALOR_LIQUIDO').AsFloat;
+          oFechamentoForma.valorEntrada := FieldByName('VALOR_ENTRADA').AsFloat;
+          oFechamentoForma.valorTroco := FieldByName('VALOR_TROCO').AsFloat;
+          oFechamentoForma.valorReforco := FieldByName('VALOR_REFORCO').AsFloat;
+          oFechamentoForma.valorSangria := FieldByName('VALOR_SANGRIA').AsFloat;
+          oFechamentoForma.codCaixa := FieldByName('COD_CAIXA').AsInteger;
+
+          Next;
+        end;
+      end;
+    finally
+      qrFechamentoFormaSincroniza.Close;
+    end;
+
+    if pendentes.Count = 0 then Exit;
+
+    Result := enviarPendentes('FECHAMENTO_FINALIZADORA', pendentes.Count,
+      function(confirmados: TList<Integer>): Boolean
+      begin
+        Result := uAPIRequest.postFechamentoFormaLote(pendentes, confirmados);
+      end,
+      function(indice: Integer): Boolean
+      begin
+        Result := uAPIRequest.postFechamentoForma(pendentes[indice]);
+      end,
+      aceitos);
+
+    if aceitos.Count = 0 then Exit;
+
+    emTransacaoCurta('FECHAMENTO_FINALIZADORA', aceitos.Count,
+      function: Integer
+      var
+        j: integer;
+      begin
+        Result := 0;
+        for j := 0 to aceitos.Count - 1 do
+          Inc(Result, encerrarSubidaFechamentoForma(pendentes[aceitos[j]]));
+      end);
+  finally
+    aceitos.Free;
+    pendentes.Free;
   end;
 end;
 
@@ -610,7 +855,8 @@ end;
 procedure TdmVenda.executaEtapa(const nomeEtapa: string; etapa: TEtapaSincronizacao);
 begin
   try
-    etapa();
+    if not etapa() then
+      FHouveFalha := true;
   except
   on E:Exception do
   begin
@@ -622,8 +868,12 @@ begin
 end;
 
 function TdmVenda.sincronizaVenda: Boolean;
+var
+  inicio: Cardinal;
 begin
 FHouveFalha := false;
+FTeveTrabalho := false;
+inicio := GetTickCount;
 
 executaEtapa('CUPOM', sincronizaCupom);
 executaEtapa('CUPOM_ITEM', sincronizaCupomItem);
@@ -632,6 +882,14 @@ executaEtapa('ESTOQUE_MOVIMENTACAO', sincronizaEstoqueMovimentacao);
 executaEtapa('NAO_FISCAL', sincronizaNaoFiscal);
 executaEtapa('FECHAMENTO', sincronizaFechamento);
 executaEtapa('FECHAMENTO_FINALIZADORA', sincronizaFechamentoForma);
+
+// So conta o ciclo na tela quando houve trabalho: um ciclo vazio a cada 5
+// segundos encheria o memo sem dizer nada.
+if FTeveTrabalho then
+  uLogErro.Progresso(Format('Subida concluida em %.1f s',
+    [(GetTickCount - inicio) / 1000]));
+
+uLogErro.Atividade('');
 
 result := not FHouveFalha;
 end;

@@ -16,5 +16,10 @@ router.post(
   verifyJWT,
   EstoqueController.insertEstoqueMovimentacao
 );
+router.post(
+  "/estoqueMovimentacao/lote",
+  verifyJWT,
+  EstoqueController.insertEstoqueMovimentacaoLote
+);
 
 export default router;

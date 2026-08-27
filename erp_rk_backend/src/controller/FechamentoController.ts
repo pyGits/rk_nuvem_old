@@ -2,6 +2,7 @@ import moment from "moment";
 import { Fechamento, FechamentoForma } from "../models/Fechamento";
 import { Op } from "sequelize";
 import sequelize from "../database/config";
+import { sincronizarLote, validaCorpoLote } from "./sincronizarLote";
 
 export default {
   async getFechamentoFormas(req: any, res: any) {
@@ -234,6 +235,101 @@ export default {
     } catch (error) {
       console.log(error);
       res.status(400).json({ message: "Erro ao tentar gerar relatório" });
+    }
+  },
+
+  // ---------------------------------------------------------------------
+  // Versoes em lote. Mesmas chaves e mesmos campos dos handlers unitarios
+  // acima, que continuam valendo para os agentes ainda nao atualizados.
+  // ---------------------------------------------------------------------
+
+  async InserirFechamentoLote(req: any, res: any) {
+    const { tenant_id } = req;
+    const registros = req.body;
+
+    const invalido = validaCorpoLote(registros);
+    if (invalido) return res.status(400).json({ error: invalido });
+
+    try {
+      const resultado = await sincronizarLote({
+        model: Fechamento,
+        tenant_id,
+        registros,
+        chave: (registro: any) => ({
+          loja: registro.loja,
+          codCaixa: registro.codCaixa,
+          codigo: registro.codigo,
+        }),
+        mapear: (registro: any) => ({
+          dataAbertura: moment(registro.dataAbertura, "DD/MM/YYYY").format("YYYY-MM-DD"),
+          dataFechamento: moment(registro.dataFechamento, "DD/MM/YYYY").format("YYYY-MM-DD"),
+          horaAbertura: moment(registro.horaAbertura, "DD/MM/YYYY HH:mm:ss").format("HH:mm:ss"),
+          horaFechamento: moment(registro.horaFechamento, "DD/MM/YYYY HH:mm:ss").format("HH:mm:ss"),
+          codOperador: registro.codOperador,
+          vendaBruta: registro.vendaBruta,
+          operador: registro.operador,
+          cancelamentoCupom: registro.cancelamentoCupom,
+          cancelamentoItem: registro.cancelamentoItem,
+          descontoItem: registro.descontoItem,
+          descontoCupom: registro.descontoCupom,
+          acrescimoCupom: registro.acrescimoCupom,
+          vendaLiquida: registro.vendaLiquida,
+          fundoCaixa: registro.fundoCaixa,
+          sangria: registro.sangria,
+          totais: registro.totais,
+          tenant_id,
+          loja: registro.loja,
+          codCaixa: registro.codCaixa,
+          codigo: registro.codigo,
+        }),
+      });
+
+      res.status(201).json(resultado);
+    } catch (error) {
+      console.log(error);
+      res.status(400).json({ error });
+    }
+  },
+
+  async InserirFechamentoFormaLote(req: any, res: any) {
+    const { tenant_id } = req;
+    const registros = req.body;
+
+    const invalido = validaCorpoLote(registros);
+    if (invalido) return res.status(400).json({ error: invalido });
+
+    try {
+      const resultado = await sincronizarLote({
+        model: FechamentoForma,
+        tenant_id,
+        registros,
+        // no payload do agente a finalizadora do fechamento chega como `id`
+        chave: (registro: any) => ({
+          loja: registro.loja,
+          codCaixa: registro.codCaixa,
+          idFechamento: registro.id,
+          Finalizadora: registro.Finalizadora,
+        }),
+        mapear: (registro: any) => ({
+          idFechamento: registro.id,
+          Finalizadora: registro.Finalizadora,
+          valorLiquido: registro.valorLiquido,
+          valorEntrada: registro.valorEntrada,
+          valorTroco: registro.valorTroco,
+          valorReforco: registro.valorReforco,
+          valorSangria: registro.valorSangria,
+          valorConferencia: registro.valorConferencia,
+          valorTotal: registro.valorTotal,
+          codCaixa: registro.codCaixa,
+          loja: registro.loja,
+          tenant_id,
+        }),
+      });
+
+      res.status(201).json(resultado);
+    } catch (error) {
+      console.log(error);
+      res.status(400).json({ error });
     }
   },
 };

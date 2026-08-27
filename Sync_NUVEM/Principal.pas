@@ -30,6 +30,13 @@ type
     procedure LogFalha(const contexto, mensagem: string); overload;
     procedure LogFalha(const contexto: string; E: Exception); overload;
 
+    // Recebem o que as camadas de baixo estao fazendo (uLogErro.Progresso e
+    // uLogErro.Atividade) e devolvem o processamento para a janela.
+    procedure MostrarProgresso(const mensagem: string);
+    procedure MostrarAtividade(const mensagem: string);
+    procedure RespirarJanela;
+    procedure ProgressoItem(const etapa: string; indice, total: integer);
+
     function cargaClientes(alterados:boolean):Boolean;
     function cargaProdutos(alterados:boolean):boolean;
     function cargaTributacoes(alterados:boolean):Boolean;
@@ -41,6 +48,11 @@ type
     // A subida dos titulos abre conexao com cada PDV e a conexao e um
     // singleton: dois ciclos ao mesmo tempo brigariam pelo IP.
     subindoContaReceber:Boolean;
+    // Um ciclo de subida de venda que passe do intervalo do timer nao pode
+    // empilhar o proximo em cima das mesmas queries e da mesma conexao.
+    subindoVenda:Boolean;
+    // Idem para a carga, que e a operacao mais longa do agente.
+    carregando:Boolean;
   end;
 
 var
@@ -55,10 +67,78 @@ const
   // etapas reportadas para a nuvem montar a barra de progresso.
   TOTAL_ETAPAS_CARGA = 6;
 
+  // O agente fica dias no ar. Sem teto, o memo cresce ate consumir memoria a
+  // toa; as linhas antigas ja estao no arquivo de log quando importam.
+  MAX_LINHAS_MEMO = 500;
+  LINHAS_MANTIDAS = 200;
+
+  TITULO = 'Sincronizar RK Nuvem';
+
+  // De quantos em quantos registros a carga avisa. Uma linha por registro,
+  // como era antes, deixava o memo com dezenas de milhares de linhas numa
+  // carga completa; e devolver o processamento para a janela a cada registro
+  // custaria mais que a propria gravacao.
+  PASSO_MEMO_CARGA = 250;
+  PASSO_ATIVIDADE_CARGA = 25;
+
 procedure TfrmPrincipal.LogFalha(const contexto, mensagem: string);
 begin
   memLog.Lines.Add('[ERRO] ' + contexto + ': ' + mensagem);
   uLogErro.LogErro(contexto, mensagem);
+end;
+
+// Tudo roda na thread principal. Sem devolver o processamento para a fila de
+// mensagens, a janela nao repinta, nao responde ao clique e o Windows a marca
+// como "nao respondendo" - foi o que apareceu como travamento.
+//
+// Reentrancia: os dois timers ficam desligados durante o ciclo, entao o
+// ProcessMessages so trata mensagem de janela, nunca dispara outro ciclo.
+procedure TfrmPrincipal.RespirarJanela;
+begin
+  Application.ProcessMessages;
+end;
+
+procedure TfrmPrincipal.MostrarProgresso(const mensagem: string);
+var
+  i: integer;
+begin
+  if memLog.Lines.Count > MAX_LINHAS_MEMO then
+  begin
+    memLog.Lines.BeginUpdate;
+    try
+      for i := 1 to memLog.Lines.Count - LINHAS_MANTIDAS do
+        memLog.Lines.Delete(0);
+    finally
+      memLog.Lines.EndUpdate;
+    end;
+  end;
+
+  memLog.Lines.Add('[' + FormatDateTime('hh:nn:ss', Now) + '] ' + mensagem);
+  RespirarJanela;
+end;
+
+// Estado corrente, no titulo da janela e no balao da bandeja: sobrescreve em
+// vez de acumular, entao serve para as esperas em que nada acontece (um SELECT
+// demorado, um CREATE INDEX) sem encher o memo.
+procedure TfrmPrincipal.MostrarAtividade(const mensagem: string);
+begin
+  if mensagem = '' then
+    Caption := TITULO
+  else
+    Caption := TITULO + ' - ' + mensagem;
+
+  TrayIcon1.Hint := Caption;
+  RespirarJanela;
+end;
+
+// Andamento de um laco de carga. O registro corrente vai para o titulo e, de
+// tempos em tempos, uma linha resumida vai para o memo.
+procedure TfrmPrincipal.ProgressoItem(const etapa: string; indice, total: integer);
+begin
+  if (indice = total - 1) or ((((indice + 1) mod PASSO_MEMO_CARGA) = 0)) then
+    MostrarProgresso(Format('   %s: %d de %d', [etapa, indice + 1, total]))
+  else if (((indice + 1) mod PASSO_ATIVIDADE_CARGA) = 0) then
+    MostrarAtividade(Format('%s: %d de %d...', [etapa, indice + 1, total]));
 end;
 
 procedure TfrmPrincipal.LogFalha(const contexto: string; E: Exception);
@@ -79,19 +159,22 @@ var
   i,x:integer;
 begin
 try
-  clienteList := TStringList.Create;
   clienteList := uAPIRequest.getClientes(alterados);
 
+  // Criados uma vez, fora dos lacos: um datamodule por registro deixava
+  // milhares de conexoes de banco abertas ate a carga terminar, e era isso
+  // que derrubava a carga completa em base grande.
+  uDmCliente := TDMCliente.Create(nil);
+  try
   for I := 0 to clienteList.Count -1 do
   begin
     try
-      uDmCliente := TDMCliente.Create(nil);
       cliente := TCliente.Create;
       cliente := cliente.JsonToCliente(clienteList[I]);
       uDmCliente.InsertCliente(cliente);
 
 
-      memLog.Lines.Add('Atualizando Cliente: '+cliente.codigo + ' - '+ cliente.nome);
+      ProgressoItem('CLIENTES', I, clienteList.Count);
     except
     on E:Exception do
     begin
@@ -102,7 +185,11 @@ try
 
     end;
   end;
-  memLog.Lines.Add('Clientes sincronizados...');
+  finally
+    uDmCliente.Free;
+    clienteList.Free;
+  end;
+  MostrarProgresso('Clientes sincronizados...');
 
   except
   on E:Exception do
@@ -125,17 +212,21 @@ var
   i,x:integer;
 begin
 try
-  finalizadoraList := TStringList.Create;
   finalizadoraList := uAPIRequest.getFinalizadoras(alterados);
 
+  // Criados uma vez, fora dos lacos: um datamodule por registro deixava
+  // milhares de conexoes de banco abertas ate a carga terminar, e era isso
+  // que derrubava a carga completa em base grande.
+  uDmFinalizadora := TdmFinalizadora.Create(nil);
+  dmConexaoPDV := TuDmConexaoPDV.Create(nil);
+  try
   for I := 0 to finalizadoraList.Count -1 do
   begin
     try
-      uDmFinalizadora := TdmFinalizadora.Create(nil);
       finalizadora := TFinalizadora.Create;
       finalizadora := finalizadora.JsonToFinalizadora(finalizadoraList[I]);
       uDmFinalizadora.InsertFinalizadora(finalizadora);
-      memLog.Lines.Add('Atualizando Finalizadora: '+finalizadora.codigo + ' - '+ finalizadora.nome);
+      ProgressoItem('FINALIZADORAS', I, finalizadoraList.Count);
 
 
 
@@ -143,7 +234,6 @@ try
       for X := 0 to caixaList.Count -1 do
       begin
         try
-          dmConexaoPDV := TuDmConexaoPDV.Create(nil);
           dmConexaoPDV.configurarIP(caixaList[X]);
 
           dmFinalizadoraPDV.insertFinalizadoraPDV(finalizadora);
@@ -170,7 +260,12 @@ try
 
     end;
   end;
-  memLog.Lines.Add('Finalizadoras sincronizadas...');
+  finally
+    dmConexaoPDV.Free;
+    uDmFinalizadora.Free;
+    finalizadoraList.Free;
+  end;
+  MostrarProgresso('Finalizadoras sincronizadas...');
 
   except
   on E:Exception do
@@ -193,17 +288,21 @@ var
   i,x:integer;
 begin
 try
-  funcionarioList := TStringList.Create;
   funcionarioList := uAPIRequest.getFuncionarios(alterados);
 
+  // Criados uma vez, fora dos lacos: um datamodule por registro deixava
+  // milhares de conexoes de banco abertas ate a carga terminar, e era isso
+  // que derrubava a carga completa em base grande.
+  uDmFuncionario := TDmFuncionario.Create(nil);
+  dmConexaoPDV := TuDmConexaoPDV.Create(nil);
+  try
   for I := 0 to funcionarioList.Count -1 do
   begin
     try
-      uDmFuncionario := TDmFuncionario.Create(nil);
       funcionario := TFuncionario.Create;
       funcionario := funcionario.JsonToFuncionario(funcionarioList[I]);
       uDmFuncionario.InsertFuncionario(funcionario);
-      memLog.Lines.Add('Atualizando Funcionario: '+funcionario.codigo + ' - '+ funcionario.nome);
+      ProgressoItem('FUNCIONARIOS', I, funcionarioList.Count);
 
 
 
@@ -211,7 +310,6 @@ try
       for X := 0 to caixaList.Count -1 do
       begin
         try
-          dmConexaoPDV := TuDmConexaoPDV.Create(nil);
           dmConexaoPDV.configurarIP(caixaList[X]);
 
           dmFuncionarioPDV.insertFuncionarioPDV(funcionario);
@@ -238,7 +336,12 @@ try
 
     end;
   end;
-  memLog.Lines.Add('Funcionarios sincronizados...');
+  finally
+    dmConexaoPDV.Free;
+    uDmFuncionario.Free;
+    funcionarioList.Free;
+  end;
+  MostrarProgresso('Funcionarios sincronizados...');
 
   except
   on E:Exception do
@@ -268,7 +371,6 @@ var
   i,x:integer;
 begin
 try
-  produtoList := TStringList.Create;
   produtoList := uAPIRequest.getProdutos(alterados);
 
   listProd := TObjectList<TProduto>.create;
@@ -288,7 +390,10 @@ try
       end;
 
       if Assigned(produtoConvertido) then
-        listProd.Add(produtoConvertido)
+      begin
+        listProd.Add(produtoConvertido);
+        ProgressoItem('PRODUTOS lidos', I, produtoList.Count);
+      end
       else
         LogFalha('CARGA_PRODUTO',
           Format('Registro %d ignorado: json invalido | json: %s',
@@ -308,15 +413,19 @@ try
 
   end;
 
+  MostrarProgresso(Format('PRODUTOS: gravando %d no retaguarda...', [listProd.Count]));
   dmProduto := TdmProduto.Create(nil);
   dmProduto.InsertProdutoBulk(listProd);
 
 
+      dmConexaoPDV := TuDmConexaoPDV.Create(nil);
+      dmProdutoPDV := TdmProdutoPDV.Create(nil);
+      try
       for X := 0 to caixaList.Count -1 do
       begin
         try
-          dmConexaoPDV := TuDmConexaoPDV.Create(nil);
-          dmProdutoPDV := TdmProdutoPDV.Create(nil);
+          MostrarProgresso(Format('PRODUTOS: enviando para o caixa %s (%d de %d)...',
+            [caixaList[X], X + 1, caixaList.Count]));
           dmConexaoPDV.configurarIP(caixaList[X]);
           dmProdutoPDV.insertProdutoPDV(listProd);
         except
@@ -328,9 +437,15 @@ try
 
         end;
       end;
+      finally
+        dmProdutoPDV.Free;
+        dmConexaoPDV.Free;
+        dmProduto.Free;
+        produtoList.Free;
+        listProd.Free;
+      end;
 
-  memLog.Lines.Add('Produtos sincronizados com o Retaguarda... Sincronizando com PDV');
-  memLog.Lines.Add('Produtos sincronizados com o Retaguarda...');
+  MostrarProgresso('PRODUTOS: concluido');
 
 
 
@@ -356,17 +471,21 @@ var
   i,x:integer;
 begin
 try
-  tributacaoList := TStringList.Create;
   tributacaoList := uAPIRequest.getTributacoes(alterados);
 
+  // Criados uma vez, fora dos lacos: um datamodule por registro deixava
+  // milhares de conexoes de banco abertas ate a carga terminar, e era isso
+  // que derrubava a carga completa em base grande.
+  uDmTributacao := TdmTributacao.Create(nil);
+  dmConexaoPDV := TuDmConexaoPDV.Create(nil);
+  try
   for I := 0 to tributacaoList.Count -1 do
   begin
     try
-      uDmTributacao := TdmTributacao.Create(nil);
       tributacao := TTributacao.Create;
       tributacao := tributacao.JsonToTributacao(tributacaoList[I]);
       uDmTributacao.InsertTributacao(tributacao);
-      memLog.Lines.Add('Atualizando Tributa��o: '+tributacao.codigo + ' - '+ tributacao.nome);
+      ProgressoItem('TRIBUTACOES', I, tributacaoList.Count);
 
 
 
@@ -374,7 +493,6 @@ try
       for X := 0 to caixaList.Count -1 do
       begin
         try
-          dmConexaoPDV := TuDmConexaoPDV.Create(nil);
           dmConexaoPDV.configurarIP(caixaList[X]);
 
           dmTributacaoPDV.insertTributacaoPDV(tributacao);
@@ -401,10 +519,12 @@ try
 
     end;
   end;
-
-//  produto.Free;
-//  produtoList.free;
-  memLog.Lines.Add('Tributa��es sincronizadas...');
+  finally
+    dmConexaoPDV.Free;
+    uDmTributacao.Free;
+    tributacaoList.Free;
+  end;
+  MostrarProgresso('TRIBUTACOES: concluido');
 
   except
   on E:Exception do
@@ -429,6 +549,20 @@ end;
 
 procedure TfrmPrincipal.FormShow(Sender: TObject);
 begin
+// Liga a tela nas camadas de baixo antes de qualquer trabalho comecar, senao
+// a primeira coisa que demora (a criacao dos indices) roda sem dar sinal.
+uLogErro.OnProgresso :=
+  procedure(mensagem: string)
+  begin
+    MostrarProgresso(mensagem);
+  end;
+
+uLogErro.OnAtividade :=
+  procedure(mensagem: string)
+  begin
+    MostrarAtividade(mensagem);
+  end;
+
 tmInicializa.Enabled := true;
 end;
 
@@ -441,6 +575,15 @@ procedure TfrmPrincipal.tmCargaTimer(Sender: TObject);
 var
   solicitacao:string;
 begin
+// A carga e a operacao mais longa do agente e passa de longe do intervalo do
+// timer. Sem o guarda, e agora que ela devolve o processamento para a janela,
+// um segundo tique entraria por cima do primeiro usando as mesmas conexoes.
+if carregando then Exit;
+
+carregando := true;
+tmCarga.Enabled := false;
+tmSubidaVenda.Enabled := false;
+try
 try
   solicitacao := uAPIRequest.verificaCargaPendente;
 
@@ -521,6 +664,12 @@ try
   end;
 
 end;
+finally
+  carregando := false;
+  MostrarAtividade('');
+  tmSubidaVenda.Enabled := true;
+  tmCarga.Enabled := true;
+end;
 end;
 
 procedure TfrmPrincipal.tmInicializaTimer(Sender: TObject);
@@ -565,6 +714,8 @@ begin
   end;
 
 
+  MostrarAtividade('Inicializando...');
+
   memLog.Lines.Add('Inicializado, Loja: '+ codLoja + ' - ' + nomeLoja);
   memLog.Lines.Add('Aguardando Solicita��o de carga');
   memLog.Lines.Add('Carregando lista de caixas ...');
@@ -584,6 +735,17 @@ begin
   if not Assigned(caixaList) then
     caixaList := TStringList.Create;
 
+  // Sem indice em NUVEM cada ciclo da subida varre as tabelas de venda
+  // inteiras. Idempotente: so cria o que ainda nao existe.
+  try
+    Global.IndicesNuvem.garantirIndices;
+  except
+  on E:Exception do
+    LogFalha('INDICES_NUVEM', E);
+  end;
+
+  MostrarAtividade('');
+
 
 if primeiraInicializacao = false then
   begin
@@ -599,33 +761,49 @@ end;
 
 procedure TfrmPrincipal.tmSubidaVendaTimer(Sender: TObject);
 begin
-//tmSubidaVenda.Enabled := false;
+// Um backlog grande faz o ciclo passar do intervalo do timer. Sem esse guarda
+// o proximo tick entraria em cima das mesmas queries e da mesma conexao.
+if subindoVenda then Exit;
+
+subindoVenda := true;
+// Enquanto o ciclo roda ele chama Application.ProcessMessages para a janela
+// continuar respondendo, e ai os timers voltariam a disparar de dentro do
+// proprio ciclo. Desligados, o ProcessMessages so trata mensagem de janela.
+tmSubidaVenda.Enabled := false;
+tmCarga.Enabled := false;
 try
-  if not uDmVenda.dmVenda.sincronizaVenda then
-    memLog.Lines.Add('[ERRO] Subida de vendas com falhas - ver ' + uLogErro.ArquivoLogErro);
+  try
+    if not uDmVenda.dmVenda.sincronizaVenda then
+      memLog.Lines.Add('[ERRO] Subida de vendas com falhas - ver ' + uLogErro.ArquivoLogErro);
 
-  // Titulo de convenio nao passa pela retaguarda: e lido direto do banco de
-  // cada PDV, entao fica fora do sincronizaVenda, que so conhece o banco.fdb.
-  if not subindoContaReceber then
-  begin
-    subindoContaReceber := true;
-    try
+    // Titulo de convenio nao passa pela retaguarda: e lido direto do banco de
+    // cada PDV, entao fica fora do sincronizaVenda, que so conhece o banco.fdb.
+    if not subindoContaReceber then
+    begin
+      subindoContaReceber := true;
       try
-        Global.SubidaContaReceberUseCase.Executar;
-      except
-      on E:Exception do
-        LogFalha('SUBIDA_CONTA_RECEBER', E);
+        try
+          Global.SubidaContaReceberUseCase.Executar;
+        except
+        on E:Exception do
+          LogFalha('SUBIDA_CONTA_RECEBER', E);
+        end;
+      finally
+        subindoContaReceber := false;
       end;
-    finally
-      subindoContaReceber := false;
     end;
+  except
+  on E:Exception do
+  begin
+    LogFalha('TIMER_SUBIDA_VENDA', E);
   end;
-except
-on E:Exception do
-begin
-  LogFalha('TIMER_SUBIDA_VENDA', E);
-end;
 
+  end;
+finally
+  subindoVenda := false;
+  uLogErro.Atividade('');
+  tmCarga.Enabled := true;
+  tmSubidaVenda.Enabled := true;
 end;
 end;
 

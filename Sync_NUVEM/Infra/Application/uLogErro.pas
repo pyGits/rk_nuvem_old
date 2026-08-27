@@ -25,6 +25,25 @@ procedure LogErro(const contexto: string; E: Exception); overload;
 function PastaLogErro: string;
 function ArquivoLogErro: string;
 
+// O que esta rodando agora, para a tela - nao vai para o arquivo.
+//
+// O agente faz tudo na thread principal, entao uma carga grande, um lote de
+// venda ou um CREATE INDEX numa tabela com anos de movimento deixam a janela
+// parada por minutos, e sem nada escrito ela parece travada.
+//
+// Sao dois canais para o memo nao virar ruido: Progresso registra o que
+// aconteceu (linha nova no memo, so quando ha o que contar) e Atividade diz
+// onde o agente esta agora (sobrescreve o titulo da janela, inclusive nas
+// esperas em que nada acontece). Quem atribui os dois e o Principal, que
+// aproveita para processar as mensagens da janela; enquanto ninguem atribuir,
+// as duas nao fazem nada.
+procedure Progresso(const mensagem: string);
+procedure Atividade(const mensagem: string);
+
+var
+  OnProgresso: TProc<string> = nil;
+  OnAtividade: TProc<string> = nil;
+
 implementation
 
 var
@@ -146,6 +165,30 @@ begin
     LogErro(contexto, E.ClassName + ': ' + E.Message)
   else
     LogErro(contexto, 'Erro desconhecido');
+end;
+
+procedure Progresso(const mensagem: string);
+begin
+  if not Assigned(OnProgresso) then
+    Exit;
+
+  try
+    OnProgresso(mensagem);
+  except
+    // avisar a tela nunca pode derrubar a sincronizacao
+  end;
+end;
+
+procedure Atividade(const mensagem: string);
+begin
+  if not Assigned(OnAtividade) then
+    Exit;
+
+  try
+    OnAtividade(mensagem);
+  except
+    // idem
+  end;
 end;
 
 initialization

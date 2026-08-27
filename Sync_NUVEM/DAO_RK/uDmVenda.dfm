@@ -4,42 +4,72 @@ object dmVenda: TdmVenda
   Width = 447
   object qrCupomSincroniza: TUniQuery
     Connection = dmConexao.ConexaoServer
-    Left = 144
-    Top = 80
+    Left = 40
+    Top = 16
   end
   object qrCupomUpdate: TUniQuery
     Connection = dmConexao.ConexaoServer
-    Left = 216
-    Top = 8
+    Left = 136
+    Top = 16
+  end
+  object qrCupomItemSincroniza: TUniQuery
+    Connection = dmConexao.ConexaoServer
+    Left = 40
+    Top = 64
   end
   object qrCupomItemUpdate: TUniQuery
     Connection = dmConexao.ConexaoServer
-    Left = 248
-    Top = 96
+    Left = 136
+    Top = 64
+  end
+  object qrCupomFormaSincroniza: TUniQuery
+    Connection = dmConexao.ConexaoServer
+    Left = 40
+    Top = 112
   end
   object qrCupomFormaUpdate: TUniQuery
     Connection = dmConexao.ConexaoServer
-    Left = 56
-    Top = 56
+    Left = 136
+    Top = 112
+  end
+  object qrEstoqueSincroniza: TUniQuery
+    Connection = dmConexao.ConexaoServer
+    Left = 40
+    Top = 160
+  end
+  object qrEstoqueUpdate: TUniQuery
+    Connection = dmConexao.ConexaoServer
+    Left = 136
+    Top = 160
   end
   object qrNaoFiscalSincroniza: TUniQuery
     Connection = dmConexao.ConexaoServer
-    Left = 80
-    Top = 216
+    Left = 40
+    Top = 208
   end
   object qrNaoFiscalUpdate: TUniQuery
     Connection = dmConexao.ConexaoServer
-    Left = 128
-    Top = 216
+    Left = 136
+    Top = 208
   end
   object qrFechamentoSincroniza: TUniQuery
     Connection = dmConexao.ConexaoServer
-    Left = 72
-    Top = 280
+    Left = 40
+    Top = 256
   end
   object qrFechamentoUpdate: TUniQuery
     Connection = dmConexao.ConexaoServer
-    Left = 160
-    Top = 280
+    Left = 136
+    Top = 256
+  end
+  object qrFechamentoFormaSincroniza: TUniQuery
+    Connection = dmConexao.ConexaoServer
+    Left = 264
+    Top = 256
+  end
+  object qrFechamentoFormaUpdate: TUniQuery
+    Connection = dmConexao.ConexaoServer
+    Left = 360
+    Top = 256
   end
 end

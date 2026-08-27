@@ -41,10 +41,22 @@ begin
     for caixa in caixas do
     begin
       try
+        // um caixa fora do ar demora ate o timeout da conexao: sem isso o
+        // agente parece parado justamente na espera mais longa do ciclo
+        uLogErro.Atividade(Format('Lendo convenio do caixa %s (%s)...', [caixa.codigo, caixa.ip]));
+
         FContaReceberPDVRepository.garantirColunaNuvem(caixa);
 
         titulos := FContaReceberPDVRepository.getPendentes(caixa);
         try
+          if titulos.Count > 0 then
+          begin
+            uLogErro.Progresso(Format('CONTA_RECEBER: %d titulo(s) no caixa %s',
+              [titulos.Count, caixa.codigo]));
+            uLogErro.Atividade(Format('Enviando convenio do caixa %s (%d)...',
+              [caixa.codigo, titulos.Count]));
+          end;
+
           for titulo in titulos do
           begin
             // cupom orfao (sem o cabecalho gravado) nao tem COD_CAIXA: usa o

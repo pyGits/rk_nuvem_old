@@ -10,6 +10,17 @@ router.post(
   FechamentoController.InserirFechamentoForma
 );
 
+router.post(
+  "/fechamento/lote",
+  verifyJWT,
+  FechamentoController.InserirFechamentoLote
+);
+router.post(
+  "/fechamentoForma/lote",
+  verifyJWT,
+  FechamentoController.InserirFechamentoFormaLote
+);
+
 router.get("/fechamento", verifyJWT, FechamentoController.getFechamentos);
 router.get(
   "/fechamento-formas",

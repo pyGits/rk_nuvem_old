@@ -5,6 +5,7 @@ import NaoFiscalController from "../controller/NaoFiscalController";
 const router = Router();
 
 router.post("/naoFiscal", verifyJWT, NaoFiscalController.InserirNaoFiscal);
+router.post("/naoFiscal/lote", verifyJWT, NaoFiscalController.InserirNaoFiscalLote);
 router.get("/reforcos", verifyJWT, NaoFiscalController.getReforcos);
 router.get("/sangrias", verifyJWT, NaoFiscalController.getSangrias);
 

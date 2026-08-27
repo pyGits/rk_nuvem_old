@@ -50,7 +50,8 @@ uses
   uConexaoPDV in 'Infra\Repository\PDV\uConexaoPDV.pas',
   ContaReceber in 'Classes_RK\ContaReceber.pas',
   ContaReceberPDVRepository in 'Infra\Repository\PDV\ContaReceberPDVRepository.pas',
-  SubidaContaReceberUseCase in 'Infra\UseCase\SubidaContaReceberUseCase.pas';
+  SubidaContaReceberUseCase in 'Infra\UseCase\SubidaContaReceberUseCase.pas',
+  IndicesNuvemRepository in 'Infra\Repository\Retaguarda\IndicesNuvemRepository.pas';
 
 {$R *.res}
  var

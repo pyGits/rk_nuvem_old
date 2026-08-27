@@ -4,6 +4,7 @@ import Funcionario from "../models/Funcionario";
 import Finalizadora from "../models/Finalizadora";
 import Loja from "../models/Loja";
 import { Op } from "sequelize";
+import { sincronizarLote, validaCorpoLote } from "./sincronizarLote";
 export default {
   async getSangrias(req: any, res: any) {
     const { tenant_id } = req;
@@ -143,6 +144,48 @@ export default {
       }
 
       res.status(201).json({ message: "SINCRONIZADO" });
+    } catch (error) {
+      console.log(error);
+      res.status(400).json({ error });
+    }
+  },
+
+  // Versao em lote do InserirNaoFiscal. Mesma chave (tenant_id, loja, caixa,
+  // codigo) e mesmos campos; o handler unitario acima segue intacto para os
+  // agentes ainda nao atualizados.
+  async InserirNaoFiscalLote(req: any, res: any) {
+    const { tenant_id } = req;
+    const registros = req.body;
+
+    const invalido = validaCorpoLote(registros);
+    if (invalido) return res.status(400).json({ error: invalido });
+
+    try {
+      const resultado = await sincronizarLote({
+        model: NaoFiscal,
+        tenant_id,
+        registros,
+        chave: (registro: any) => ({
+          loja: registro.loja,
+          caixa: registro.caixa,
+          codigo: registro.codigo,
+        }),
+        mapear: (registro: any) => ({
+          codigo: registro.codigo,
+          data: moment(registro.data, "DD/MM/YYYY").format("YYYY-MM-DD"),
+          indice: registro.indice,
+          Descricao: registro.Descricao,
+          Valor: registro.Valor,
+          Hora: registro.Hora,
+          Vendedor: registro.Vendedor,
+          fzcod: registro.fzcod,
+          caixa: registro.caixa,
+          loja: registro.loja,
+          tenant_id,
+        }),
+      });
+
+      res.status(201).json(resultado);
     } catch (error) {
       console.log(error);
       res.status(400).json({ error });
