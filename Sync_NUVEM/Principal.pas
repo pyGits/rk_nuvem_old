@@ -91,8 +91,10 @@ end;
 // mensagens, a janela nao repinta, nao responde ao clique e o Windows a marca
 // como "nao respondendo" - foi o que apareceu como travamento.
 //
-// Reentrancia: os dois timers ficam desligados durante o ciclo, entao o
-// ProcessMessages so trata mensagem de janela, nunca dispara outro ciclo.
+// Reentrancia: quem chama isto ja esta dentro de um ciclo com a flag ligada
+// (subindoVenda ou carregando), e os dois handlers de timer conferem as duas
+// flags antes de comecar. O ProcessMessages ate deixa o tique chegar, mas ele
+// sai na primeira linha sem entrar no ciclo.
 procedure TfrmPrincipal.RespirarJanela;
 begin
   Application.ProcessMessages;
@@ -578,11 +580,16 @@ begin
 // A carga e a operacao mais longa do agente e passa de longe do intervalo do
 // timer. Sem o guarda, e agora que ela devolve o processamento para a janela,
 // um segundo tique entraria por cima do primeiro usando as mesmas conexoes.
-if carregando then Exit;
+//
+// O guarda tem que ser por flag. Desligar o timer do outro ciclo parece mais
+// seguro mas mata a carga: religar um TTimer chama KillTimer + SetTimer, o que
+// reinicia a contagem do zero e descarta o WM_TIMER que ja estava na fila.
+// Como os dois timers sao de 5 s e a subida roda a cada 5 s gastando alguns
+// segundos, ela zerava o relogio da carga a cada ciclo e a carga nunca
+// chegava a disparar - a nuvem ficava em "aguardando sync" para sempre.
+if carregando or subindoVenda then Exit;
 
 carregando := true;
-tmCarga.Enabled := false;
-tmSubidaVenda.Enabled := false;
 try
 try
   solicitacao := uAPIRequest.verificaCargaPendente;
@@ -667,8 +674,6 @@ end;
 finally
   carregando := false;
   MostrarAtividade('');
-  tmSubidaVenda.Enabled := true;
-  tmCarga.Enabled := true;
 end;
 end;
 
@@ -763,14 +768,13 @@ procedure TfrmPrincipal.tmSubidaVendaTimer(Sender: TObject);
 begin
 // Um backlog grande faz o ciclo passar do intervalo do timer. Sem esse guarda
 // o proximo tick entraria em cima das mesmas queries e da mesma conexao.
-if subindoVenda then Exit;
+//
+// Confere tambem "carregando" porque durante a carga este ciclo nao pode
+// entrar - e por flag, nunca desligando tmCarga, que era o que impedia a
+// carga de disparar (ver o comentario em tmCargaTimer).
+if subindoVenda or carregando then Exit;
 
 subindoVenda := true;
-// Enquanto o ciclo roda ele chama Application.ProcessMessages para a janela
-// continuar respondendo, e ai os timers voltariam a disparar de dentro do
-// proprio ciclo. Desligados, o ProcessMessages so trata mensagem de janela.
-tmSubidaVenda.Enabled := false;
-tmCarga.Enabled := false;
 try
   try
     if not uDmVenda.dmVenda.sincronizaVenda then
@@ -802,8 +806,6 @@ try
 finally
   subindoVenda := false;
   uLogErro.Atividade('');
-  tmCarga.Enabled := true;
-  tmSubidaVenda.Enabled := true;
 end;
 end;
 

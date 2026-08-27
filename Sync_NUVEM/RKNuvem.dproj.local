@@ -122,6 +122,7 @@
     <File Path="Classes_RK\NaoFiscal.pas"/>
     <File Path="Classes_RK\Fechamento.pas"/>
     <File Path="Classes_RK\Cliente.pas"/>
+    <File Path="Classes_RK\ContaReceber.pas"/>
     <File Path="Classes_Varejo"/>
     <File Path="Classes_Varejo\Loja.pas"/>
     <File Path="DAO_RK"/>
@@ -172,11 +173,14 @@
     <File Path="Infra\Repository\PDV"/>
     <File Path="Infra\Repository\PDV\ClientePDVRepository.pas"/>
     <File Path="Infra\Repository\PDV\uConexaoPDV.pas"/>
+    <File Path="Infra\Repository\PDV\ContaReceberPDVRepository.pas"/>
     <File Path="Infra\Repository\Retaguarda"/>
     <File Path="Infra\Repository\Retaguarda\CaixaRepository.pas"/>
     <File Path="Infra\Repository\Retaguarda\uConexaoRetaguarda.pas"/>
+    <File Path="Infra\Repository\Retaguarda\IndicesNuvemRepository.pas"/>
     <File Path="Infra\UseCase"/>
     <File Path="Infra\UseCase\CargaPDVUseCase.pas"/>
+    <File Path="Infra\UseCase\SubidaContaReceberUseCase.pas"/>
     <File Path="Login.pas"/>
     <File Path="Login.dfm"/>
     <File Path="Principal.pas"/>

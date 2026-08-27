@@ -42,6 +42,7 @@ function solicitaCarga(tenant_id: number, lojas: any[], carga: "COMPLETA" | "ALT
     const pendente = achaCarga(tenant_id, codigo);
 
     if (!pendente) {
+      console.log(`[CARGA] pedida ${carga} tenant=${tenant_id} loja="${codigo}"`);
       cargaList.push({
         tenant_id,
         codigo,
@@ -59,7 +60,18 @@ function solicitaCarga(tenant_id: number, lojas: any[], carga: "COMPLETA" | "ALT
     // nao comecou, senao a carga em andamento seria trocada no meio.
     if (pendente.status === "PENDENTE" && carga === "COMPLETA") {
       pendente.carga = "COMPLETA";
+      console.log(`[CARGA] promovida para COMPLETA tenant=${tenant_id} loja="${codigo}"`);
+      return;
     }
+
+    // Entrada presa em EM_ANDAMENTO (sync caiu sem chamar finalizaCarga)
+    // engole o pedido novo sem nenhum sinal, e o usuario fica clicando em
+    // "carga completa" sem efeito ate os 30 min do TEMPO_MAX_EM_ANDAMENTO.
+    const espera = Math.max(0, TEMPO_MAX_EM_ANDAMENTO - (Date.now() - (pendente.iniciadaEm ?? 0)));
+    console.log(
+      `[CARGA] pedido IGNORADO tenant=${tenant_id} loja="${codigo}" ` +
+        `ja existe ${pendente.carga}/${pendente.status}, liberada em ${Math.round(espera / 1000)}s`
+    );
   });
 }
 
@@ -158,8 +170,21 @@ export default {
         Date.now() - (pendente.iniciadaEm ?? 0) > TEMPO_MAX_EM_ANDAMENTO);
 
     if (!pendente || !podeEnviar) {
+      // Sem isto, "o sync nunca recebe a carga" e indistinguivel de "ninguem
+      // pediu carga" e de "o codigo de loja que o sync pergunta nao e o mesmo
+      // que o front gravou na lista".
+      console.log(
+        `[CARGA] consulta tenant=${tenant_id} loja="${loja}" -> CARGA_NADA ` +
+          (pendente
+            ? `(existe ${pendente.carga}/${pendente.status})`
+            : `(nenhuma pedida; na lista: ${JSON.stringify(
+                cargaList.map((c) => ({ tenant: c.tenant_id, loja: c.codigo, status: c.status }))
+              )})`)
+      );
       return res.status(200).json({ message: "CARGA_NADA" });
     }
+
+    console.log(`[CARGA] consulta tenant=${tenant_id} loja="${loja}" -> ${pendente.carga}`);
 
     // A entrada so sai da lista quando o sync avisa que terminou
     // (finalizaCarga), para o front conseguir mostrar a carga em andamento.

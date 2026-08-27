@@ -85,6 +85,14 @@ var
   // seriam sete requisicoes inuteis a cada ciclo do timer.
   FSemRotaDeLote: Boolean = false;
 
+  // Ultima falha mostrada na tela pela consulta de carga, para nao repetir a
+  // mesma linha no memo a cada tique do timer.
+  FUltimaFalhaCarga: string = '';
+
+  // Idem para a resposta: o memo mostra a consulta de carga so quando ela muda
+  // de resposta, senao seriam doze linhas por minuto sem nenhuma informacao.
+  FUltimaRespostaCarga: string = '';
+
 function ObterCliente: TIdHTTP;
 var
   IdSSL: TIdSSLIOHandlerSocketOpenSSL;
@@ -363,18 +371,49 @@ end;
 function verificaCargaPendente:string;
 var
   jsonResponse:string;
+  resposta:string;
 begin
   try
     result := '';
-    jsonResponse := APIGet('/carga/'+codLoja);
-    jsonResponse := uJsonUtils.GetJsonValue(jsonResponse,'message');
+    resposta := APIGet('/carga/'+codLoja);
+    jsonResponse := uJsonUtils.GetJsonValue(resposta,'message');
     result := jsonResponse;
+
+    // Mostra a loja consultada junto da resposta crua. A pergunta e feita por
+    // codigo de loja e o servidor procura a carga por esse mesmo codigo: se os
+    // dois nao baterem o resultado e um CARGA_NADA eterno, indistinguivel de
+    // "nao ha carga pedida" - e sem ver o codigo nao da para saber qual dos
+    // dois esta acontecendo.
+    if FUltimaRespostaCarga <> resposta then
+    begin
+      FUltimaRespostaCarga := resposta;
+      uLogErro.Progresso(Format('Consulta de carga (loja %s): %s',
+        [codLoja, resposta]));
+    end;
+
+    if FUltimaFalhaCarga <> '' then
+    begin
+      FUltimaFalhaCarga := '';
+      uLogErro.Progresso('Consulta de carga voltou a responder.');
+    end;
   except
   on E:Exception do
   begin
     result := '';
     uLogErro.LogErro('VERIFICA_CARGA_PENDENTE',
       'Loja ' + codLoja + ' | ' + DescreveErro(E));
+
+    // So no arquivo de log a falha passava despercebida: na tela o agente
+    // parecia saudavel (subindo venda normalmente) enquanto a nuvem esperava
+    // uma carga que nunca era buscada. Avisa so na mudanca de estado, senao
+    // encheria o memo a cada tique.
+    if FUltimaFalhaCarga <> E.Message then
+    begin
+      FUltimaFalhaCarga := E.Message;
+      FUltimaRespostaCarga := '';
+      uLogErro.Progresso('[ERRO] consulta de carga (loja ' + codLoja + '): ' +
+        E.Message);
+    end;
   end;
 
   end;
