@@ -20,11 +20,16 @@ import { QueryTypes } from "sequelize";
 
 const URL_CCG = process.env.SEFAZ_GTIN_URL || "https://dfe-servico.svrs.rs.gov.br/ws/ccgConsGTIN/ccgConsGTIN.asmx";
 
-// Namespace do wsdl. Sobreponivel por .env pelo mesmo motivo do GEMINI_MODEL:
-// se a SEFAZ publicar outro, corrigir nao pode depender de deploy. O WSDL nao e
-// baixavel sem certificado (responde 403), entao este valor segue o padrao dos
-// demais servicos da NF-e e deve ser confirmado no primeiro uso real.
-const NS_WSDL = process.env.SEFAZ_GTIN_NS || "http://www.portalfiscal.inf.br/nfe/wsdl/CCGConsGTIN";
+// Namespace e action lidos do WSDL real (baixavel apenas com certificado, o que
+// so foi possivel depois do upload no painel). A grafia importa e nao segue o
+// nome do arquivo .asmx: e "ccgConsGtin" no namespace, mas "ccgConsGTIN" no
+// sufixo do action e no elemento. Errar a caixa devolve 500 com
+// "The action ... was not recognized".
+//
+// Sobreponiveis por .env pelo mesmo motivo do GEMINI_MODEL: se a SEFAZ publicar
+// outro, corrigir nao pode depender de deploy.
+const NS_WSDL = process.env.SEFAZ_GTIN_NS || "http://www.portalfiscal.inf.br/nfe/wsdl/ccgConsGtin";
+const ACTION = process.env.SEFAZ_GTIN_ACTION || `${NS_WSDL}/ccgConsGTIN`;
 const NS_NFE = "http://www.portalfiscal.inf.br/nfe";
 
 const CSTAT_SUCESSO = "9490";
@@ -122,17 +127,37 @@ export async function certificadoDisponivel(): Promise<CertificadoLoja | null> {
   };
 }
 
+// O corpo e ccgConsGTIN > nfeDadosMsg > consGTIN, conforme o schema do WSDL.
+// Sem o nfeDadosMsg no meio o servico responde 200 com corpo VAZIO - sem erro e
+// sem dado, que e o pior tipo de falha: parece funcionar.
 function envelope(gtin: string): string {
   return (
     '<?xml version="1.0" encoding="utf-8"?>' +
     '<soap12:Envelope xmlns:soap12="http://www.w3.org/2003/05/soap-envelope">' +
     "<soap12:Body>" +
-    `<nfeDadosMsg xmlns="${NS_WSDL}">` +
+    `<ccgConsGTIN xmlns="${NS_WSDL}">` +
+    "<nfeDadosMsg>" +
     `<consGTIN xmlns="${NS_NFE}" versao="1.00"><GTIN>${gtin}</GTIN></consGTIN>` +
     "</nfeDadosMsg>" +
+    "</ccgConsGTIN>" +
     "</soap12:Body>" +
     "</soap12:Envelope>"
   );
+}
+
+// O axios reduz qualquer falha a "Request failed with status code 500" e joga
+// fora o corpo - e o corpo e justamente onde o servico diz o que esta errado
+// ("The action ... was not recognized"). Sem isto, diagnosticar exige acesso ao
+// servidor; com isto, a mensagem certa chega na tela.
+function erroDaSefaz(erro: any): Error {
+  const corpo = erro?.response?.data;
+  if (!corpo) return erro;
+
+  const texto = typeof corpo === "string" ? corpo : String(corpo);
+  const falha = /<(?:\w+:)?Text[^>]*>([^<]+)</i.exec(texto);
+  if (falha) return new Error(`SEFAZ (HTTP ${erro?.response?.status}): ${falha[1].trim()}`);
+
+  return new Error(`SEFAZ (HTTP ${erro?.response?.status}): ${texto.replace(/\s+/g, " ").substring(0, 300)}`);
 }
 
 // A resposta vem embrulhada em Envelope/Body/...Result. Em vez de adivinhar a
@@ -167,11 +192,19 @@ export async function consultarGTIN(gtin: string, loja: CertificadoLoja): Promis
     minVersion: "TLSv1.2",
   });
 
-  const resposta = await axios.post(URL_CCG, envelope(gtin), {
-    httpsAgent: agent,
-    headers: { "Content-Type": "application/soap+xml; charset=utf-8" },
-    timeout: Number(process.env.SEFAZ_TIMEOUT || 60000),
-  });
+  // O action vai DENTRO do Content-Type, nao num header SOAPAction: e SOAP 1.2
+  // sobre .asmx. Sem ele o servico responde 500 com "Unable to handle request
+  // without a valid action parameter".
+  let resposta: any;
+  try {
+    resposta = await axios.post(URL_CCG, envelope(gtin), {
+      httpsAgent: agent,
+      headers: { "Content-Type": `application/soap+xml; charset=utf-8; action="${ACTION}"` },
+      timeout: Number(process.env.SEFAZ_TIMEOUT || 60000),
+    });
+  } catch (erro: any) {
+    throw erroDaSefaz(erro);
+  }
 
   const json = await parseStringPromise(resposta.data, {
     explicitArray: false,
