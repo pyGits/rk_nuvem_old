@@ -15,10 +15,10 @@ const LOTE_INSERCAO = 1000;
 const LIMITE_BUSCA = 50;
 const DIGITOS_NCM = 8;
 const LIMITE_SUGESTAO = 10;
-// Teto da conferencia. Sem limite, um tenant grande com o cadastro todo errado
-// traria dezenas de milhares de linhas para a tela - e para uma alteracao em
-// massa de dado fiscal, ver o que vai mudar e parte do trabalho.
-const LIMITE_CONFERENCIA = 500;
+// Sem inquilino escolhido a conferencia traz todos os clientes. O teto existe
+// so como protecao contra uma base absurda: ele nunca deveria ser atingido, e
+// quando for, a tela avisa e o filtro por inquilino resolve.
+const LIMITE_CONFERENCIA = 5000;
 
 // Embalagem e unidade nao identificam o produto e so atrapalham a busca.
 const RUIDO = new Set(["kg", "gr", "ml", "lt", "und", "uni", "pct", "cx", "fd", "sc", "dz", "mg", "cm", "mt", "pacote", "caixa", "unidade", "com", "para", "sem", "tipo"]);
@@ -440,9 +440,12 @@ async function anexarSugestoes(produtos: any[]): Promise<void> {
 
   if (consultas.length === 0) return;
 
+  // bind, e nao replacements: o replacements do Sequelize expande array como
+  // lista "a','b" (para IN), o que aqui geraria SQL invalido. O bind vai pelo
+  // driver, que converte JS array em array do Postgres de verdade.
   const achados: any[] = await db.query(
     `select entrada.idx, sugerido.codigo, sugerido.descricao
-       from unnest(cast(:consultas as text[])) with ordinality as entrada(consulta, idx)
+       from unnest($1::text[]) with ordinality as entrada(consulta, idx)
        cross join lateral (
          select codigo, descricao
            from ibpt
@@ -450,7 +453,7 @@ async function anexarSugestoes(produtos: any[]): Promise<void> {
           order by ts_rank(to_tsvector('portuguese', descricao), to_tsquery('portuguese', entrada.consulta)) desc, codigo
           limit 1
        ) sugerido`,
-    { replacements: { consultas }, type: QueryTypes.SELECT }
+    { bind: [consultas], type: QueryTypes.SELECT }
   );
 
   achados.forEach((achado: any) => {
