@@ -30,5 +30,9 @@ router.post("/admin/ibpt", verifyJWTADMIN, IbptController.publicar);
 router.get("/admin/ibpt/produtos-sem-ncm", verifyJWTADMIN, seguro(IbptController.produtosSemNcm));
 // Grava os NCM sugeridos nos produtos que o operador escolheu.
 router.post("/admin/ibpt/normalizar", verifyJWTADMIN, seguro(IbptController.normalizar));
+// Correcao do zero a esquerda: deterministica, roda sobre todos os produtos.
+// O GET so conta; o POST aplica.
+router.get("/admin/ibpt/zero-esquerda", verifyJWTADMIN, seguro(IbptController.zeroAEsquerda));
+router.post("/admin/ibpt/zero-esquerda", verifyJWTADMIN, seguro(IbptController.zeroAEsquerda));
 
 export default router;

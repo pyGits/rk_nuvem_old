@@ -15,6 +15,9 @@ const LOTE_INSERCAO = 1000;
 const LIMITE_BUSCA = 50;
 const DIGITOS_NCM = 8;
 const LIMITE_SUGESTAO = 10;
+// Regex de 'nao-digito' para o Postgres. Em template literal do TS, uma barra
+// so seria engolida (\D vira D), entao a fonte carrega duas.
+const RX = "'\\D'";
 // Sem inquilino escolhido a conferencia traz todos os clientes. O teto existe
 // so como protecao contra uma base absurda: ele nunca deveria ser atingido, e
 // quando for, a tela avisa e o filtro por inquilino resolve.
@@ -370,6 +373,39 @@ export default {
     res.status(200).json({ alterados, rejeitados });
   },
 
+  // Corrige o zero a esquerda perdido. E deterministico: o NCM tem 8 digitos
+  // por definicao, entao "4039000" so pode ser "04039000". Nao ha palpite, e por
+  // isso esta funcao roda sobre TODOS os produtos, sem o teto da conferencia.
+  //
+  // O PDV guarda o NCM em campo numerico, o que come o zero da frente. E o caso
+  // mais comum da conferencia - iogurte (04039000) e frango (02071411) inteiros
+  // aparecem como irregulares so por isso.
+  async zeroAEsquerda(req: Request, res: Response) {
+    const tenant = req.query.tenant_id || req.body?.tenant_id;
+
+    const filtroTenant = tenant ? " and tenant_id = :tenant_id" : "";
+    const parametros: any = tenant ? { tenant_id: Number(tenant) } : {};
+
+    const alvo = `length(regexp_replace(coalesce(ncm, ''), ${RX}, '', 'g')) between 1 and ${DIGITOS_NCM - 1}`;
+
+    // GET so conta, para o botao dizer quantos serao alterados antes do clique.
+    if (req.method === "GET") {
+      const linha: any = await db.query(`select count(*) as total from produtos where ${alvo}${filtroTenant}`, { replacements: parametros, type: QueryTypes.SELECT, plain: true });
+
+      return res.status(200).json({ total: Number(linha?.total || 0) });
+    }
+
+    const [, alterados] = await db.query(
+      `update produtos
+          set ncm = lpad(regexp_replace(coalesce(ncm, ''), ${RX}, '', 'g'), ${DIGITOS_NCM}, '0'),
+              updated_at = now()
+        where ${alvo}${filtroTenant}`,
+      { replacements: parametros, type: QueryTypes.UPDATE }
+    );
+
+    res.status(200).json({ alterados: Number(alterados || 0) });
+  },
+
   // ---------- Clientes ----------
 
   // Sugere NCM parecidos com a descricao do produto. Existe porque escolher NCM
@@ -391,7 +427,12 @@ export default {
               ts_rank(to_tsvector('portuguese', descricao), to_tsquery('portuguese', :consulta)) as score
          from ibpt
         where to_tsvector('portuguese', descricao) @@ to_tsquery('portuguese', :primeiro)
-        order by score desc, codigo
+        order by
+          -- item cuja descricao COMECA pelo termo vem antes da mencao de passagem
+          case when lower(descricao) like lower(:primeiro) || '%' then 0 else 1 end,
+          score desc,
+          length(descricao),
+          codigo
         limit ${LIMITE_SUGESTAO}`,
       { replacements: { consulta, primeiro }, type: QueryTypes.SELECT }
     );
@@ -443,17 +484,58 @@ export default {
   },
 };
 
+// NCM com menos de 8 digitos quase sempre e o codigo certo que perdeu o zero a
+// esquerda pelo caminho (o PDV guarda em campo numerico). "4039000" e o iogurte
+// 04039000; "2071411" e o peito de frango 02071411.
+//
+// Isto nao e sugestao, e correcao: se o codigo completado existe no IBPT, ele e
+// o NCM que o cadastro sempre quis dizer. Vem antes da busca por texto para nao
+// trocar um NCM certo por um palpite.
+async function sugerirPorZeroAEsquerda(produtos: any[]): Promise<void> {
+  const candidatos = new Map<string, any[]>();
+
+  produtos.forEach((produto) => {
+    const limpo = String(produto.ncm || "").replace(/[^0-9]/g, "");
+    if (limpo.length === 0 || limpo.length >= DIGITOS_NCM) return;
+
+    const completo = limpo.padStart(DIGITOS_NCM, "0");
+    if (!candidatos.has(completo)) candidatos.set(completo, []);
+    candidatos.get(completo).push(produto);
+  });
+
+  if (candidatos.size === 0) return;
+
+  const encontrados: any[] = await Ibpt.findAll({
+    where: { codigo: Array.from(candidatos.keys()) },
+    attributes: ["codigo", "descricao"],
+  });
+
+  encontrados.forEach((registro: any) => {
+    (candidatos.get(registro.codigo) || []).forEach((produto) => {
+      produto.ncm_sugerido = registro.codigo;
+      produto.descricao_sugerida = registro.descricao;
+      produto.sugestao_origem = "zero";
+    });
+  });
+}
+
 // Sugere um NCM para cada produto da lista, numa consulta so.
 //
 // O caminho obvio seria uma consulta por produto; com 500 produtos isso vira
 // 500 idas ao banco. Aqui as consultas de texto vao juntas num array e o
 // Postgres resolve todas com um LATERAL sobre o mesmo indice.
 async function anexarSugestoes(produtos: any[]): Promise<void> {
+  await sugerirPorZeroAEsquerda(produtos);
+
   const primeiros: string[] = [];
   const consultas: string[] = [];
   const posicoes: number[] = [];
 
   produtos.forEach((produto, i) => {
+    // Ja resolvido pelo zero a esquerda: nao vale trocar um NCM certo por um
+    // palpite de texto.
+    if (produto.ncm_sugerido) return;
+
     const termos = termosDaDescricao(produto.descricao);
     if (termos.length === 0) return;
 
@@ -478,7 +560,15 @@ async function anexarSugestoes(produtos: any[]): Promise<void> {
            from ibpt
           -- filtra pela primeira palavra, ordena pela descricao inteira
           where to_tsvector('portuguese', descricao) @@ to_tsquery('portuguese', entrada.primeiro)
-          order by ts_rank(to_tsvector('portuguese', descricao), to_tsquery('portuguese', entrada.consulta)) desc, codigo
+          order by
+            -- Descricao que COMECA pelo termo e do produto, nao uma mencao de
+            -- passagem: "Aguas minerais naturais" ganha de "Produtos quimicos
+            -- (...) incluindo as aguas destiladas".
+            case when lower(descricao) like lower(entrada.primeiro) || '%' then 0 else 1 end,
+            ts_rank(to_tsvector('portuguese', descricao), to_tsquery('portuguese', entrada.consulta)) desc,
+            -- Descricao curta e o item especifico; a longa e o texto do capitulo.
+            length(descricao),
+            codigo
           limit 1
        ) sugerido`,
     { bind: [primeiros, consultas], type: QueryTypes.SELECT }
@@ -491,6 +581,7 @@ async function anexarSugestoes(produtos: any[]): Promise<void> {
 
     produto.ncm_sugerido = achado.codigo;
     produto.descricao_sugerida = achado.descricao;
+    produto.sugestao_origem = "texto";
   });
 
   // Sem correspondencia, cai no padrao - e marcado como tal, para a tela
@@ -504,6 +595,7 @@ async function anexarSugestoes(produtos: any[]): Promise<void> {
     produto.ncm_sugerido = NCM_PADRAO;
     produto.descricao_sugerida = padrao ? padrao.descricao : "";
     produto.sugestao_padrao = true;
+    produto.sugestao_origem = "padrao";
   });
 }
 

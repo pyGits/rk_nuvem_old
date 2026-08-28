@@ -53,6 +53,30 @@
 
         <v-divider class="my-4"></v-divider>
 
+        <!-- Correção do zero à esquerda: determinística, separada da sugestão -->
+        <v-sheet outlined rounded class="pa-4 mb-4">
+          <div class="d-flex align-center flex-wrap">
+            <div>
+              <h3 class="text-subtitle-1 font-weight-medium mb-0">NCM sem o zero à esquerda</h3>
+              <span class="text-caption grey--text text--darken-1">
+                O PDV guarda o NCM em campo numérico e o zero da frente se perde. "4039000" é o iogurte 04039000. Não é palpite: completa para 8 dígitos.
+              </span>
+            </div>
+            <v-spacer></v-spacer>
+            <span v-if="zeroTotal !== null" class="mr-4 text-body-2">
+              <strong :class="zeroTotal ? 'primary--text' : 'grey--text'">{{ zeroTotal }}</strong> produto(s)
+            </span>
+            <v-btn outlined class="mr-2" :loading="contandoZero" @click="contarZero">
+              <v-icon left>mdi-magnify</v-icon>
+              Verificar
+            </v-btn>
+            <v-btn color="primary" depressed :disabled="!zeroTotal" :loading="corrigindoZero" @click="corrigirZero">
+              <v-icon left>mdi-numeric-0-box</v-icon>
+              Corrigir
+            </v-btn>
+          </div>
+        </v-sheet>
+
         <!-- Conferência de NCM -->
         <div class="d-flex align-center flex-wrap mb-3">
           <div>
@@ -85,9 +109,11 @@
             <div class="d-flex align-center flex-wrap mb-2">
               <span class="text-caption grey--text text--darken-1">
                 {{ conferencia.totais.produtos }} produto(s) em {{ conferencia.totais.clientes }} cliente(s) ·
-                {{ comSugestao.length - comPadrao.length }} com correspondência ·
-                <span class="warning--text">{{ comPadrao.length }} sem correspondência (NCM padrão)</span>
+                <span class="primary--text">{{ porZero.length }} zero à esquerda</span> ·
+                {{ comSugestao.length - comPadrao.length - porZero.length }} por descrição ·
+                <span class="warning--text">{{ comPadrao.length }} sem correspondência</span>
               </span>
+              <v-spacer></v-spacer>
               <v-spacer></v-spacer>
               <v-btn small color="primary" class="mr-2" :disabled="!selecionadosComSugestao.length" :loading="normalizando" @click="normalizar(selecionadosComSugestao)">
                 <v-icon left small>mdi-check</v-icon>
@@ -119,9 +145,11 @@
               </template>
               <template #[`item.ncm_sugerido`]="{ item }">
                 <template v-if="item.ncm_sugerido">
-                  <div class="font-weight-medium" :class="item.sugestao_padrao ? 'warning--text' : 'success--text'">
+                  <div class="font-weight-medium" :class="corSugestao(item)">
                     {{ item.ncm_sugerido }}
-                    <v-chip v-if="item.sugestao_padrao" x-small color="warning" dark class="ml-1">padrão</v-chip>
+                    <v-chip v-if="item.sugestao_origem === 'zero'" x-small color="primary" dark class="ml-1" title="O NCM atual já estava certo, só faltava o zero à esquerda">zero à esquerda</v-chip>
+                    <v-chip v-else-if="item.sugestao_padrao" x-small color="warning" dark class="ml-1">padrão</v-chip>
+                    <v-chip v-else x-small color="success" dark class="ml-1">por descrição</v-chip>
                   </div>
                   <div class="text-caption grey--text text--darken-1">{{ item.descricao_sugerida }}</div>
                 </template>
@@ -181,6 +209,9 @@ export default {
       erroArquivo: "",
       incluirInativos: false,
       tenantId: null,
+      zeroTotal: null,
+      contandoZero: false,
+      corrigindoZero: false,
       selecionados: [],
       normalizando: false,
       snackbar: false,
@@ -223,6 +254,11 @@ export default {
     comPadrao() {
       return this.produtos.filter((produto) => produto.sugestao_padrao);
     },
+    // Correção determinística, não palpite: o NCM atual já era o certo e só
+    // perdeu o zero à esquerda. Pode ser aplicada em massa com segurança.
+    porZero() {
+      return this.produtos.filter((produto) => produto.sugestao_origem === "zero");
+    },
     inquilinos() {
       return (this.$store.state.admin.tenantList.tenantList || []).map((tenant) => ({
         id: tenant.id,
@@ -246,6 +282,10 @@ export default {
     }
   },
   methods: {
+    corSugestao(item) {
+      if (item.sugestao_origem === "zero") return "primary--text";
+      return item.sugestao_padrao ? "warning--text" : "success--text";
+    },
     formatarData(data) {
       if (!data) return "-";
       const [ano, mes, dia] = String(data).substring(0, 10).split("-");
@@ -291,6 +331,31 @@ export default {
         this.erroArquivo = erro?.response?.data?.message || "Não foi possível processar o arquivo.";
       } finally {
         this.enviando = false;
+      }
+    },
+    async contarZero() {
+      this.contandoZero = true;
+      try {
+        const res = await this.$store.dispatch("contarZeroAEsquerda", this.tenantId ? { tenant_id: this.tenantId } : {});
+        this.zeroTotal = res.total;
+      } finally {
+        this.contandoZero = false;
+      }
+    },
+    async corrigirZero() {
+      const alvo = this.tenantId ? "do inquilino selecionado" : "de TODOS os inquilinos";
+      if (!window.confirm(`Completar o zero à esquerda em ${this.zeroTotal} produto(s) ${alvo}?`)) return;
+
+      this.corrigindoZero = true;
+      try {
+        const res = await this.$store.dispatch("corrigirZeroAEsquerda", this.tenantId ? { tenant_id: this.tenantId } : {});
+        this.avisar(`${res.alterados} produto(s) corrigido(s).`);
+        await this.contarZero();
+        if (this.jaConferiu) await this.conferir();
+      } catch (erro) {
+        this.avisar(erro?.response?.data?.message || "Não foi possível corrigir.", "error");
+      } finally {
+        this.corrigindoZero = false;
       }
     },
     async conferir() {
@@ -356,7 +421,7 @@ A alteração não pode ser desfeita.`);
         ncm: produto.ncm,
         ncm_sugerido: produto.ncm_sugerido,
         descricao_sugerida: produto.descricao_sugerida,
-        sugestao_padrao: produto.sugestao_padrao ? "SIM" : "",
+        origem_sugestao: produto.sugestao_origem || "",
         motivo: produto.motivo,
       }));
       gerarExcel(linhas, "produtos_ncm_irregular.xlsx");

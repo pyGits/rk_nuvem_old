@@ -46,6 +46,16 @@ export default {
       return res.data;
     },
 
+    async contarZeroAEsquerda(_: any, filtro: any = {}) {
+      const res = await Vue.prototype.$http.get("/admin/ibpt/zero-esquerda", { params: filtro });
+      return res.data;
+    },
+
+    async corrigirZeroAEsquerda(_: any, filtro: any = {}) {
+      const res = await Vue.prototype.$http.post("/admin/ibpt/zero-esquerda", filtro);
+      return res.data;
+    },
+
     async getIbptProdutosSemNcm({ commit }: any, filtro: any = {}) {
       const res = await Vue.prototype.$http.get("/admin/ibpt/produtos-sem-ncm", { params: filtro });
       commit("setIbptProdutosSemNcm", res.data);
