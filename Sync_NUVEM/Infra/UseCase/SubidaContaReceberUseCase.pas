@@ -8,6 +8,12 @@ type TSubidaContaReceberUseCase = class
   private
   FCaixaRepository:ICaixaRepository;
   FContaReceberPDVRepository:IContaReceberPDVRepository;
+  // Ultimo resumo mostrado. A etapa era muda quando nao achava nada, e ai
+  // "nenhum caixa cadastrado", "caixa sem titulo pendente" e "o titulo nem foi
+  // gravado no PDV" ficavam indistinguiveis - nao dava para saber onde olhar.
+  // So aparece quando o resumo muda, senao seriam doze linhas por minuto.
+  FUltimoResumo:string;
+  procedure resumir(caixas, titulos, enviados: integer);
   public
   procedure Executar;
   constructor create;
@@ -34,7 +40,12 @@ var
   caixa:TCaixaModel;
   titulos:TObjectList<TContaReceber>;
   titulo:TContaReceber;
+  totalTitulos:integer;
+  totalEnviados:integer;
 begin
+  totalTitulos := 0;
+  totalEnviados := 0;
+
   caixas := FCaixaRepository.getAll;
   try
     // uma caixa fora do ar nao pode impedir a subida das demais
@@ -49,6 +60,8 @@ begin
 
         titulos := FContaReceberPDVRepository.getPendentes(caixa);
         try
+          Inc(totalTitulos, titulos.Count);
+
           if titulos.Count > 0 then
           begin
             uLogErro.Progresso(Format('CONTA_RECEBER: %d titulo(s) no caixa %s',
@@ -65,7 +78,10 @@ begin
               titulo.caixa := caixa.codigo;
 
             if uAPIRequest.postContaReceber(titulo) then
+            begin
               FContaReceberPDVRepository.marcarEnviado(caixa, titulo.codigo);
+              Inc(totalEnviados);
+            end;
           end;
         finally
           titulos.Free;
@@ -78,9 +94,30 @@ begin
       end;
       end;
     end;
+    resumir(caixas.Count, totalTitulos, totalEnviados);
   finally
     caixas.Free;
   end;
+end;
+
+procedure TSubidaContaReceberUseCase.resumir(caixas, titulos, enviados: integer);
+var
+  resumo:string;
+begin
+  resumo := Format('caixas=%d titulos=%d enviados=%d', [caixas, titulos, enviados]);
+  if resumo = FUltimoResumo then Exit;
+
+  FUltimoResumo := resumo;
+
+  uLogErro.Progresso('CONTA_RECEBER: ' + resumo);
+  uLogErro.LogErro('CONTA_RECEBER_RESUMO', resumo);
+
+  // Sem caixa na lista o laco inteiro nao roda e nada e sequer tentado. E o
+  // unico caso em que o problema esta na retaguarda, e nao no PDV.
+  if caixas = 0 then
+    uLogErro.Progresso(
+      'CONTA_RECEBER: nenhum caixa cadastrado na retaguarda - a subida de ' +
+      'convenio nao tem onde procurar');
 end;
 
 end.

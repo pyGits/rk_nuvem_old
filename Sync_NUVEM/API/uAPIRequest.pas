@@ -389,6 +389,12 @@ begin
       FUltimaRespostaCarga := resposta;
       uLogErro.Progresso(Format('Consulta de carga (loja %s): %s',
         [codLoja, resposta]));
+      // Vai para o arquivo tambem, e nao so para o memo: e no arquivo que da
+      // para conferir depois se a consulta chegou a acontecer. Sem esta linha,
+      // "o timer nao dispara" e "o servidor respondeu CARGA_NADA" ficam
+      // indistinguiveis para quem le so o log. So na mudanca de resposta.
+      uLogErro.LogErro('CARGA_CONSULTA',
+        Format('Loja %s | %s', [codLoja, resposta]));
     end;
 
     if FUltimaFalhaCarga <> '' then

@@ -76,7 +76,11 @@ begin
     '  FROM CUPOM_CREDIARIO CR ' +
     '  LEFT JOIN CUPOM   C  ON C.CODIGO  = CR.COD_CUPOM ' +
     '  LEFT JOIN CLIENTE CL ON CL.CODIGO = CR.COD_CLIENTE ' +
-    ' WHERE CR.NUVEM = 0 ' +
+    // COALESCE, e nao "NUVEM = 0" puro: no Firebird o ALTER TABLE ADD com
+    // DEFAULT nao preenche as linhas que ja existiam - elas ficam NULL. E
+    // NULL = 0 nao e verdadeiro, entao todo titulo de convenio anterior a
+    // criacao da coluna ficava invisivel para a subida, para sempre.
+    ' WHERE COALESCE(CR.NUVEM, 0) = 0 ' +
     ' ORDER BY CR.DATA, CR.COD_CUPOM, CR.PRESTACAO');
   try
     result := TObjectList<TContaReceber>.Create(true);

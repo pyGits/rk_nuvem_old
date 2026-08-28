@@ -56,6 +56,7 @@ type
     function encerrarSubidaFechamentoForma(oFechamentoForma:TFechamentoFin):Integer;
   public
     function sincronizaVenda:Boolean;
+    procedure liberarConexao;
   end;
 
 var
@@ -864,6 +865,24 @@ begin
     uLogErro.LogErro('SINCRONIZA_VENDA', 'Etapa ' + nomeEtapa + ' | ' +
       E.ClassName + ': ' + E.Message);
   end;
+  end;
+end;
+
+// Solta a transacao que o UniDAC deixa viva depois de um Open. Enquanto ela
+// existe a conexao do agente conta como "usando" CUPOM e companhia, e um
+// CREATE INDEX nessas tabelas falha com "object is in use" - inclusive quando
+// quem esta tentando criar o indice e o proprio agente.
+procedure TdmVenda.liberarConexao;
+var
+  conexao: TUniConnection;
+begin
+  conexao := dmConexao.ConexaoServer;
+  try
+    if conexao.InTransaction then
+      conexao.Commit;
+  except
+  on E: Exception do
+    uLogErro.LogErro('LIBERA_CONEXAO', Format('%s: %s', [E.ClassName, E.Message]));
   end;
 end;
 

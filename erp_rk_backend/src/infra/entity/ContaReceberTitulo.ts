@@ -25,7 +25,11 @@ export default class ContaReceberTitulo {
     public origem = "PDV",
     public cancelado = 0,
     public status: Status = "ABERTO",
-    public recebimentos: RecebimentoTitulo[] = []
+    public recebimentos: RecebimentoTitulo[] = [],
+    // Resolvido na leitura a partir de clientes. A tabela guarda so o codigo,
+    // e ate agora o nome era resolvido no navegador - o que nao serve para o
+    // recibo em PDF nem para o extrato consolidado.
+    public clienteNome = ""
   ) {}
 
   recebimentosValidos(): RecebimentoTitulo[] {

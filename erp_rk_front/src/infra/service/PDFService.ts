@@ -7,6 +7,18 @@ export default class PDFService {
     const blob = new Blob([byteArray], { type: "application/pdf" });
 
     const url = URL.createObjectURL(blob);
-    window.open(url);
+    const janela = window.open(url);
+
+    // O window.open acontece depois de um await, então o navegador pode
+    // bloquear por não considerar mais o clique do usuário. Sem esta saída o
+    // documento simplesmente não aparece e nada explica o porquê.
+    if (!janela) {
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "documento.pdf";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   }
 }

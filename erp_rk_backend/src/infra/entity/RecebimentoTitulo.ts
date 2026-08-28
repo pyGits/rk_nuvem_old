@@ -11,7 +11,10 @@ export default class RecebimentoTitulo {
     public dataPagamento = "",
     public id = "",
     public usuario = "",
-    public estornado = 0
+    public estornado = 0,
+    // Resolvido na leitura a partir de forma_pagamento. A coluna guarda o
+    // codigo ("01"), que nao diz nada para quem le a tela ou o recibo.
+    public formaPagamentoNome = ""
   ) {}
 
   // Quanto o cliente efetivamente pagou.

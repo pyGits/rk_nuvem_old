@@ -190,8 +190,9 @@ export default {
       const confirmar = await this.$refs.confirmDialog.abrir("Confirmar recebimento dos títulos ?", "O estorno desfaz o lançamento, se precisar");
       if (!confirmar) return;
 
-      await ContaReceberService.receber(this.contas, this.recebimento);
-      this.$emit("gravar");
+      // Repassa o recibo criado para a listagem abrir o comprovante.
+      const recibo = await ContaReceberService.receber(this.contas, this.recebimento);
+      this.$emit("gravar", recibo);
     },
   },
 };

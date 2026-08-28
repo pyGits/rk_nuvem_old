@@ -8,7 +8,7 @@
             <v-icon left>mdi-file-excel-outline</v-icon>
             Excel
           </v-btn>
-          <v-btn color="primary" @click="tab = 1">
+          <v-btn color="primary" @click="tab = 2">
             <v-icon left>mdi-plus</v-icon>
             Lançar título
           </v-btn>
@@ -23,6 +23,13 @@
               <span class="font-weight-medium">Filtros de Pesquisa</span>
             </div>
             <v-icon color="primary">{{ showFilters ? "mdi-chevron-up" : "mdi-chevron-down" }}</v-icon>
+          </div>
+
+          <!-- Com o painel fechado o usuario nao ve o que esta filtrando, e o
+               padrao e "Em aberto": era por isso que o titulo sumia da grade
+               assim que era liquidado, sem explicacao nenhuma. -->
+          <div v-if="!showFilters" class="mt-2">
+            <v-chip v-for="filtroAtivo in filtrosAtivos" :key="filtroAtivo" x-small class="mr-1 mb-1" color="primary" outlined>{{ filtroAtivo }}</v-chip>
           </div>
 
           <v-expand-transition>
@@ -107,6 +114,7 @@
 
       <v-tabs v-model="tab" background-color="primary" dark>
         <v-tab>Títulos</v-tab>
+        <v-tab>Recebimentos</v-tab>
         <v-tab>Lançar título</v-tab>
         <v-tab>Extrato do cliente</v-tab>
       </v-tabs>
@@ -142,7 +150,7 @@
                 <v-chip v-if="item.diasAtraso() > 0" x-small color="error" dark class="ml-1">{{ item.diasAtraso() }}d</v-chip>
               </template>
               <template v-slot:item.cliente="{ item }">
-                {{ nomeCliente(item.clienteCodigo) }}
+                {{ nomeCliente(item.clienteCodigo, item.clienteNome) }}
               </template>
               <template v-slot:item.valor="{ item }">
                 {{ maskMoney(item.valor) }}
@@ -182,6 +190,10 @@
         </v-tab-item>
 
         <v-tab-item>
+          <RecibosRecebimento ref="recibos" @estornado="carregar" />
+        </v-tab-item>
+
+        <v-tab-item>
           <EditarContasAReceber @gravar="aoLancar" />
         </v-tab-item>
 
@@ -214,6 +226,8 @@ import EditarContasAReceber from "./EditarContasAReceber.vue";
 import EditarTitulo from "./EditarTitulo.vue";
 import ExtratoCliente from "./ExtratoCliente.vue";
 import ReceberTitulos from "./ReceberTitulos.vue";
+import RecibosRecebimento from "./RecibosRecebimento.vue";
+import PDFService from "@/infra/service/PDFService";
 import ContaReceberTituloList from "@/infra/entity/ContaReceberTituloList";
 import ContaReceberService from "@/infra/service/ContaReceberService";
 import { gerarExcel } from "@/utils/exports";
@@ -221,11 +235,11 @@ import { maskMoney, maskDateBR } from "@/utils/masks";
 
 export default {
   name: "ListarContasReceber",
-  components: { ConfirmDialog, LocalizarCliente, EditarContasAReceber, EditarTitulo, ExtratoCliente, ReceberTitulos },
+  components: { ConfirmDialog, LocalizarCliente, EditarContasAReceber, EditarTitulo, ExtratoCliente, ReceberTitulos, RecibosRecebimento },
   data() {
     return {
       tab: 0,
-      showFilters: true,
+      showFilters: false,
       dialogReceber: false,
       dialogEditar: false,
       dialogCliente: false,
@@ -265,6 +279,25 @@ export default {
     clienteList() {
       return this.$store.state.cliente.clienteList || [];
     },
+    // Só o que está de fato restringindo a consulta.
+    filtrosAtivos() {
+      const situacao = { ABERTO: "Em aberto", LIQUIDADO: "Liquidado", CANCELADO: "Cancelado", AMBAS: "Todas as situações" };
+      const chips = [`Situação: ${situacao[this.filtro.selectedStatus] || this.filtro.selectedStatus}`];
+
+      if (this.filtro.dataVencimentoDe || this.filtro.dataVencimentoAte) {
+        chips.push(`Vencimento: ${this.formatarData(this.filtro.dataVencimentoDe) || "..."} a ${this.formatarData(this.filtro.dataVencimentoAte) || "..."}`);
+      }
+      if (this.filtro.dataEmissaoDe || this.filtro.dataEmissaoAte) {
+        chips.push(`Emissão: ${this.formatarData(this.filtro.dataEmissaoDe) || "..."} a ${this.formatarData(this.filtro.dataEmissaoAte) || "..."}`);
+      }
+      if (this.filtro.selectedCliente) chips.push(`Cliente: ${this.clienteFiltroDescricao}`);
+      if (this.filtro.selectedLoja) chips.push(`Loja: ${this.filtro.selectedLoja}`);
+      if (this.filtro.selectedOrigem) chips.push(`Origem: ${this.filtro.selectedOrigem}`);
+      if (this.filtro.cupomFiltro) chips.push(`Cupom: ${this.filtro.cupomFiltro}`);
+      if (this.filtro.descricaoFiltro) chips.push(`Descrição: ${this.filtro.descricaoFiltro}`);
+
+      return chips;
+    },
     clienteFiltroDescricao() {
       if (!this.filtro.selectedCliente) return "";
       return `${this.filtro.selectedCliente} - ${this.clienteFiltroNome}`.trim();
@@ -294,8 +327,11 @@ export default {
       if (!data) return "";
       return maskDateBR(String(data).substring(0, 10));
     },
-    nomeCliente(codigo) {
+    // O nome vem resolvido do backend. O store continua como reserva para o
+    // título antigo, gravado antes dessa mudança.
+    nomeCliente(codigo, nome) {
       if (!codigo) return "";
+      if (nome) return `${codigo} - ${nome}`;
       const cliente = this.clienteList.find((item) => String(item.codigo) === String(codigo));
       return cliente ? `${codigo} - ${cliente.nome}` : codigo;
     },
@@ -317,11 +353,13 @@ export default {
       }
     },
     aplicarFiltro() {
+      this.showFilters = false;
       this.carregar();
     },
     limparFiltro() {
       this.filtro = this.filtroInicial();
       this.clienteFiltroNome = "";
+      this.showFilters = false;
       this.carregar();
     },
     selecionarCliente(cliente) {
@@ -365,9 +403,16 @@ export default {
       this.dialogEditar = true;
       this.$nextTick(() => this.$refs.frmEditarTitulo.abrir(this.selecionados[0]));
     },
-    async aoReceber() {
+    // O título liquidado sai da grade na hora (o filtro padrão é "em aberto").
+    // Abrir o comprovante logo após a baixa é o que fecha o ciclo para o
+    // operador: ele vê o que acabou de receber, com número de recibo.
+    async aoReceber(recibo) {
       this.dialogReceber = false;
       await this.carregar();
+
+      if (!recibo?.reciboId) return;
+      const gerado = await ContaReceberService.gerarRecibo(recibo.reciboId);
+      PDFService.exibirPDF(gerado.arquivo);
     },
     async aoEditar() {
       this.dialogEditar = false;
@@ -382,7 +427,7 @@ export default {
     exportarExcel() {
       const linhas = this.titulos.items.map((titulo) => ({
         titulo: titulo.codigo,
-        cliente: this.nomeCliente(titulo.clienteCodigo),
+        cliente: this.nomeCliente(titulo.clienteCodigo, titulo.clienteNome),
         cpf: titulo.clienteCpf,
         loja: titulo.lojaId,
         cupom: titulo.numero,

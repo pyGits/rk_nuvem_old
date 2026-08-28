@@ -27,8 +27,29 @@ class ContaReceberService {
 
   async receber(titulos: ContaReceberTituloList, recebimento: RecebimentoTitulo) {
     titulos.validarRecebimento(recebimento);
-    await this.contaReceberRepository.receber(titulos, recebimento);
-    ToastService.showSuccess("Recebimento lançado com sucesso !");
+    const recibo = await this.contaReceberRepository.receber(titulos, recebimento);
+    ToastService.showSuccess(`Recebimento lançado com sucesso ! Recibo nº ${recibo?.reciboNumero ?? ""}`);
+    return recibo;
+  }
+
+  async getSaldoClientes(filtro: any) {
+    return await this.contaReceberRepository.getSaldoClientes(filtro);
+  }
+
+  async getRecibos(filtro: any) {
+    return await this.contaReceberRepository.getRecibos(filtro);
+  }
+
+  // Devolve o base64 do PDF; quem chama decide como exibir.
+  async gerarRecibo(reciboId: string) {
+    const recibo = await this.contaReceberRepository.gerarRecibo(reciboId);
+    if (!recibo?.arquivo) throw new Error("Não foi possível gerar o recibo !");
+    return recibo;
+  }
+
+  async estornarRecibo(reciboId: string) {
+    await this.contaReceberRepository.estornarRecibo(reciboId);
+    ToastService.showSuccess("Recibo estornado com sucesso !");
   }
 
   async estornar(titulos: ContaReceberTituloList) {

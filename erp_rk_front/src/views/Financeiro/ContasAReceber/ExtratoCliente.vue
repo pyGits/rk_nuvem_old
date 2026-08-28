@@ -5,19 +5,25 @@
       :subtitulo="resumoFiltro"
       icone="mdi-account-cash-outline"
       :carregando="carregando"
-      :sem-dados="!titulos.items.length"
+      :sem-dados="filtro.selectedCliente ? !titulos.items.length : !clientes.length"
       texto-atualizar="Gerar"
       @atualizar="gerar"
       @exportar="exportarExcel"
     />
 
     <div class="px-6">
-      <FiltroPeriodo :dt-inicio.sync="filtro.dataVencimentoDe" :dt-fim.sync="filtro.dataVencimentoAte" @alterado="gerar">
+      <FiltroPeriodo :dt-inicio.sync="filtro.dataVencimentoDe" :dt-fim.sync="filtro.dataVencimentoAte" atalho-inicial="" @alterado="gerar">
+        <template v-slot:acoes-filtro>
+          <v-chip small outlined class="mr-2 mb-1" :color="semPeriodo ? 'primary' : ''" @click="limparPeriodo">Tudo (sem período)</v-chip>
+        </template>
         <v-col cols="12" md="5">
           <v-text-field :value="clienteDescricao" label="Cliente" readonly outlined dense hide-details prepend-inner-icon="mdi-account-outline" placeholder="Selecione o cliente">
             <template v-slot:append-outer>
               <v-btn icon small @click="dialogCliente = true">
                 <v-icon>mdi-magnify</v-icon>
+              </v-btn>
+              <v-btn v-if="filtro.selectedCliente" icon small title="Ver todos os clientes" @click="voltarParaTodos">
+                <v-icon>mdi-close</v-icon>
               </v-btn>
             </template>
           </v-text-field>
@@ -29,7 +35,51 @@
     </div>
 
     <v-card-text>
-      <v-alert v-if="!filtro.selectedCliente" type="info" dense text class="mb-0"> Selecione um cliente para gerar o extrato. </v-alert>
+      <!-- Sem cliente escolhido a tela mostra a posição de todos, e clicar numa
+           linha abre o extrato daquele cliente. Antes era só um aviso pedindo
+           para escolher alguém. -->
+      <template v-if="!filtro.selectedCliente">
+        <v-row dense class="mb-2">
+          <v-col cols="12" sm="4">
+            <v-sheet outlined rounded class="pa-3">
+              <div class="text-caption grey--text">Clientes com saldo</div>
+              <div class="text-h6">{{ totaisClientes.clientes }}</div>
+            </v-sheet>
+          </v-col>
+          <v-col cols="12" sm="4">
+            <v-sheet outlined rounded class="pa-3">
+              <div class="text-caption grey--text">Saldo devedor total</div>
+              <div class="text-h6">{{ maskMoney(totaisClientes.saldo) }}</div>
+            </v-sheet>
+          </v-col>
+          <v-col cols="12" sm="4">
+            <v-sheet outlined rounded class="pa-3">
+              <div class="text-caption grey--text">Saldo vencido</div>
+              <div class="text-h6 error--text">{{ maskMoney(totaisClientes.saldoVencido) }}</div>
+            </v-sheet>
+          </v-col>
+        </v-row>
+
+        <EstadoVazio v-if="!carregando && !clientes.length" mensagem="Nenhum cliente com saldo em aberto." icone="mdi-account-cash-outline" />
+
+        <v-data-table v-else :headers="headersClientes" :items="clientes" :loading="carregando" :items-per-page="20" class="elevation-1" @click:row="abrirCliente">
+          <template v-slot:item.cliente="{ item }">
+            {{ item.clienteCodigo }}{{ item.clienteNome ? ` - ${item.clienteNome}` : "" }}
+          </template>
+          <template v-slot:item.saldo="{ item }">
+            {{ maskMoney(item.saldo) }}
+          </template>
+          <template v-slot:item.saldoVencido="{ item }">
+            <span :class="item.saldoVencido > 0 ? 'error--text' : ''">{{ maskMoney(item.saldoVencido) }}</span>
+          </template>
+          <template v-slot:item.vencimentoMaisAntigo="{ item }">
+            {{ formatarData(item.vencimentoMaisAntigo) }}
+          </template>
+          <template v-slot:item.ultimoRecebimento="{ item }">
+            {{ formatarData(item.ultimoRecebimento) }}
+          </template>
+        </v-data-table>
+      </template>
 
       <template v-else>
         <v-row dense class="mb-2">
@@ -47,7 +97,7 @@
           </v-col>
           <v-col cols="12" sm="3">
             <v-sheet outlined rounded class="pa-3">
-              <div class="text-caption grey--text">A receber (período)</div>
+              <div class="text-caption grey--text">{{ semPeriodo ? "A receber" : "A receber (período)" }}</div>
               <div class="text-h6">{{ maskMoney(totais.aReceber) }}</div>
             </v-sheet>
           </v-col>
@@ -88,6 +138,9 @@
                 <template v-slot:item.dataPagamento="{ item: recebimento }">
                   {{ formatarData(recebimento.dataPagamento) }}
                 </template>
+                <template v-slot:item.formaPagamentoNome="{ item: recebimento }">
+                  {{ recebimento.formaPagamentoNome || recebimento.formaPagamento }}
+                </template>
                 <template v-slot:item.valor="{ item: recebimento }">
                   {{ maskMoney(recebimento.valor) }}
                 </template>
@@ -125,7 +178,6 @@ import ContaReceberTituloList from "@/infra/entity/ContaReceberTituloList";
 import ContaReceberService from "@/infra/service/ContaReceberService";
 import { gerarExcel } from "@/utils/exports";
 import { maskMoney, maskDateBR } from "@/utils/masks";
-import { getCurrentDate } from "@/utils/date";
 
 // Extrato por cliente: os títulos do período, os recebimentos de cada um e o
 // saldo devedor total (que considera também títulos fora do período filtrado).
@@ -137,13 +189,18 @@ export default {
       carregando: false,
       dialogCliente: false,
       clienteNome: "",
+      clientes: [],
+      totaisClientes: { clientes: 0, saldo: 0, saldoVencido: 0 },
       titulos: new ContaReceberTituloList(),
       totais: { valor: 0, recebido: 0, aReceber: 0, saldoDevedorCliente: 0 },
       filtro: {
         selectedCliente: "",
         selectedStatus: "AMBAS",
-        dataVencimentoDe: getCurrentDate(),
-        dataVencimentoAte: getCurrentDate(),
+        // Vazio de proposito: o backend ignora data em branco, entao o extrato
+        // abre com o historico inteiro do cliente. Comecar em hoje->hoje fazia
+        // o extrato aparecer vazio, que era o "nao mostra tudo".
+        dataVencimentoDe: "",
+        dataVencimentoAte: "",
       },
       situacoes: [
         { texto: "Todas", valor: "AMBAS" },
@@ -163,9 +220,18 @@ export default {
         { text: "Situação", value: "status" },
         { text: "", value: "data-table-expand" },
       ],
+      headersClientes: [
+        { text: "Cliente", value: "cliente", sortable: false },
+        { text: "Títulos", value: "qtdTitulos" },
+        { text: "Vencidos", value: "qtdTitulosVencidos" },
+        { text: "Saldo devedor", value: "saldo" },
+        { text: "Saldo vencido", value: "saldoVencido" },
+        { text: "Vencimento mais antigo", value: "vencimentoMaisAntigo" },
+        { text: "Último recebimento", value: "ultimoRecebimento" },
+      ],
       headersRecebimento: [
         { text: "Data", value: "dataPagamento" },
-        { text: "Forma", value: "formaPagamento" },
+        { text: "Forma", value: "formaPagamentoNome" },
         { text: "Valor", value: "valor" },
         { text: "Juros", value: "juros" },
         { text: "Multa", value: "multa" },
@@ -178,10 +244,17 @@ export default {
       if (!this.filtro.selectedCliente) return "";
       return `${this.filtro.selectedCliente} - ${this.clienteNome}`.trim();
     },
+    semPeriodo() {
+      return !this.filtro.dataVencimentoDe && !this.filtro.dataVencimentoAte;
+    },
     resumoFiltro() {
-      if (!this.filtro.selectedCliente) return "Nenhum cliente selecionado";
+      if (!this.filtro.selectedCliente) return "Todos os clientes com saldo em aberto";
+      if (this.semPeriodo) return `${this.clienteDescricao} · todo o período`;
       return `${this.clienteDescricao} · vencimento de ${this.formatarData(this.filtro.dataVencimentoDe)} até ${this.formatarData(this.filtro.dataVencimentoAte)}`;
     },
+  },
+  mounted() {
+    this.gerar();
   },
   methods: {
     maskMoney,
@@ -194,6 +267,11 @@ export default {
       if (titulo.status === "LIQUIDADO") return "success";
       return titulo.vencido() ? "error" : "primary";
     },
+    limparPeriodo() {
+      this.filtro.dataVencimentoDe = "";
+      this.filtro.dataVencimentoAte = "";
+      this.gerar();
+    },
     selecionarCliente(cliente) {
       this.filtro.selectedCliente = cliente.codigo;
       this.clienteNome = cliente.nome;
@@ -201,10 +279,15 @@ export default {
       this.gerar();
     },
     async gerar() {
-      if (!this.filtro.selectedCliente) return;
-
       this.carregando = true;
       try {
+        if (!this.filtro.selectedCliente) {
+          const posicao = await ContaReceberService.getSaldoClientes({ dataVencimentoAte: this.filtro.dataVencimentoAte });
+          this.clientes = posicao.clientes;
+          this.totaisClientes = posicao.totais;
+          return;
+        }
+
         const extrato = await ContaReceberService.getExtrato(this.filtro);
         this.titulos = extrato.titulos;
         this.totais = extrato.totais;
@@ -212,7 +295,37 @@ export default {
         this.carregando = false;
       }
     },
+    // Do consolidado para o extrato individual, sem passar pela busca.
+    abrirCliente(cliente) {
+      this.filtro.selectedCliente = cliente.clienteCodigo;
+      this.clienteNome = cliente.clienteNome;
+      this.gerar();
+    },
+    voltarParaTodos() {
+      this.filtro.selectedCliente = "";
+      this.clienteNome = "";
+      this.gerar();
+    },
     exportarExcel() {
+      // Exporta o que está na tela: no modo consolidado são os clientes, não
+      // os títulos (que nesse modo nem foram carregados).
+      if (!this.filtro.selectedCliente) {
+        const posicao = this.clientes.map((cliente) => ({
+          codigo: cliente.clienteCodigo,
+          cliente: cliente.clienteNome,
+          titulos: cliente.qtdTitulos,
+          titulos_vencidos: cliente.qtdTitulosVencidos,
+          valor: cliente.valor,
+          recebido: cliente.recebido,
+          saldo: cliente.saldo,
+          saldo_vencido: cliente.saldoVencido,
+          vencimento_mais_antigo: this.formatarData(cliente.vencimentoMaisAntigo),
+          ultimo_recebimento: this.formatarData(cliente.ultimoRecebimento),
+        }));
+        gerarExcel(posicao, "posicao_clientes.xlsx");
+        return;
+      }
+
       const linhas = this.titulos.items.map((titulo) => ({
         titulo: titulo.codigo,
         cliente: this.clienteDescricao,

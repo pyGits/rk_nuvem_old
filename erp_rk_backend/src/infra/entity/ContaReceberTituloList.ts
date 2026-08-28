@@ -39,6 +39,12 @@ export default class ContaReceberTituloList {
   validarReceber() {
     if (this.items.length === 0) throw new Error("Nenhum título selecionado !");
     this.items.forEach((titulo) => titulo.validarRecebimento());
+
+    // O recebimento e rateado sequencialmente sobre os titulos selecionados,
+    // sem olhar de quem eles sao. Misturar clientes joga o pagamento de um nos
+    // titulos de outro, em silencio - e um recibo com tres donos nao existe.
+    const clientes = new Set(this.items.map((titulo) => String(titulo.clienteCodigo)));
+    if (clientes.size > 1) throw new Error("Selecione títulos de um mesmo cliente !");
   }
 
   // O abatimento (valor recebido + desconto concedido) e consumido titulo a

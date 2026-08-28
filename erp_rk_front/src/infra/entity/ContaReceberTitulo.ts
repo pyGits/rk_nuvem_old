@@ -23,7 +23,10 @@ export default class ContaReceberTitulo {
     public origem = "PDV",
     public cancelado = 0,
     public status: Status = "ABERTO",
-    public recebimentos: RecebimentoTitulo[] = []
+    public recebimentos: RecebimentoTitulo[] = [],
+    // Vem resolvido do backend. Antes o nome era montado no navegador a partir
+    // do store de clientes, o que não funciona para cliente que só existe no PDV.
+    public clienteNome = ""
   ) {}
 
   recebimentosValidos(): RecebimentoTitulo[] {

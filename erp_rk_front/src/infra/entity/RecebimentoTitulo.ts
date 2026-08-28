@@ -10,7 +10,10 @@ export default class RecebimentoTitulo {
     public dataPagamento = "",
     public id = "",
     public usuario = "",
-    public estornado = 0
+    public estornado = 0,
+    // Vem resolvido do backend: a coluna guarda o código ("01"), que não diz
+    // nada para quem lê a tela.
+    public formaPagamentoNome = ""
   ) {}
 
   valorEmCaixa(): number {

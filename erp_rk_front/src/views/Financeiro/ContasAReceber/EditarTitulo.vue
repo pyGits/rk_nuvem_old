@@ -38,7 +38,7 @@
         </v-col>
       </v-row>
 
-      <v-alert v-if="somenteLeitura" type="info" dense text class="mt-4 mb-0"> Título cancelado não pode ser alterado. </v-alert>
+      <v-alert v-if="somenteLeitura" type="info" dense text class="mt-4 mb-0">{{ motivoBloqueio }}</v-alert>
     </v-card-text>
 
     <v-card-actions class="px-6 pb-4">
@@ -65,8 +65,15 @@ export default {
     };
   },
   computed: {
+    // Título liquidado também trava: mudar o valor de um título já baixado
+    // deixaria o recebimento gravado sem relação com o que ele quitou. O
+    // Contas a Pagar já bloqueia qualquer status diferente de ABERTO.
     somenteLeitura() {
-      return this.titulo.cancelado === 1;
+      return this.titulo.cancelado === 1 || this.titulo.status !== "ABERTO";
+    },
+    motivoBloqueio() {
+      if (this.titulo.cancelado === 1) return "Título cancelado não pode ser alterado.";
+      return "Título liquidado não pode ser alterado. Estorne o recebimento antes.";
     },
   },
   methods: {

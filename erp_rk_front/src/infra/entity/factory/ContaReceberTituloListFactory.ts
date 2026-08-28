@@ -18,7 +18,8 @@ export default class ContaReceberTituloListFactory {
             recebimento.dataPagamento,
             recebimento.id,
             recebimento.usuario,
-            Number(recebimento.estornado || 0)
+            Number(recebimento.estornado || 0),
+            recebimento.formaPagamentoNome || ""
           )
       );
 
@@ -41,7 +42,8 @@ export default class ContaReceberTituloListFactory {
           titulo.origem,
           Number(titulo.cancelado || 0),
           titulo.status,
-          recebimentos
+          recebimentos,
+          titulo.clienteNome || ""
         )
       );
     });

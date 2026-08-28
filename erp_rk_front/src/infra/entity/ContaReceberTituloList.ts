@@ -35,6 +35,12 @@ export default class ContaReceberTituloList {
     const cancelado = this.items.find((titulo) => titulo.cancelado === 1);
     if (cancelado) throw new Error(`Título ${cancelado.codigo} está cancelado !`);
     if (this.valorReceber() <= 0) throw new Error("Títulos selecionados já estão liquidados !");
+
+    // O recebimento e rateado sequencialmente sobre os titulos selecionados,
+    // sem olhar de quem eles sao. Misturar clientes joga o pagamento de um nos
+    // titulos de outro, em silencio - e um recibo com tres donos nao existe.
+    const clientes = new Set(this.items.map((titulo) => String(titulo.clienteCodigo)));
+    if (clientes.size > 1) throw new Error("Selecione títulos de um mesmo cliente !");
   }
 
   validarEstornar() {

@@ -96,12 +96,15 @@ export default {
   props: {
     dtInicio: { type: String, required: true },
     dtFim: { type: String, required: true },
+    // Qual atalho nasce destacado. Relatórios que começam com um período
+    // pronto usam o padrão; quem começa sem período passa "".
+    atalhoInicial: { type: String, default: "Hoje" },
   },
   data() {
     return {
       menuInicio: false,
       menuFim: false,
-      atalhoAtivo: "Hoje",
+      atalhoAtivo: this.atalhoInicial,
       atalhos: [
         { label: "Hoje", dias: 0 },
         { label: "Ontem", dias: 1, apenasDia: true },

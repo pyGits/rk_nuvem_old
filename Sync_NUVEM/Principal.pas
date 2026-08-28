@@ -1,4 +1,4 @@
-unit Principal;
+﻿unit Principal;
 
 interface
 
@@ -6,7 +6,7 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,uAPIRequest, Vcl.ExtCtrls,SelecionarLoja,Utils,Login,Produto,uDmProduto,Preco,uDmPreco,uDmTributacao,
   tributacao,uDmCaixa,ConexaoPDV,uDmProdutoPDV,uDmPrecoPDV,uDmTributacaoPDV,uDmVenda,Finalizadora,uDmFinalizadora,uDmFinalizadoraPDV,Funcionario,uDmFuncionario,uDmFuncionarioPDV,system.Generics.collections,
-  Vcl.Menus,Cliente,uDmCliente,Global,uLogErro;
+  Vcl.Menus,Cliente,uDmCliente,Global,uLogErro,System.DateUtils;
 
 type
   TfrmPrincipal = class(TForm)
@@ -53,6 +53,13 @@ type
     subindoVenda:Boolean;
     // Idem para a carga, que e a operacao mais longa do agente.
     carregando:Boolean;
+    // Tique da carga que caiu no meio de uma subida. Ele NAO pode ser
+    // simplesmente descartado: os dois timers tem o mesmo intervalo e sao
+    // ligados em linhas seguidas, entao ficam em fase e o tique da carga cai
+    // dentro do ciclo da subida sempre - descartando, a carga nunca rodava.
+    cargaAdiada:Boolean;
+    // Quando o agente tentou criar os indices que ainda faltam.
+    ultimaTentativaIndices:TDateTime;
   end;
 
 var
@@ -80,6 +87,13 @@ const
   // custaria mais que a propria gravacao.
   PASSO_MEMO_CARGA = 250;
   PASSO_ATIVIDADE_CARGA = 25;
+
+  // CREATE INDEX exige acesso exclusivo a tabela. A CUPOM fica em uso pelo
+  // RK_Sync e pelos PDVs o expediente inteiro, entao a tentativa unica da
+  // inicializacao falhava todo dia e o indice mais importante nunca saia.
+  // Insistindo neste intervalo o agente pega a base parada sozinho - na virada
+  // do dia, no almoco, ou quando o cliente fecha a loja.
+  MINUTOS_ENTRE_INDICES = 10;
 
 procedure TfrmPrincipal.LogFalha(const contexto, mensagem: string);
 begin
@@ -587,7 +601,16 @@ begin
 // Como os dois timers sao de 5 s e a subida roda a cada 5 s gastando alguns
 // segundos, ela zerava o relogio da carga a cada ciclo e a carga nunca
 // chegava a disparar - a nuvem ficava em "aguardando sync" para sempre.
-if carregando or subindoVenda then Exit;
+if carregando then Exit;
+
+// Caiu no meio de uma subida: anota para rodar assim que ela terminar, em vez
+// de perder o tique. Perder e o mesmo que nunca rodar, porque os dois timers
+// disparam sempre juntos.
+if subindoVenda then
+begin
+  cargaAdiada := true;
+  Exit;
+end;
 
 carregando := true;
 try
@@ -741,7 +764,9 @@ begin
     caixaList := TStringList.Create;
 
   // Sem indice em NUVEM cada ciclo da subida varre as tabelas de venda
-  // inteiras. Idempotente: so cria o que ainda nao existe.
+  // inteiras. Idempotente: so cria o que ainda nao existe. O que falhar por
+  // tabela em uso fica pendente e volta a ser tentado pelo ciclo da subida.
+  ultimaTentativaIndices := Now;
   try
     Global.IndicesNuvem.garantirIndices;
   except
@@ -777,6 +802,23 @@ if subindoVenda or carregando then Exit;
 subindoVenda := true;
 try
   try
+    // Retentativa dos indices que a inicializacao nao conseguiu criar por a
+    // tabela estar em uso. Vai ANTES da subida, e nao depois: depois quem
+    // estaria segurando a CUPOM seria o proprio agente. O liberarConexao solta
+    // a transacao que o UniDAC deixa viva do ciclo anterior, pelo mesmo motivo.
+    if Global.IndicesNuvem.faltamIndices and
+       (MinutesBetween(Now, ultimaTentativaIndices) >= MINUTOS_ENTRE_INDICES) then
+    begin
+      ultimaTentativaIndices := Now;
+      try
+        uDmVenda.dmVenda.liberarConexao;
+        Global.IndicesNuvem.garantirIndices;
+      except
+      on E:Exception do
+        LogFalha('INDICES_NUVEM', E);
+      end;
+    end;
+
     if not uDmVenda.dmVenda.sincronizaVenda then
       memLog.Lines.Add('[ERRO] Subida de vendas com falhas - ver ' + uLogErro.ArquivoLogErro);
 
@@ -806,6 +848,14 @@ try
 finally
   subindoVenda := false;
   uLogErro.Atividade('');
+end;
+
+// Fora do finally e depois de baixar a flag: agora a chamada e sequencial, nao
+// reentrante, e o guarda de tmCargaTimer deixa passar.
+if cargaAdiada then
+begin
+  cargaAdiada := false;
+  tmCargaTimer(nil);
 end;
 end;
 
