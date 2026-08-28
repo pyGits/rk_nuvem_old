@@ -10,9 +10,11 @@ const Ibpt = db.define(
   "Ibpt",
   {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    // 10, e nao 8: o arquivo tras NCM (8), NBS (9, servicos) e LC116 (4).
     codigo: { type: DataTypes.STRING(8), allowNull: false },
     // Excecao da TIPI: o mesmo NCM pode ter aliquota diferente por EX.
     ex: { type: DataTypes.STRING(3), defaultValue: "" },
+    // 0 = NCM (produto), 1 = NBS, 2 = LC116 (os dois ultimos sao servicos).
     tipo: { type: DataTypes.INTEGER, defaultValue: 0 },
     descricao: { type: DataTypes.TEXT, defaultValue: "" },
     nacional_federal: { type: DataTypes.DECIMAL(5, 2), defaultValue: 0 },

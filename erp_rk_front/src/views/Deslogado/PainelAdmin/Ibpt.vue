@@ -218,7 +218,8 @@ export default {
           },
         });
         this.fecharUpload();
-        this.avisar(`${resposta.message} ${resposta.registros} NCM carregados (versão ${resposta.versao}).`);
+        const descartados = resposta.ignorados ? ` ${resposta.ignorados} código(s) de serviço do arquivo foram ignorados.` : "";
+        this.avisar(`${resposta.message} ${resposta.registros} NCM carregados (versão ${resposta.versao}).${descartados}`);
         // A conferência anterior fala da tabela antiga: refaz se já havia uma.
         if (this.jaConferiu) await this.conferir();
       } catch (erro) {

@@ -16,7 +16,7 @@ export default class Produto {
     if (this.codigo_barras.length > 14) error.add({ field: "produto.codigo_barras", message: "Código de barras não pode ter mais que 14 dígitos!" });
 
     if (this.descricao.trim() === "") error.add({ field: "produto.descricao", message: "Descrição do produto não pode estar em branco !" });
-    if (this.ncm.trim().length < 8) error.add({ field: "produto.ncm", message: "NCM Do produto não pode ser menor que 8 digitos" });
+    if (this.ncm.trim().length !== 8) error.add({ field: "produto.ncm", message: "NCM do produto deve ter 8 dígitos" });
 
     for (const preco of this.precos) {
       if (preco.preco <= 0) error.add({ field: "produto.preco", message: "Preço do produto não pode ser 0,00 ou negativo" });

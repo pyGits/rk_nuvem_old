@@ -28,6 +28,10 @@ export default class Produto {
     if (this.descricao.trim() === "") throw new Error("Nome do produto em branco !");
     if (this.ncm.trim() === "") throw new Error("NCM Em branco !");
     if (this.ncm.trim() === "00000000") throw new Error("NCM inválido !");
+    // NCM tem 8 digitos, sempre. O padStart de create() completa os curtos mas
+    // nao corta os longos, e a coluna e varchar(8): sem esta linha o produto
+    // morria no banco com "value too long", sem dizer qual campo.
+    if (this.ncm.trim().length !== 8) throw new Error("NCM deve ter 8 dígitos !");
     if (this.tributacao.trim() === "") throw new Error("Tributação em branco !");
   }
   static create(data: any) {

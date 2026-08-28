@@ -44,6 +44,8 @@
           type="text"
           class="form-control"
           placeholder="Código do NCM"
+          maxlength="8"
+          inputmode="numeric"
           v-model="ncm"
           @blur="setNCM"
         />
@@ -208,7 +210,10 @@ export default {
         return this.$store.state.produto.produto.ncm;
       },
       set(valor) {
-        this.$store.commit("setProdutoNCM", valor);
+        // NCM tem 8 dígitos e nada além de número. Cortar aqui evita que um
+        // colado de outro lugar (com ponto, ou o de 9 dígitos que é NBS)
+        // chegue à gravação e volte como erro do banco.
+        this.$store.commit("setProdutoNCM", String(valor || "").replace(/\D/g, "").substring(0, 8));
       },
     },
     ncm_descricao: {

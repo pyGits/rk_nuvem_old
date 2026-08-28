@@ -13,6 +13,7 @@ const ENCODING_ARQUIVO = "win1252";
 const TAMANHO_MAXIMO = 20 * 1024 * 1024; // o arquivo de referencia tem ~2 MB
 const LOTE_INSERCAO = 1000;
 const LIMITE_BUSCA = 50;
+const DIGITOS_NCM = 8;
 
 // Em memoria: o arquivo e pequeno, e processado numa unica requisicao e nao
 // precisa sobreviver a ela - o que vale e a tabela, nao o CSV.
@@ -83,7 +84,11 @@ function numero(valor: string): number {
   return Number.isFinite(convertido) ? convertido : 0;
 }
 
-export function converterCSV(conteudo: string): LinhaIbpt[] {
+// Alem do NCM, o arquivo do IBPT tras NBS (9 digitos, servicos) e LC116 (4
+// digitos, servicos municipais). Esta tabela e catalogo de NCM de PRODUTO,
+// entao so entra o que tem 8 digitos - descartado na leitura, e nao filtrado
+// depois: a garantia fica num lugar so.
+export function converterCSV(conteudo: string): { registros: LinhaIbpt[]; ignorados: number } {
   const linhas = conteudo.split(/\r?\n/).filter((linha) => linha.trim() !== "");
   if (linhas.length === 0) throw new Error("Arquivo vazio !");
 
@@ -95,6 +100,7 @@ export function converterCSV(conteudo: string): LinhaIbpt[] {
 
   const indice = (coluna: string) => cabecalho.indexOf(coluna);
   const registros: LinhaIbpt[] = [];
+  let ignorados = 0;
   // O mesmo (codigo, ex) repetido no arquivo violaria a unique da tabela e
   // derrubaria a carga inteira no meio; fica a ultima ocorrencia.
   const vistos = new Map<string, number>();
@@ -103,6 +109,11 @@ export function converterCSV(conteudo: string): LinhaIbpt[] {
     const campos = separarCampos(linhas[i]);
     const codigo = String(campos[indice("codigo")] || "").replace(/\D/g, "");
     if (!codigo) continue;
+
+    if (codigo.length !== DIGITOS_NCM) {
+      ignorados++;
+      continue;
+    }
 
     const registro: LinhaIbpt = {
       codigo,
@@ -131,7 +142,7 @@ export function converterCSV(conteudo: string): LinhaIbpt[] {
 
   if (registros.length === 0) throw new Error("Nenhum NCM encontrado no arquivo !");
 
-  return registros;
+  return { registros, ignorados };
 }
 
 export default {
@@ -144,7 +155,7 @@ export default {
         const arquivo = (req as any).file;
         if (!arquivo) return res.status(400).json({ message: "Envie o arquivo .csv do IBPT." });
 
-        const registros = converterCSV(iconv.decode(arquivo.buffer, ENCODING_ARQUIVO));
+        const { registros, ignorados } = converterCSV(iconv.decode(arquivo.buffer, ENCODING_ARQUIVO));
 
         // Substituicao atomica: enquanto a carga roda, a consulta de NCM
         // continua vendo a tabela anterior inteira. Sem transacao, um erro no
@@ -171,6 +182,8 @@ export default {
         res.status(201).json({
           message: "Tabela IBPT atualizada com sucesso !",
           registros: registros.length,
+          // Codigos de servico do arquivo, que nao sao NCM de produto.
+          ignorados,
           versao: registros[0].versao,
         });
       } catch (error: any) {
@@ -255,7 +268,7 @@ export default {
          left join tenants t on t.id = p.tenant_id
         where p.ncm_limpo is null
            or length(p.ncm_limpo) <> 8
-           or not exists (select 1 from ibpt i where i.codigo = p.ncm_limpo)
+           or not exists (select 1 from ibpt i where i.codigo = p.ncm_limpo )
         order by t.name nulls last, p.descricao`,
       { replacements: parametros, type: QueryTypes.SELECT }
     );
