@@ -32,6 +32,7 @@ import Login from "@/views/Deslogado/Login.vue";
 import RegistrarAdmin from "@/views/Deslogado/PainelAdmin/RegistrarAdmin.vue";
 import ClientesAdmin from "@/views/Deslogado/PainelAdmin/ListarClientes.vue";
 import DownloadsAdmin from "@/views/Deslogado/PainelAdmin/Downloads.vue";
+import IbptAdmin from "@/views/Deslogado/PainelAdmin/Ibpt.vue";
 import FeedbacksAdmin from "@/views/Deslogado/PainelAdmin/Feedbacks.vue";
 import DownloadsPublico from "@/views/Deslogado/DownloadsPublico.vue";
 import LoginAdmin from "@/views/Deslogado/LoginAdmin.vue";
@@ -93,6 +94,16 @@ const routes: Array<RouteConfig> = [
     name: "admin-downloads",
     components: {
       "rotas-deslogado": DownloadsAdmin,
+    },
+    meta: {
+      requiresAuthAdmin: true,
+    },
+  },
+  {
+    path: "/administracao/ibpt",
+    name: "admin-ibpt",
+    components: {
+      "rotas-deslogado": IbptAdmin,
     },
     meta: {
       requiresAuthAdmin: true,

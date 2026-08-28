@@ -298,8 +298,8 @@ export default {
       await this.carregarNCM();
       await this.carregarTributacao();
     },
-    carregarNCM() {
-      const ncm = NCM.findByNCM(this.produto.ncm);
+    async carregarNCM() {
+      const ncm = await NCM.findByNCM(this.produto.ncm);
       this.produto.cest = "";
       if (ncm) this.ncm_descricao = ncm.Descricao;
       if (!ncm) {

@@ -1,5 +1,7 @@
 import Vue from "vue";
 import { maskCEST, maskNCM } from "@/utils/masks";
+// Apelidado: este arquivo ja tem uma interface local chamada NCM.
+import CatalogoNCM from "@/infra/entity/NCM";
 
 interface Tributacao {
   codigo: string;
@@ -103,18 +105,16 @@ export default {
   },
 
   actions: {
-    async getNCM({ state, commit }: any, payload: string) {
-      payload = maskNCM(payload);
-      if (state.ncm.ncmList.length === 0) {
-        await import("@/utils/NCM.json").then((module) => {
-          commit("setNCMList", module.default.Nomenclaturas);
-        });
-      }
-      const ncm = state.ncm.ncmList.find(
-        (ncm: any) => ncm.Codigo.replace(/\./g, "").padStart(8, "0") === payload
-      ) || { Codigo: "00000000", Descricao: "" };
-
+    // Consulta um NCM na tabela do IBPT. Antes carregava o JSON de 4 MB inteiro
+    // no navegador so para achar uma linha.
+    async getNCM({ commit }: any, payload: string) {
+      const ncm = (await CatalogoNCM.findByNCM(payload)) || { Codigo: "00000000", Descricao: "" };
       commit("setTributacaoNCM", ncm);
+    },
+
+    // Busca do modal de NCM: quem filtra e o servidor.
+    async buscarNCM({ commit }: any, termo: string) {
+      commit("setNCMList", await CatalogoNCM.filter(termo));
     },
     async getCEST({ state, commit }: any, payload: string) {
       commit("setCESTList", []);

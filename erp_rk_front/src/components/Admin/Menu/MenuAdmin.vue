@@ -57,6 +57,11 @@ export default {
           icon: "mdi-cloud-download-outline",
           route: "/administracao/downloads",
         },
+        {
+          title: "Tabela IBPT",
+          icon: "mdi-table-large",
+          route: "/administracao/ibpt",
+        },
         // Feature de feedback está desativada por enquanto (ver Header.vue,
         // featureFeedbackAtivo). Reativar os dois juntos.
         // {

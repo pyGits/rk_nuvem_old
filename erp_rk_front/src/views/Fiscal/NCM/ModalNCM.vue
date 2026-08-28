@@ -5,13 +5,18 @@
         <v-card-title>
           <span class="headline">Lista de NCMS</span>
         </v-card-title>
-        <v-text-field v-model="search" label="Pesquisar"></v-text-field>
+        <v-text-field v-model="search" label="Pesquisar" hint="Digite ao menos 2 caracteres do código ou da descrição" persistent-hint></v-text-field>
         <v-data-table
           id="tableNCM"
           :headers="header"
-          :items="filteredNCMs"
+          :items="NCMs"
+          :loading="carregando"
           @click:row="selectNCM"
-        ></v-data-table>
+        >
+          <template v-slot:no-data>
+            <span class="grey--text">{{ search.length >= 2 ? "Nenhum NCM encontrado." : "Digite para pesquisar." }}</span>
+          </template>
+        </v-data-table>
       </v-card>
     </v-dialog>
   </v-container>
@@ -33,28 +38,33 @@ export default {
         return this.$store.state.tributacao.ncm.ncmList;
       },
     },
-    filteredNCMs() {
-      // Filtra os NCMs de acordo com o que o usuário digitar no campo de pesquisa
-      return this.NCMs.filter((NCM) => {
-        const codigoSemPonto = NCM.Codigo.replace(/\./g, "");
-        return (
-          codigoSemPonto.toLowerCase().includes(this.search.toLowerCase()) ||
-          NCM.Descricao.toLowerCase().includes(this.search.toLowerCase())
-        );
-      });
-    },
   },
   methods: {
+    async pesquisar(termo) {
+      this.carregando = true;
+      try {
+        await this.$store.dispatch("buscarNCM", termo);
+      } finally {
+        this.carregando = false;
+      }
+    },
     selectNCM(ncm) {
       this.$store.commit("setTributacaoNCM", ncm);
       this.localDialog = false;
     },
   },
   watch: {
-    localDialog: function (newValue, oldValue) {
+    localDialog: function (newValue) {
       if (newValue) {
-        this.$store.dispatch("getNCM", "00000000");
+        this.search = "";
+        this.$store.commit("setNCMList", []);
       }
+    },
+    // A tabela tem 12 mil NCM: quem filtra e o servidor. O atraso evita uma
+    // consulta por tecla digitada.
+    search: function (termo) {
+      clearTimeout(this.debounce);
+      this.debounce = setTimeout(() => this.pesquisar(termo), 350);
     },
   },
   data() {
@@ -70,6 +80,8 @@ export default {
         },
       ],
       search: "",
+      carregando: false,
+      debounce: null,
     };
   },
 };
