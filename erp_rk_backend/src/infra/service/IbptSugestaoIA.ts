@@ -43,6 +43,23 @@ export function segundosDeEspera(erro: any): number {
   return 0;
 }
 
+// A recusa por cota traz um QuotaFailure que nomeia a janela no quotaId:
+// "...PerMinutePerProjectPerModel" passa sozinha em menos de um minuto,
+// "...PerDayPerProjectPerModel" so volta na virada do dia.
+//
+// O retryDelay NAO distingue as duas - o teto diario tambem pede ~49s. Confiar
+// so nele faz o mutirao repetir a noite inteira sem avancar um produto, que foi
+// o que aconteceu aqui: o plano gratuito da 20 requisicoes POR DIA por modelo,
+// nao por minuto.
+export function cotaDiaria(erro: any): { esgotada: boolean; limite: number } {
+  const detalhes = erro?.response?.data?.error?.details || [];
+
+  const falha = detalhes.find((detalhe: any) => String(detalhe["@type"] || "").includes("QuotaFailure"));
+  const violacao = (falha?.violations || []).find((v: any) => String(v?.quotaId || "").includes("PerDay"));
+
+  return { esgotada: !!violacao, limite: Number(violacao?.quotaValue || 0) };
+}
+
 function esperar(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -75,8 +92,10 @@ async function chamar(url: string, corpo: any, config: any): Promise<any> {
     } catch (erro: any) {
       const detalhe = erro?.response?.data?.error?.message;
       const status = erro?.response?.status;
+      const diaria = cotaDiaria(erro);
 
-      if (STATUS_TEMPORARIOS.includes(status) && tentativa < TENTATIVAS) {
+      // Cota diaria esgotada nao e falha passageira: insistir so gasta tempo.
+      if (!diaria.esgotada && STATUS_TEMPORARIOS.includes(status) && tentativa < TENTATIVAS) {
         // O tempo que o proprio Google pediu tem prioridade; sem ele, espera
         // crescente (4s, 8s), que cobre a sobrecarga passageira do modelo.
         const pedido = segundosDeEspera(erro) * 1000;
@@ -90,6 +109,18 @@ async function chamar(url: string, corpo: any, config: any): Promise<any> {
         return await tratarErro(detalhe, status, erro);
       } catch (tratado: any) {
         tratado.retryEmSegundos = segundosDeEspera(erro);
+        tratado.cotaDiariaEsgotada = diaria.esgotada;
+
+        // A mensagem do Google ("You exceeded your current quota") nao diz que
+        // o teto e diario nem quanto ele vale; sem isso o operador fica
+        // esperando uma janela que nao vem.
+        if (diaria.esgotada) {
+          tratado.message =
+            `Cota diária do plano gratuito esgotada: ${diaria.limite} requisições por dia no modelo ` +
+            `${modeloConfigurado()}. Só libera na virada do dia. Para rodar o volume todo de uma vez, ` +
+            `ative o faturamento no projeto do Google Cloud.`;
+        }
+
         throw tratado;
       }
     }

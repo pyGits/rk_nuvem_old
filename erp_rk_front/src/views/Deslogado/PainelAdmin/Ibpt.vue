@@ -110,8 +110,8 @@
               <span v-if="mutirao.tentativas"> · {{ mutirao.tentativas }} nova(s) tentativa(s)</span>
             </div>
 
-            <v-alert v-if="mutirao.ultimoErro" type="warning" text dense class="mt-2 mb-0">
-              {{ mutirao.ultimoErro }} — repetindo automaticamente.
+            <v-alert v-if="mutirao.ultimoErro" :type="mutirao.cotaDiaria ? 'error' : 'warning'" text dense class="mt-2 mb-0">
+              {{ mutirao.ultimoErro }}<span v-if="!mutirao.cotaDiaria"> — repetindo automaticamente.</span>
             </v-alert>
           </template>
         </v-sheet>
@@ -256,7 +256,7 @@ export default {
       buscandoIA: false,
       iniciandoMutirao: false,
       mutiraoReconsultar: false,
-      mutirao: { rodando: false, total: 0, processados: 0, comSugestao: 0, tentativas: 0, ultimoErro: "" },
+      mutirao: { rodando: false, total: 0, processados: 0, comSugestao: 0, tentativas: 0, ultimoErro: "", cotaDiaria: false },
       timerMutirao: null,
       selecionados: [],
       normalizando: false,
