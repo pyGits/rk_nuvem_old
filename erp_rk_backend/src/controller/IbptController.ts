@@ -5,6 +5,8 @@ import { Request, Response } from "express";
 import db from "../database/config";
 import Ibpt from "../models/Ibpt";
 import IbptCarga from "../models/IbptCarga";
+import IbptSugestaoIa from "../models/IbptSugestaoIa";
+import { escolherNCM, iaDisponivel, modeloConfigurado, PerguntaIA } from "../infra/service/IbptSugestaoIA";
 
 // O arquivo do IBPT sai em ANSI (cp1252), nao em UTF-8. Ler como UTF-8 corrompe
 // toda descricao acentuada - e sao milhares.
@@ -22,6 +24,12 @@ const RX = "'\\D'";
 // so como protecao contra uma base absurda: ele nunca deveria ser atingido, e
 // quando for, a tela avisa e o filtro por inquilino resolve.
 const LIMITE_CONFERENCIA = 5000;
+// Produtos por chamada a IA. Lote grande economiza requisicao, mas resposta
+// longa demais o modelo trunca - e ai a metade final volta sem escolha.
+const LOTE_IA = 25;
+// Teto por execucao do botao, para nao estourar a cota do plano gratuito num
+// clique so. O que sobrar fica para a proxima rodada.
+const LIMITE_IA = 300;
 
 // NCM usado quando nada e encontrado. Decisao de negocio: e melhor um padrao
 // conhecido do que deixar o produto sem NCM.
@@ -319,6 +327,7 @@ export default {
     const lista = truncado ? produtos.slice(0, LIMITE_CONFERENCIA) : produtos;
 
     await anexarSugestoes(lista as any[]);
+    await anexarSugestoesIA(lista as any[]);
 
     res.status(200).json({
       tabelaCarregada: true,
@@ -404,6 +413,66 @@ export default {
     );
 
     res.status(200).json({ alterados: Number(alterados || 0) });
+  },
+
+  // Consulta a IA para os produtos que ainda nao tem resposta gravada, e grava.
+  //
+  // Roda sob demanda, nunca junto da conferencia: a conferencia e usada o tempo
+  // todo e nao pode ficar presa numa chamada externa.
+  async buscarComIA(req: Request, res: Response) {
+    if (!iaDisponivel()) throw new Error("Configure GEMINI_API_KEY no servidor para usar a busca por IA.");
+
+    const total = await Ibpt.count();
+    if (total === 0) throw new Error("Carregue a tabela do IBPT antes de usar a busca por IA.");
+
+    const itens = Array.isArray(req.body?.produtos) ? req.body.produtos : [];
+    if (itens.length === 0) throw new Error("Nenhum produto informado !");
+
+    // Descricao repetida vira uma pergunta so - e o que faz o mesmo item em
+    // varios clientes custar uma chamada, e nao uma por cliente.
+    const descricoes: string[] = Array.from(new Set(itens.map((item: any) => String(item.descricao || "")))).filter((d) => !!d) as string[];
+
+    const jaRespondidas: any[] = await IbptSugestaoIa.findAll({ where: { descricao: descricoes }, attributes: ["descricao"] });
+    const conhecidas = new Set(jaRespondidas.map((linha: any) => linha.descricao));
+
+    const pendentes = descricoes.filter((descricao) => !conhecidas.has(descricao)).slice(0, LIMITE_IA);
+
+    if (pendentes.length === 0) {
+      return res.status(200).json({ consultados: 0, comSugestao: 0, restantes: 0, message: "Todos os produtos selecionados já tinham resposta da IA." });
+    }
+
+    // Os candidatos saem da propria tabela do IBPT: a IA escolhe, nao inventa.
+    const perguntas: PerguntaIA[] = [];
+    for (const descricao of pendentes) {
+      perguntas.push({ descricao, candidatos: await candidatosPara(descricao) });
+    }
+
+    let comSugestao = 0;
+
+    for (let i = 0; i < perguntas.length; i += LOTE_IA) {
+      const lote = perguntas.slice(i, i + LOTE_IA);
+      const respostas = await escolherNCM(lote);
+
+      for (const resposta of respostas) {
+        // Segunda conferencia, agora contra o banco: mesmo escolhendo entre as
+        // opcoes, nada entra sem existir na tabela.
+        const registro: any = resposta.ncm ? await Ibpt.findOne({ where: { codigo: resposta.ncm } }) : null;
+        if (registro) comSugestao++;
+
+        await IbptSugestaoIa.upsert({
+          descricao: resposta.descricao,
+          ncm: registro ? registro.codigo : null,
+          ncm_descricao: registro ? registro.descricao : null,
+          modelo: modeloConfigurado(),
+        } as any);
+      }
+    }
+
+    res.status(200).json({
+      consultados: pendentes.length,
+      comSugestao,
+      restantes: descricoes.filter((d) => !conhecidas.has(d)).length - pendentes.length,
+    });
   },
 
   // ---------- Clientes ----------
@@ -516,6 +585,49 @@ async function sugerirPorZeroAEsquerda(produtos: any[]): Promise<void> {
       produto.descricao_sugerida = registro.descricao;
       produto.sugestao_origem = "zero";
     });
+  });
+}
+
+// Candidatos do IBPT para uma descricao: e o que a IA recebe para escolher.
+async function candidatosPara(descricao: string): Promise<{ codigo: string; descricao: string }[]> {
+  const termos = termosDaDescricao(descricao);
+  if (termos.length === 0) return [];
+
+  // Aqui o filtro e mais solto que na sugestao por texto (OR, sem exigir a
+  // primeira palavra): a IA sabe descartar o que nao serve, e um leque maior
+  // aumenta a chance de a opcao certa estar entre as opcoes.
+  const registros: any[] = await db.query(
+    `select codigo, descricao
+       from ibpt
+      where to_tsvector('portuguese', descricao) @@ to_tsquery('portuguese', :consulta)
+      order by ts_rank(to_tsvector('portuguese', descricao), to_tsquery('portuguese', :consulta)) desc, length(descricao)
+      limit ${LIMITE_SUGESTAO}`,
+    { replacements: { consulta: termos.join(" | ") }, type: QueryTypes.SELECT }
+  );
+
+  return registros.map((registro: any) => ({ codigo: registro.codigo, descricao: registro.descricao }));
+}
+
+// Anexa o que a IA ja respondeu antes. So leitura: a conferencia e usada o
+// tempo todo e nao pode depender de chamada externa - quem consulta a IA e o
+// botao proprio, uma vez.
+async function anexarSugestoesIA(produtos: any[]): Promise<void> {
+  const descricoes = Array.from(new Set(produtos.map((p) => p.descricao).filter((d) => !!d)));
+  if (descricoes.length === 0) return;
+
+  const cache: any[] = await IbptSugestaoIa.findAll({ where: { descricao: descricoes } });
+
+  const porDescricao = new Map<string, any>();
+  cache.forEach((linha: any) => porDescricao.set(linha.descricao, linha));
+
+  produtos.forEach((produto) => {
+    const linha = porDescricao.get(produto.descricao);
+    if (!linha) return;
+
+    produto.ncm_ia = linha.ncm;
+    produto.descricao_ia = linha.ncm_descricao;
+    // Diferente de "sem cache": a IA ja foi consultada e nao soube dizer.
+    produto.ia_consultada = true;
   });
 }
 

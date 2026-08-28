@@ -119,9 +119,17 @@
                 <v-icon left small>mdi-check</v-icon>
                 Normalizar selecionados ({{ selecionadosComSugestao.length }})
               </v-btn>
-              <v-btn small color="warning" :disabled="!comSugestao.length" :loading="normalizando" @click="normalizar(comSugestao)">
+              <v-btn small color="warning" class="mr-2" :disabled="!comSugestao.length" :loading="normalizando" @click="normalizar(comSugestao)">
                 <v-icon left small>mdi-check-all</v-icon>
                 Normalizar todos ({{ comSugestao.length }})
+              </v-btn>
+              <v-btn small color="purple" dark class="mr-2" :disabled="!semRespostaIA.length" :loading="buscandoIA" @click="buscarIA">
+                <v-icon left small>mdi-robot-outline</v-icon>
+                Buscar na IA ({{ semRespostaIA.length }})
+              </v-btn>
+              <v-btn small color="purple" outlined :disabled="!comSugestaoIA.length" :loading="normalizando" @click="normalizarIA">
+                <v-icon left small>mdi-robot</v-icon>
+                Usar sugestão da IA ({{ comSugestaoIA.length }})
               </v-btn>
             </div>
 
@@ -154,6 +162,14 @@
                   <div class="text-caption grey--text text--darken-1">{{ item.descricao_sugerida }}</div>
                 </template>
                 <span v-else class="grey--text">sem sugestão</span>
+              </template>
+              <template #[`item.ncm_ia`]="{ item }">
+                <template v-if="item.ncm_ia">
+                  <div class="font-weight-medium purple--text">{{ item.ncm_ia }}</div>
+                  <div class="text-caption grey--text text--darken-1">{{ item.descricao_ia }}</div>
+                </template>
+                <span v-else-if="item.ia_consultada" class="grey--text">IA não soube dizer</span>
+                <span v-else class="grey--text">não consultado</span>
               </template>
               <template #[`item.motivo`]="{ item }">
                 <v-chip x-small :color="item.motivo === 'NCM em branco' ? 'error' : 'warning'" dark>{{ item.motivo }}</v-chip>
@@ -212,6 +228,7 @@ export default {
       zeroTotal: null,
       contandoZero: false,
       corrigindoZero: false,
+      buscandoIA: false,
       selecionados: [],
       normalizando: false,
       snackbar: false,
@@ -222,7 +239,8 @@ export default {
         { text: "Código", value: "codigo", width: 100 },
         { text: "Descrição", value: "descricao" },
         { text: "NCM atual", value: "ncm", width: 110 },
-        { text: "NCM sugerido", value: "ncm_sugerido", width: 260 },
+        { text: "NCM sugerido", value: "ncm_sugerido", width: 240 },
+        { text: "Sugestão da IA", value: "ncm_ia", width: 240 },
         { text: "Motivo", value: "motivo", width: 200 },
       ],
     };
@@ -256,6 +274,14 @@ export default {
     },
     // Correção determinística, não palpite: o NCM atual já era o certo e só
     // perdeu o zero à esquerda. Pode ser aplicada em massa com segurança.
+    // Ainda não perguntados à IA. Quem já foi e voltou vazio não entra: seria
+    // pagar de novo pela mesma resposta.
+    semRespostaIA() {
+      return this.produtos.filter((produto) => !produto.ia_consultada && produto.descricao);
+    },
+    comSugestaoIA() {
+      return this.produtos.filter((produto) => !!produto.ncm_ia);
+    },
     porZero() {
       return this.produtos.filter((produto) => produto.sugestao_origem === "zero");
     },
@@ -358,6 +384,28 @@ export default {
         this.corrigindoZero = false;
       }
     },
+    async buscarIA() {
+      const alvo = this.semRespostaIA;
+      if (!window.confirm(`Consultar a IA para ${alvo.length} produto(s)?
+
+A resposta fica gravada, então a conferência seguinte já vem preenchida.`)) return;
+
+      this.buscandoIA = true;
+      try {
+        const res = await this.$store.dispatch("buscarNcmComIA", alvo.map((item) => ({ descricao: item.descricao })));
+        const sobra = res.restantes ? ` ${res.restantes} ficaram para a próxima rodada.` : "";
+        this.avisar(res.message || `${res.consultados} descrição(ões) consultada(s), ${res.comSugestao} com NCM.${sobra}`);
+        await this.conferir();
+      } catch (erro) {
+        this.avisar(erro?.response?.data?.message || "Não foi possível consultar a IA.", "error");
+      } finally {
+        this.buscandoIA = false;
+      }
+    },
+    // Grava o NCM que a IA escolheu, no mesmo caminho validado da normalização.
+    normalizarIA() {
+      return this.normalizar(this.comSugestaoIA.map((produto) => ({ ...produto, ncm_sugerido: produto.ncm_ia, sugestao_padrao: false })));
+    },
     async conferir() {
       this.conferindo = true;
       try {
@@ -422,6 +470,8 @@ A alteração não pode ser desfeita.`);
         ncm_sugerido: produto.ncm_sugerido,
         descricao_sugerida: produto.descricao_sugerida,
         origem_sugestao: produto.sugestao_origem || "",
+        ncm_ia: produto.ncm_ia,
+        descricao_ia: produto.descricao_ia,
         motivo: produto.motivo,
       }));
       gerarExcel(linhas, "produtos_ncm_irregular.xlsx");

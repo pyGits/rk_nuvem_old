@@ -56,6 +56,12 @@ export default {
       return res.data;
     },
 
+    // Consulta a IA e grava. Depois disso, a conferência já traz a resposta.
+    async buscarNcmComIA(_: any, produtos: any[]) {
+      const res = await Vue.prototype.$http.post("/admin/ibpt/buscar-ia", { produtos });
+      return res.data;
+    },
+
     async getIbptProdutosSemNcm({ commit }: any, filtro: any = {}) {
       const res = await Vue.prototype.$http.get("/admin/ibpt/produtos-sem-ncm", { params: filtro });
       commit("setIbptProdutosSemNcm", res.data);

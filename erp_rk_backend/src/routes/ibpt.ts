@@ -34,5 +34,7 @@ router.post("/admin/ibpt/normalizar", verifyJWTADMIN, seguro(IbptController.norm
 // O GET so conta; o POST aplica.
 router.get("/admin/ibpt/zero-esquerda", verifyJWTADMIN, seguro(IbptController.zeroAEsquerda));
 router.post("/admin/ibpt/zero-esquerda", verifyJWTADMIN, seguro(IbptController.zeroAEsquerda));
+// Busca por IA: consulta o modelo e GRAVA. A conferencia depois so le o cache.
+router.post("/admin/ibpt/buscar-ia", verifyJWTADMIN, seguro(IbptController.buscarComIA));
 
 export default router;
