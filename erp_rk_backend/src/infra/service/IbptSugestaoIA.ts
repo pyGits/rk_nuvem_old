@@ -2,10 +2,19 @@ import axios from "axios";
 
 // Sugestao de NCM por IA.
 //
-// Regra central: a IA NAO inventa codigo. Ela recebe os candidatos que saíram
-// da propria tabela do IBPT e so escolhe entre eles. Quem chama ainda confere a
-// resposta contra a tabela antes de gravar - codigo que nao existe vira "sem
-// sugestao", nunca um NCM inventado no cadastro fiscal do cliente.
+// Regra central: nada entra no cadastro sem existir na tabela do IBPT. Quem
+// chama confere o codigo devolvido contra a tabela e descarta o que nao achar.
+//
+// A IA responde LIVREMENTE, com os candidatos da busca textual apenas como
+// pista. A primeira versao a obrigava a escolher entre os candidatos, e numa
+// joalheria o resultado foi "nao soube dizer" em 100% dos produtos: para "ANEL
+// DE OURO" a busca textual so acha po de ouro e sulfeto de ouro, porque a linha
+// certa (71131900) diz "Artefatos de joalharia" e nao menciona anel nem ouro.
+// Presa a esses candidatos, a IA nao tinha como acertar - e acertava ao recusar.
+// Solta, ela responde 71131900 de primeira.
+//
+// A validacao contra a tabela sozinha ja impede codigo inventado, que era o
+// motivo da restricao.
 //
 // O ganho sobre a busca textual esta onde ela falha: marca no comeco da
 // descricao (FANDANGOS, YOPRO) e palavra generica (DOCE BRIGADEIRO virava peixe
@@ -18,9 +27,11 @@ export type PerguntaIA = { descricao: string; candidatos: CandidatoNCM[] };
 export type RespostaIA = { descricao: string; ncm: string | null };
 
 export function modeloConfigurado(): string {
-  // Confirmado como disponivel na chave em uso. O .env sobrepoe quando o
-  // Google aposentar este nome - e ele aposenta com frequencia.
-  return process.env.GEMINI_MODEL || "gemini-2.5-flash";
+  // O Google aposenta nome de modelo com frequencia, e o endpoint de listagem
+  // continua mostrando modelo que ja nao aceita chave nova - foi assim com o
+  // gemini-2.5-flash. Por isso o .env sobrepoe: trocar o modelo nao pode
+  // depender de deploy.
+  return (process.env.GEMINI_MODEL || "gemini-3.6-flash").trim();
 }
 
 export function iaDisponivel(): boolean {
@@ -37,13 +48,19 @@ async function chamar(url: string, corpo: any, config: any): Promise<any> {
     const detalhe = erro?.response?.data?.error?.message;
     const status = erro?.response?.status;
 
+    // A mensagem do Google e mais precisa que qualquer deducao a partir do
+    // status: no 404 do gemini-2.5-flash ela dizia "no longer available to new
+    // users" e ja indicava o substituto, enquanto o texto que eu montava
+    // afirmava que o modelo nao existia - e listava ele mesmo como disponivel.
+    if (detalhe) throw new Error(`Gemini (${modeloConfigurado()}): ${detalhe}`);
+
     if (status === 404) {
       const modelos = await modelosDisponiveis().catch(() => [] as string[]);
-      const sugestao = modelos.length ? ` Modelos disponíveis para esta chave: ${modelos.slice(0, 8).join(", ")}.` : "";
-      throw new Error(`O modelo "${modeloConfigurado()}" não existe para esta chave. Ajuste GEMINI_MODEL no .env.${sugestao}`);
+      const sugestao = modelos.length ? ` Modelos listados para esta chave: ${modelos.slice(0, 8).join(", ")}.` : "";
+      throw new Error(`Falha 404 no modelo "${modeloConfigurado()}". Ajuste GEMINI_MODEL no .env.${sugestao}`);
     }
 
-    throw new Error(detalhe ? `Gemini: ${detalhe}` : erro?.message || "Falha ao consultar a IA.");
+    throw new Error(erro?.message || "Falha ao consultar a IA.");
   }
 }
 
@@ -51,15 +68,17 @@ function montarPrompt(perguntas: PerguntaIA[]): string {
   const itens = perguntas
     .map((pergunta, i) => {
       const opcoes = pergunta.candidatos.map((c) => `    - ${c.codigo}: ${c.descricao}`).join("\n");
-      return `${i + 1}. Produto: "${pergunta.descricao}"\n  Opcoes:\n${opcoes || "    (nenhuma)"}`;
+      return `${i + 1}. Produto: "${pergunta.descricao}"\n  Sugestoes da busca:\n${opcoes || "    (nenhuma)"}`;
     })
     .join("\n\n");
 
   return [
-    "Voce classifica produtos de supermercado brasileiro em codigos NCM.",
+    "Voce classifica produtos de varejo brasileiro em codigos NCM.",
     "",
-    "Para cada produto abaixo, escolha o NCM mais adequado ENTRE AS OPCOES listadas.",
-    "Se nenhuma opcao servir, responda null - nao invente codigo e nao use codigo fora das opcoes.",
+    "Para cada produto abaixo, indique o NCM de 8 digitos mais adequado.",
+    "As opcoes listadas vem de uma busca por palavra e podem nao conter a resposta certa:",
+    "use uma delas se servir, ou informe outro NCM que voce considere correto.",
+    "Responda null so quando nao souber - null e melhor que um codigo no chute.",
     "",
     "Responda SOMENTE um array JSON, sem texto ao redor, no formato:",
     '[{"i": 1, "ncm": "19059090"}, {"i": 2, "ncm": null}]',
@@ -115,10 +134,8 @@ export async function escolherNCM(perguntas: PerguntaIA[]): Promise<RespostaIA[]
     const escolha = escolhas.find((e: any) => Number(e?.i) === i + 1);
     const ncm = String(escolha?.ncm || "").replace(/[^0-9]/g, "");
 
-    // So aceita o que estava entre as opcoes: fecha a porta para o modelo
-    // devolver um codigo parecido mas inexistente.
-    const valido = pergunta.candidatos.some((c) => c.codigo === ncm);
-
-    return { descricao: pergunta.descricao, ncm: valido ? ncm : null };
+    // Aceita qualquer codigo de 8 digitos; quem chama confere na tabela antes
+    // de gravar, e e essa conferencia que barra codigo inventado.
+    return { descricao: pergunta.descricao, ncm: ncm.length === 8 ? ncm : null };
   });
 }

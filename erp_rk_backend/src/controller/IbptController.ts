@@ -432,6 +432,14 @@ export default {
     // varios clientes custar uma chamada, e nao uma por cliente.
     const descricoes: string[] = Array.from(new Set(itens.map((item: any) => String(item.descricao || "")))).filter((d) => !!d) as string[];
 
+    // Reconsultar: apaga as respostas vazias antes de perguntar de novo. Serve
+    // quando o motivo do "nao soube dizer" foi corrigido - foi o caso quando a
+    // IA era obrigada a escolher entre os candidatos da busca textual e, numa
+    // joalheria, nenhum candidato continha a resposta.
+    if (String(req.body?.reconsultarVazios || "") === "1") {
+      await IbptSugestaoIa.destroy({ where: { descricao: descricoes, ncm: null } });
+    }
+
     const jaRespondidas: any[] = await IbptSugestaoIa.findAll({ where: { descricao: descricoes }, attributes: ["descricao"] });
     const conhecidas = new Set(jaRespondidas.map((linha: any) => linha.descricao));
 

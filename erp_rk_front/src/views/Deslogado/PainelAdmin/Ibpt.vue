@@ -123,9 +123,13 @@
                 <v-icon left small>mdi-check-all</v-icon>
                 Normalizar todos ({{ comSugestao.length }})
               </v-btn>
-              <v-btn small color="purple" dark class="mr-2" :disabled="!semRespostaIA.length" :loading="buscandoIA" @click="buscarIA">
+              <v-btn small color="purple" dark class="mr-2" :disabled="!semRespostaIA.length" :loading="buscandoIA" @click="buscarIA(false)">
                 <v-icon left small>mdi-robot-outline</v-icon>
                 Buscar na IA ({{ semRespostaIA.length }})
+              </v-btn>
+              <v-btn small color="purple" outlined class="mr-2" :disabled="!semNcmIA.length" :loading="buscandoIA" @click="buscarIA(true)" title="Pergunta de novo para quem a IA não soube responder">
+                <v-icon left small>mdi-robot-confused-outline</v-icon>
+                Reconsultar vazios ({{ semNcmIA.length }})
               </v-btn>
               <v-btn small color="purple" outlined :disabled="!comSugestaoIA.length" :loading="normalizando" @click="normalizarIA">
                 <v-icon left small>mdi-robot</v-icon>
@@ -282,6 +286,11 @@ export default {
     comSugestaoIA() {
       return this.produtos.filter((produto) => !!produto.ncm_ia);
     },
+    // Já consultados e sem resposta. Ficam de fora da busca normal para não
+    // pagar duas vezes pelo mesmo silêncio, mas podem ser reconsultados.
+    semNcmIA() {
+      return this.produtos.filter((produto) => produto.ia_consultada && !produto.ncm_ia);
+    },
     porZero() {
       return this.produtos.filter((produto) => produto.sugestao_origem === "zero");
     },
@@ -384,15 +393,19 @@ export default {
         this.corrigindoZero = false;
       }
     },
-    async buscarIA() {
-      const alvo = this.semRespostaIA;
-      if (!window.confirm(`Consultar a IA para ${alvo.length} produto(s)?
+    async buscarIA(reconsultar) {
+      const alvo = reconsultar ? this.semNcmIA : this.semRespostaIA;
+      const texto = reconsultar ? "Perguntar de novo para" : "Consultar a IA para";
+      if (!window.confirm(`${texto} ${alvo.length} produto(s)?
 
 A resposta fica gravada, então a conferência seguinte já vem preenchida.`)) return;
 
       this.buscandoIA = true;
       try {
-        const res = await this.$store.dispatch("buscarNcmComIA", alvo.map((item) => ({ descricao: item.descricao })));
+        const res = await this.$store.dispatch("buscarNcmComIA", {
+          produtos: alvo.map((item) => ({ descricao: item.descricao })),
+          reconsultarVazios: reconsultar,
+        });
         const sobra = res.restantes ? ` ${res.restantes} ficaram para a próxima rodada.` : "";
         this.avisar(res.message || `${res.consultados} descrição(ões) consultada(s), ${res.comSugestao} com NCM.${sobra}`);
         await this.conferir();

@@ -57,8 +57,11 @@ export default {
     },
 
     // Consulta a IA e grava. Depois disso, a conferência já traz a resposta.
-    async buscarNcmComIA(_: any, produtos: any[]) {
-      const res = await Vue.prototype.$http.post("/admin/ibpt/buscar-ia", { produtos });
+    async buscarNcmComIA(_: any, payload: any) {
+      const res = await Vue.prototype.$http.post("/admin/ibpt/buscar-ia", {
+        produtos: payload.produtos,
+        reconsultarVazios: payload.reconsultarVazios ? "1" : "0",
+      });
       return res.data;
     },
 
