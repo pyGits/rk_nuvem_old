@@ -302,34 +302,47 @@
             <div class="d-flex align-center flex-wrap mb-2">
               <span class="text-caption grey--text text--darken-1">
                 {{ conferencia.totais.produtos }} produto(s) em {{ conferencia.totais.clientes }} cliente(s) ·
-                <span class="teal--text text--darken-2">{{ comSefaz.length }} com NCM da SEFAZ</span> ·
-                <span class="purple--text">{{ comSugestaoIA.length }} com NCM da IA</span> ·
+                <span class="teal--text text--darken-2">{{ comSefaz.length }} pela SEFAZ</span> ·
+                <span class="indigo--text">{{ comTabela.length }} pela tabela</span> ·
+                <span class="purple--text">{{ comSugestaoIA.length }} pela IA</span> ·
                 {{ semRespostaIA.length }} ainda não consultados
               </span>
               <v-spacer></v-spacer>
-              <v-btn small color="teal" dark class="mr-2" :disabled="!selecionadosComSefaz.length" :loading="normalizando" @click="normalizarSefaz(selecionadosComSefaz)">
-                <v-icon left small>mdi-check</v-icon>
-                Usar SEFAZ nos selecionados ({{ selecionadosComSefaz.length }})
-              </v-btn>
-              <v-btn small color="teal" dark class="mr-2" :disabled="!comSefaz.length" :loading="normalizando" @click="normalizarSefaz(comSefaz)">
+
+              <!-- Ordem das origens = ordem de confiabilidade. SEFAZ é consulta
+                   ao cadastro do dono da marca; tabela é a hierarquia do NCM já
+                   digitado; IA é inferência a partir da descrição. -->
+              <v-btn small color="teal" dark class="mr-1 mb-1" :disabled="!selecionadosComSefaz.length" :loading="normalizando" @click="normalizarSefaz(selecionadosComSefaz)">
                 <v-icon left small>mdi-barcode</v-icon>
-                Usar SEFAZ em todos ({{ comSefaz.length }})
+                SEFAZ: selecionados ({{ selecionadosComSefaz.length }})
               </v-btn>
-              <v-btn small color="purple" dark class="mr-2" :disabled="!selecionadosComIA.length" :loading="normalizando" @click="normalizarIA(selecionadosComIA)">
-                <v-icon left small>mdi-check</v-icon>
-                Usar IA nos selecionados ({{ selecionadosComIA.length }})
+              <v-btn small color="teal" outlined class="mr-4 mb-1" :disabled="!comSefaz.length" :loading="normalizando" @click="normalizarSefaz(comSefaz)">
+                todos ({{ comSefaz.length }})
               </v-btn>
-              <v-btn small color="purple" dark class="mr-2" :disabled="!semRespostaIA.length" :loading="buscandoIA" @click="buscarIA(false)">
+
+              <v-btn small color="indigo" dark class="mr-1 mb-1" :disabled="!selecionadosComTabela.length" :loading="normalizando" @click="normalizarTabela(selecionadosComTabela)">
+                <v-icon left small>mdi-table-search</v-icon>
+                Tabela: selecionados ({{ selecionadosComTabela.length }})
+              </v-btn>
+              <v-btn small color="indigo" outlined class="mr-4 mb-1" :disabled="!comTabela.length" :loading="normalizando" @click="normalizarTabela(comTabela)">
+                todos ({{ comTabela.length }})
+              </v-btn>
+
+              <v-btn small color="purple" dark class="mr-1 mb-1" :disabled="!selecionadosComIA.length" :loading="normalizando" @click="normalizarIA(selecionadosComIA)">
+                <v-icon left small>mdi-robot</v-icon>
+                IA: selecionados ({{ selecionadosComIA.length }})
+              </v-btn>
+              <v-btn small color="purple" outlined class="mr-4 mb-1" :disabled="!comSugestaoIA.length" :loading="normalizando" @click="normalizarIA(comSugestaoIA)">
+                todos ({{ comSugestaoIA.length }})
+              </v-btn>
+
+              <v-btn small text color="purple" class="mr-1 mb-1" :disabled="!semRespostaIA.length" :loading="buscandoIA" @click="buscarIA(false)">
                 <v-icon left small>mdi-robot-outline</v-icon>
                 Buscar na IA ({{ semRespostaIA.length }})
               </v-btn>
-              <v-btn small color="purple" outlined class="mr-2" :disabled="!semNcmIA.length" :loading="buscandoIA" @click="buscarIA(true)" title="Pergunta de novo para quem a IA não soube responder">
+              <v-btn small text color="purple" class="mb-1" :disabled="!semNcmIA.length" :loading="buscandoIA" @click="buscarIA(true)" title="Pergunta de novo para quem a IA não soube responder">
                 <v-icon left small>mdi-robot-confused-outline</v-icon>
                 Reconsultar vazios ({{ semNcmIA.length }})
-              </v-btn>
-              <v-btn small color="purple" outlined :disabled="!comSugestaoIA.length" :loading="normalizando" @click="normalizarIA(comSugestaoIA)">
-                <v-icon left small>mdi-robot</v-icon>
-                Usar IA em todos ({{ comSugestaoIA.length }})
               </v-btn>
             </div>
 
@@ -366,6 +379,18 @@
                 <span v-else-if="item.sefaz_consultada" class="grey--text" :title="item.motivo_sefaz">SEFAZ não tem este GTIN</span>
                 <span v-else-if="!item.gtin_consultavel" class="grey--text">GTIN não atendido</span>
                 <span v-else class="grey--text">não consultado</span>
+              </template>
+              <template #[`item.ncm_tabela`]="{ item }">
+                <template v-if="item.ncm_tabela">
+                  <div class="font-weight-medium indigo--text">{{ item.ncm_tabela }}</div>
+                  <div class="text-caption grey--text text--darken-1">{{ item.descricao_tabela }}</div>
+                  <!-- Quantos dígitos casaram é a medida de confiança: 6 é
+                       subposição (estreito), 4 é posição (largo). -->
+                  <div class="text-caption" :class="item.prefixo_tabela.length >= 6 ? 'grey--text' : 'orange--text text--darken-2'">
+                    casou {{ item.prefixo_tabela.length }} dígitos ({{ item.prefixo_tabela }})
+                  </div>
+                </template>
+                <span v-else class="grey--text">sem correspondência</span>
               </template>
               <template #[`item.ncm_ia`]="{ item }">
                 <template v-if="item.ncm_ia">
@@ -461,8 +486,9 @@ export default {
         { text: "NCM atual", value: "ncm", width: 110 },
         // A SEFAZ vem antes da IA de propósito: é consulta ao cadastro do dono
         // da marca, não palpite. Quando as duas respondem, é a que vale.
-        { text: "NCM da SEFAZ", value: "ncm_sefaz", width: 280 },
-        { text: "Sugestão da IA", value: "ncm_ia", width: 280 },
+        { text: "NCM da SEFAZ", value: "ncm_sefaz", width: 260 },
+        { text: "Sugestão pela tabela", value: "ncm_tabela", width: 260 },
+        { text: "Sugestão da IA", value: "ncm_ia", width: 260 },
         { text: "Motivo", value: "motivo", width: 200 },
       ],
     };
@@ -497,6 +523,12 @@ export default {
     // pagar duas vezes pelo mesmo silêncio, mas podem ser reconsultados.
     semNcmIA() {
       return this.produtos.filter((produto) => produto.ia_consultada && !produto.ncm_ia);
+    },
+    selecionadosComTabela() {
+      return this.selecionados.filter((produto) => !!produto.ncm_tabela);
+    },
+    comTabela() {
+      return this.produtos.filter((produto) => !!produto.ncm_tabela);
     },
     selecionadosComSefaz() {
       return this.selecionados.filter((produto) => !!produto.ncm_sefaz);
@@ -731,6 +763,13 @@ export default {
         this.testando = false;
       }
     },
+    // Grava o NCM deduzido pela hierarquia da própria tabela do IBPT.
+    normalizarTabela(itens) {
+      return this.normalizar(
+        itens.map((produto) => ({ ...produto, ncm_sugerido: produto.ncm_tabela })),
+        "sugerido pela tabela IBPT"
+      );
+    },
     // Grava o NCM que a SEFAZ devolveu, no mesmo caminho validado da IA.
     normalizarSefaz(itens) {
       return this.normalizar(
@@ -826,6 +865,9 @@ A alteração não pode ser desfeita.`);
         ncm: produto.ncm,
         ncm_sefaz: produto.ncm_sefaz,
         descricao_sefaz: produto.descricao_sefaz,
+        ncm_tabela: produto.ncm_tabela,
+        descricao_tabela: produto.descricao_tabela,
+        prefixo_tabela: produto.prefixo_tabela,
         ncm_ia: produto.ncm_ia,
         descricao_ia: produto.descricao_ia,
         motivo: produto.motivo,

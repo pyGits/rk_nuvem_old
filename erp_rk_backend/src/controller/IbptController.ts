@@ -610,6 +610,7 @@ export default {
     // OURO" oferecia po de ouro) e virava ruído ao lado de uma resposta boa.
     await anexarSugestoesIA(lista as any[]);
     await anexarSefaz(lista as any[]);
+    await anexarSugestaoPrefixo(lista as any[]);
 
     res.status(200).json({
       tabelaCarregada: true,
@@ -1102,6 +1103,96 @@ async function anexarSefaz(produtos: any[]): Promise<void> {
   });
 }
 
+
+
+// Sugestao a partir do NCM que o cliente JA digitou, subindo na hierarquia da
+// propria NCM: 8 digitos = item, 6 = subposicao, 4 = posicao, 2 = capitulo.
+// Se 30029091 nao existe, 300290 existe e tem um unico filho (30029000).
+//
+// Vale mais que adivinhar pela descricao porque aproveita a intencao de quem
+// cadastrou - o codigo errado quase sempre erra no fim, nao no comeco.
+//
+// Duas leituras do mesmo numero, nesta ordem de prioridade:
+//
+//  1. ZERO-PADDED. O valor e um NCM de 8 digitos que perdeu zeros a esquerda
+//     (o PDV guarda NCM como numero). 4031000 -> 04031000. Trunca em 6 e em 4.
+//
+//  2. PURO. Os digitos SAO o prefixo, sem padding: 00003922 e a posicao 3922,
+//     nao algo que comeca em 0000.
+//
+// A ordem importa e nao e cosmetica: 08109000 (frutas) lido como puro viraria
+// 8109000 -> prefixo 810900, que cai no capitulo 81, metais. Tentar o padded
+// primeiro evita sugerir metal para fruta.
+//
+// Piso de 4 digitos de proposito. Casar so o capitulo (2 digitos) e vago demais
+// para gravar: o capitulo 30 inteiro e "produtos farmaceuticos", e qualquer
+// codigo dele teria tributacao propria. Melhor nao sugerir do que sugerir mal.
+//
+// Desempate dentro do grupo: o codigo MAIS ALTO. Pela convencao da NCM o
+// residual "Outros" e o maior do grupo (termina em 90/99), e e ele o certo
+// quando a subposicao foi desmembrada - caso do 08109000, que virou
+// 08109011..17 mais 08109090.
+async function anexarSugestaoPrefixo(produtos: any[]): Promise<void> {
+  const chave = (ncm: any) => String(ncm || "").replace(/[^0-9]/g, "").substring(0, DIGITOS_NCM);
+
+  const ncms = Array.from(new Set(produtos.map((p) => chave(p.ncm)).filter((n) => n.length >= 2)));
+  if (ncms.length === 0) return;
+
+  // bind, nao replacements: replacements expande array como lista separada por
+  // virgula e quebra o ::text[].
+  const linhas: any[] = await db.query(
+    `with alvo as (
+       select distinct left(regexp_replace(t.n, ${RX}, '', 'g'), ${DIGITOS_NCM}) as d
+         from unnest($1::text[]) as t(n)
+     ),
+     norm as (
+       select d,
+              lpad(d, ${DIGITOS_NCM}, '0') as pad,
+              nullif(ltrim(lpad(d, ${DIGITOS_NCM}, '0'), '0'), '') as puro
+         from alvo
+        where d <> ''
+     ),
+     cand as (
+       select n.d, p.prefixo, p.ordem
+         from norm n
+         cross join lateral (
+           select * from (values
+             (left(n.pad, 6), 1),
+             (left(n.pad, 4), 2),
+             (n.puro, 3),
+             (left(n.puro, 6), 4),
+             (left(n.puro, 4), 5)
+           ) as t(prefixo, ordem)
+          where prefixo is not null and length(prefixo) >= 4
+         ) p
+     )
+     select distinct on (c.d) c.d, c.prefixo, i.codigo, i.descricao
+       from cand c
+       join ibpt i on i.codigo like c.prefixo || '%'
+      -- A tabela do IBPT traz um 00000000 "PRODUTO NAO ESPECIFICADO NA LISTA DE
+      -- NCM". Ele casa com qualquer prefixo de zeros e sequestrava a leitura
+      -- pura: 00003922 sugeria 00000000 em vez de 39229000. Pior, passaria na
+      -- validacao do normalizar e marcaria o produto como resolvido sem dizer
+      -- nada.
+      where i.codigo !~ '^0+$'
+      order by c.d, c.ordem, i.codigo desc`,
+    { bind: [ncms], type: QueryTypes.SELECT }
+  );
+
+  const porNcm = new Map<string, any>();
+  linhas.forEach((linha: any) => porNcm.set(linha.d, linha));
+
+  produtos.forEach((produto) => {
+    const linha = porNcm.get(chave(produto.ncm));
+    if (!linha) return;
+
+    produto.ncm_tabela = linha.codigo;
+    produto.descricao_tabela = linha.descricao;
+    // Quantos digitos casaram: 6 e bem mais confiavel que 4, e quem le precisa
+    // saber disso antes de aplicar em massa.
+    produto.prefixo_tabela = linha.prefixo;
+  });
+}
 
 function serializar(registro: any) {
   return {
