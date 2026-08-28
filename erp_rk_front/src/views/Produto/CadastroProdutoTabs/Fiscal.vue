@@ -151,7 +151,9 @@
               <v-list-item-content>
                 <v-list-item-title>
                   <strong>{{ sugestao.Codigo }}</strong> — {{ sugestao.Descricao }}
+                  <v-chip v-if="sugestao.Padrao" x-small color="warning" dark class="ml-1">padrão</v-chip>
                 </v-list-item-title>
+                <v-list-item-subtitle v-if="sugestao.Padrao" class="warning--text"> Nenhum NCM parecido encontrado — este é o padrão do sistema. </v-list-item-subtitle>
               </v-list-item-content>
               <v-list-item-action>
                 <v-btn small outlined color="primary">Usar</v-btn>

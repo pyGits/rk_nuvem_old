@@ -40,12 +40,12 @@ export default class NCM {
 
   // Sugere NCM a partir da descrição do produto. Quem compara é o Postgres,
   // por busca textual sobre as descrições do IBPT.
-  static async sugerir(descricao: string): Promise<(ItemNCM & { Score: number })[]> {
+  static async sugerir(descricao: string): Promise<(ItemNCM & { Score: number; Padrao: boolean })[]> {
     const texto = String(descricao || "").trim();
     if (texto.length < 3) return [];
 
     const res = await Connection.get("/ibpt/ncm/sugestao", { params: { descricao: texto } });
-    return (res.data || []).map((registro: any) => ({ ...converter(registro), Score: Number(registro.score || 0) }));
+    return (res.data || []).map((registro: any) => ({ ...converter(registro), Score: Number(registro.score || 0), Padrao: !!registro.padrao }));
   }
 
   static async findByNCM(ncm: string): Promise<ItemNCM | null> {

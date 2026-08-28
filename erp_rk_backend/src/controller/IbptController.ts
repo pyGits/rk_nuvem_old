@@ -20,8 +20,18 @@ const LIMITE_SUGESTAO = 10;
 // quando for, a tela avisa e o filtro por inquilino resolve.
 const LIMITE_CONFERENCIA = 5000;
 
-// Embalagem e unidade nao identificam o produto e so atrapalham a busca.
-const RUIDO = new Set(["kg", "gr", "ml", "lt", "und", "uni", "pct", "cx", "fd", "sc", "dz", "mg", "cm", "mt", "pacote", "caixa", "unidade", "com", "para", "sem", "tipo"]);
+// NCM usado quando nada e encontrado. Decisao de negocio: e melhor um padrao
+// conhecido do que deixar o produto sem NCM.
+const NCM_PADRAO = "19059090";
+
+// Embalagem, unidade e palavras genericas. As genericas sao o que mais
+// atrapalha: "ANTIMOFO DIA A DIA" casava com "envelopes de primeiro DIA" e
+// sugeria selo postal.
+const RUIDO = new Set([
+  "kg", "gr", "ml", "lt", "und", "uni", "pct", "cx", "fd", "sc", "dz", "mg", "cm", "mt",
+  "pacote", "caixa", "unidade", "com", "para", "sem", "tipo", "dia", "casa", "lar",
+  "novo", "nova", "linha", "super", "master", "premium", "special", "the", "and",
+]);
 
 // Monta os termos de busca a partir da descricao do produto.
 //
@@ -369,19 +379,31 @@ export default {
     const termos = termosDaDescricao(String(req.query.descricao || ""));
     if (termos.length === 0) return res.status(200).json([]);
 
-    // OR, e nao AND: "ARROZ TIO JOAO" nao pode exigir que "tio" e "joao"
-    // estejam no IBPT. O ts_rank ja coloca na frente quem casou mais termos.
+    // A primeira palavra e a que nomeia o produto e por isso e obrigatoria; as
+    // demais so ordenam. Com OR puro, uma palavra generica da descricao casava
+    // com qualquer coisa ("ANTIMOFO DIA A DIA" sugeria selo postal, por causa
+    // de "envelopes de primeiro dia").
+    const primeiro = termos[0];
     const consulta = termos.join(" | ");
 
     const registros = await db.query(
       `select codigo, descricao,
               ts_rank(to_tsvector('portuguese', descricao), to_tsquery('portuguese', :consulta)) as score
          from ibpt
-        where to_tsvector('portuguese', descricao) @@ to_tsquery('portuguese', :consulta)
+        where to_tsvector('portuguese', descricao) @@ to_tsquery('portuguese', :primeiro)
         order by score desc, codigo
         limit ${LIMITE_SUGESTAO}`,
-      { replacements: { consulta }, type: QueryTypes.SELECT }
+      { replacements: { consulta, primeiro }, type: QueryTypes.SELECT }
     );
+
+    // Nada encontrado: devolve o padrao, marcado, para quem escolhe saber que
+    // e um padrao e nao uma correspondencia.
+    if ((registros as any[]).length === 0) {
+      const padrao: any = await Ibpt.findOne({ where: { codigo: NCM_PADRAO } });
+      if (!padrao) return res.status(200).json([]);
+
+      return res.status(200).json([{ codigo: padrao.codigo, descricao: padrao.descricao, score: 0, padrao: true }]);
+    }
 
     res.status(200).json(
       (registros as any[]).map((registro) => ({
@@ -427,6 +449,7 @@ export default {
 // 500 idas ao banco. Aqui as consultas de texto vao juntas num array e o
 // Postgres resolve todas com um LATERAL sobre o mesmo indice.
 async function anexarSugestoes(produtos: any[]): Promise<void> {
+  const primeiros: string[] = [];
   const consultas: string[] = [];
   const posicoes: number[] = [];
 
@@ -434,6 +457,10 @@ async function anexarSugestoes(produtos: any[]): Promise<void> {
     const termos = termosDaDescricao(produto.descricao);
     if (termos.length === 0) return;
 
+    // A primeira palavra e a que nomeia o produto ("ARROZ tio joao"). Ela e
+    // obrigatoria; as demais so ordenam. Sem essa exigencia, uma palavra
+    // qualquer da descricao casa com qualquer coisa e a sugestao vira ruido.
+    primeiros.push(termos[0]);
     consultas.push(termos.join(" | "));
     posicoes.push(i);
   });
@@ -445,15 +472,16 @@ async function anexarSugestoes(produtos: any[]): Promise<void> {
   // driver, que converte JS array em array do Postgres de verdade.
   const achados: any[] = await db.query(
     `select entrada.idx, sugerido.codigo, sugerido.descricao
-       from unnest($1::text[]) with ordinality as entrada(consulta, idx)
+       from unnest($1::text[], $2::text[]) with ordinality as entrada(primeiro, consulta, idx)
        cross join lateral (
          select codigo, descricao
            from ibpt
-          where to_tsvector('portuguese', descricao) @@ to_tsquery('portuguese', entrada.consulta)
+          -- filtra pela primeira palavra, ordena pela descricao inteira
+          where to_tsvector('portuguese', descricao) @@ to_tsquery('portuguese', entrada.primeiro)
           order by ts_rank(to_tsvector('portuguese', descricao), to_tsquery('portuguese', entrada.consulta)) desc, codigo
           limit 1
        ) sugerido`,
-    { bind: [consultas], type: QueryTypes.SELECT }
+    { bind: [primeiros, consultas], type: QueryTypes.SELECT }
   );
 
   achados.forEach((achado: any) => {
@@ -463,6 +491,19 @@ async function anexarSugestoes(produtos: any[]): Promise<void> {
 
     produto.ncm_sugerido = achado.codigo;
     produto.descricao_sugerida = achado.descricao;
+  });
+
+  // Sem correspondencia, cai no padrao - e marcado como tal, para a tela
+  // mostrar diferente. Um palpite errado disfarcado de acerto e pior que
+  // nenhuma sugestao.
+  const padrao: any = await Ibpt.findOne({ where: { codigo: NCM_PADRAO } });
+
+  produtos.forEach((produto) => {
+    if (produto.ncm_sugerido) return;
+
+    produto.ncm_sugerido = NCM_PADRAO;
+    produto.descricao_sugerida = padrao ? padrao.descricao : "";
+    produto.sugestao_padrao = true;
   });
 }
 

@@ -83,7 +83,11 @@
             </v-alert>
 
             <div class="d-flex align-center flex-wrap mb-2">
-              <span class="text-caption grey--text text--darken-1">{{ conferencia.totais.produtos }} produto(s) em {{ conferencia.totais.clientes }} cliente(s) · {{ comSugestao.length }} com sugestão</span>
+              <span class="text-caption grey--text text--darken-1">
+                {{ conferencia.totais.produtos }} produto(s) em {{ conferencia.totais.clientes }} cliente(s) ·
+                {{ comSugestao.length - comPadrao.length }} com correspondência ·
+                <span class="warning--text">{{ comPadrao.length }} sem correspondência (NCM padrão)</span>
+              </span>
               <v-spacer></v-spacer>
               <v-btn small color="primary" class="mr-2" :disabled="!selecionadosComSugestao.length" :loading="normalizando" @click="normalizar(selecionadosComSugestao)">
                 <v-icon left small>mdi-check</v-icon>
@@ -115,7 +119,10 @@
               </template>
               <template #[`item.ncm_sugerido`]="{ item }">
                 <template v-if="item.ncm_sugerido">
-                  <div class="font-weight-medium success--text">{{ item.ncm_sugerido }}</div>
+                  <div class="font-weight-medium" :class="item.sugestao_padrao ? 'warning--text' : 'success--text'">
+                    {{ item.ncm_sugerido }}
+                    <v-chip v-if="item.sugestao_padrao" x-small color="warning" dark class="ml-1">padrão</v-chip>
+                  </div>
                   <div class="text-caption grey--text text--darken-1">{{ item.descricao_sugerida }}</div>
                 </template>
                 <span v-else class="grey--text">sem sugestão</span>
@@ -211,6 +218,11 @@ export default {
     selecionadosComSugestao() {
       return this.selecionados.filter((produto) => !!produto.ncm_sugerido);
     },
+    // Sem correspondência no IBPT: recebe o NCM padrão. Contado à parte porque
+    // aplicar padrão em massa é decisão diferente de aceitar uma sugestão.
+    comPadrao() {
+      return this.produtos.filter((produto) => produto.sugestao_padrao);
+    },
     inquilinos() {
       return (this.$store.state.admin.tenantList.tenantList || []).map((tenant) => ({
         id: tenant.id,
@@ -302,7 +314,12 @@ export default {
       if (!itens.length) return;
 
       const clientes = new Set(itens.map((item) => item.tenant_id)).size;
-      const confirmado = window.confirm(`Gravar o NCM sugerido em ${itens.length} produto(s) de ${clientes} cliente(s)?
+      const padroes = itens.filter((item) => item.sugestao_padrao).length;
+      const avisoPadrao = padroes ? `
+
+ATENÇÃO: ${padroes} deles não tiveram correspondência no IBPT e vão receber o NCM padrão.` : "";
+
+      const confirmado = window.confirm(`Gravar o NCM sugerido em ${itens.length} produto(s) de ${clientes} cliente(s)?${avisoPadrao}
 
 A alteração não pode ser desfeita.`);
       if (!confirmado) return;
@@ -339,6 +356,7 @@ A alteração não pode ser desfeita.`);
         ncm: produto.ncm,
         ncm_sugerido: produto.ncm_sugerido,
         descricao_sugerida: produto.descricao_sugerida,
+        sugestao_padrao: produto.sugestao_padrao ? "SIM" : "",
         motivo: produto.motivo,
       }));
       gerarExcel(linhas, "produtos_ncm_irregular.xlsx");
