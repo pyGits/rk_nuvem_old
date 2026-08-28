@@ -49,8 +49,11 @@ uses
   ClientePDVRepository in 'Infra\Repository\PDV\ClientePDVRepository.pas',
   uConexaoPDV in 'Infra\Repository\PDV\uConexaoPDV.pas',
   ContaReceber in 'Classes_RK\ContaReceber.pas',
+  ErroPDV in 'Classes_RK\ErroPDV.pas',
   ContaReceberPDVRepository in 'Infra\Repository\PDV\ContaReceberPDVRepository.pas',
+  ErroPDVRepository in 'Infra\Repository\PDV\ErroPDVRepository.pas',
   SubidaContaReceberUseCase in 'Infra\UseCase\SubidaContaReceberUseCase.pas',
+  SubidaErroPDVUseCase in 'Infra\UseCase\SubidaErroPDVUseCase.pas',
   IndicesNuvemRepository in 'Infra\Repository\Retaguarda\IndicesNuvemRepository.pas';
 
 {$R *.res}

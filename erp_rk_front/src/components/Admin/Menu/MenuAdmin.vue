@@ -62,6 +62,11 @@ export default {
           icon: "mdi-table-large",
           route: "/administracao/ibpt",
         },
+        {
+          title: "Erros nos PDVs",
+          icon: "mdi-alert-circle-outline",
+          route: "/administracao/erros-pdv",
+        },
         // Feature de feedback está desativada por enquanto (ver Header.vue,
         // featureFeedbackAtivo). Reativar os dois juntos.
         // {

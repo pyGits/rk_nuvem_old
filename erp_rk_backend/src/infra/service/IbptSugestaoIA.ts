@@ -26,6 +26,23 @@ const TENTATIVAS = 3;
 const ESPERA_BASE_MS = 4000;
 const STATUS_TEMPORARIOS = [429, 500, 502, 503, 504];
 
+// Quando estoura a cota, o Google diz exatamente quanto esperar - no corpo, em
+// RetryInfo, e tambem no texto ("Please retry in 39.18s"). Obedecer esse tempo
+// e melhor que qualquer escalonamento nosso: menos que ele volta a falhar, e
+// mais que ele desperdica a janela.
+export function segundosDeEspera(erro: any): number {
+  const detalhes = erro?.response?.data?.error?.details || [];
+
+  const info = detalhes.find((detalhe: any) => String(detalhe["@type"] || "").includes("RetryInfo"));
+  const doCampo = Number(String(info?.retryDelay || "").replace("s", ""));
+  if (Number.isFinite(doCampo) && doCampo > 0) return doCampo;
+
+  const doTexto = /retry in ([\d.]+)s/i.exec(String(erro?.response?.data?.error?.message || ""));
+  if (doTexto) return Number(doTexto[1]);
+
+  return 0;
+}
+
 function esperar(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -59,14 +76,22 @@ async function chamar(url: string, corpo: any, config: any): Promise<any> {
       const detalhe = erro?.response?.data?.error?.message;
       const status = erro?.response?.status;
 
-      // Espera crescente: 4s, 8s. O modelo sobrecarregado costuma voltar nesse
-      // intervalo, e insistir de imediato so piora a fila.
       if (STATUS_TEMPORARIOS.includes(status) && tentativa < TENTATIVAS) {
-        await esperar(ESPERA_BASE_MS * tentativa);
+        // O tempo que o proprio Google pediu tem prioridade; sem ele, espera
+        // crescente (4s, 8s), que cobre a sobrecarga passageira do modelo.
+        const pedido = segundosDeEspera(erro) * 1000;
+        await esperar(pedido || ESPERA_BASE_MS * tentativa);
         continue;
       }
 
-      return tratarErro(detalhe, status, erro);
+      // Leva o tempo pedido junto: quem chama em lote usa para pausar o
+      // suficiente antes do proximo, em vez de insistir e queimar a cota.
+      try {
+        return await tratarErro(detalhe, status, erro);
+      } catch (tratado: any) {
+        tratado.retryEmSegundos = segundosDeEspera(erro);
+        throw tratado;
+      }
     }
   }
 }

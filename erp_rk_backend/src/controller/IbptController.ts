@@ -34,6 +34,12 @@ const LOTE_IA = 8;
 // clique so. O que sobrar fica para a proxima rodada.
 const LIMITE_IA = 300;
 
+// O plano gratuito limita requisicoes por minuto (o proprio erro informa:
+// "limit: 20"). Uma pausa de pouco mais de 3s entre lotes mantem o mutirao
+// abaixo do teto - com LOTE_IA de 8, sao cerca de 140 produtos por minuto,
+// sem esbarrar em cota o tempo todo.
+const PAUSA_ENTRE_LOTES_MS = 3200;
+
 // NCM usado quando nada e encontrado. Decisao de negocio: e melhor um padrao
 // conhecido do que deixar o produto sem NCM.
 const NCM_PADRAO = "19059090";
@@ -276,18 +282,21 @@ async function rodarMutirao(): Promise<void> {
 
         mutirao.processados += lote.length;
         mutirao.ultimoErro = "";
+        mutirao.tentativas = 0;
         i += LOTE_IA;
 
-        // Respiro entre lotes: o erro de sobrecarga vem de rajada, e insistir
-        // sem pausa mantem o modelo ocupado com a nossa propria fila.
-        await esperar(1500);
+        await esperar(PAUSA_ENTRE_LOTES_MS);
       } catch (erro: any) {
         // NAO avanca o indice: o mesmo lote sera tentado de novo.
         mutirao.tentativas++;
         mutirao.ultimoErro = erro?.message || "falha ao consultar";
 
-        // Espera crescente ate 2 minutos - sobrecarga costuma passar nessa faixa.
-        await esperar(Math.min(15000 * mutirao.tentativas, 120000));
+        // O tempo que o Google pediu vem junto do erro. Respeitar exatamente
+        // ele e melhor que escalonar por conta: menos volta a falhar, mais
+        // desperdica a janela. Um segundo de folga para a contagem virar.
+        const pedido = Number(erro?.retryEmSegundos || 0);
+
+        await esperar(pedido > 0 ? (pedido + 1) * 1000 : Math.min(15000 * mutirao.tentativas, 120000));
       }
     }
   } catch (erro: any) {

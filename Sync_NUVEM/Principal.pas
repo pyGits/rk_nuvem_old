@@ -838,6 +838,15 @@ try
         subindoContaReceber := false;
       end;
     end;
+
+    // Erros gravados nos PDVs. Fica no mesmo ciclo do convenio porque tambem
+    // le o banco de cada caixa, e nao o banco.fdb da retaguarda.
+    try
+      Global.SubidaErroPDVUseCase.Executar;
+    except
+    on E:Exception do
+      LogFalha('SUBIDA_ERRO_PDV', E);
+    end;
   except
   on E:Exception do
   begin

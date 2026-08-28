@@ -3,7 +3,7 @@ unit uAPIRequest;
 interface
 
 uses
-  System.SysUtils, System.Classes, System.Generics.Collections, IdHTTP, VCL.dialogs,uJsonUtils,utils,IdSSLOpenSSL,Cupom,Estoque,NaoFiscal,Fechamento,ContaReceber,uLogErro;
+  System.SysUtils, System.Classes, System.Generics.Collections, IdHTTP, VCL.dialogs,uJsonUtils,utils,IdSSLOpenSSL,Cupom,Estoque,NaoFiscal,Fechamento,ContaReceber,ErroPDV,uLogErro;
 
 function APIGet(route:string): string;
 function APIPost(const route:string;const AJSON: string): string;
@@ -30,6 +30,7 @@ function postVendaForma(cupomForma:TCupomForma):Boolean;
 
 // Titulo de convenio lido do CUPOM_CREDIARIO de cada PDV.
 function postContaReceber(contaReceber:TContaReceber):Boolean;
+function postErroPDV(erro:TErroPDV):Boolean;
 
 function postEstoqueMovimentacao(estoqueMovimentacao:TEstoqueMovimentacao):Boolean;
 function postNaoFiscal(naoFiscal:TNaoFiscal):Boolean;
@@ -563,6 +564,38 @@ begin
       venda, DescreveErro(E));
   end;
 
+  end;
+end;
+
+// Sobe um erro registrado no PDV. Mesma resposta literal das demais rotas do
+// agente: o backend devolve {"message":"SINCRONIZADO"} e so entao o erro e
+// marcado como enviado.
+function postErroPDV(erro:TErroPDV):Boolean;
+var
+  corpo:string;
+  jsonResponse:string;
+begin
+  corpo := '';
+  try
+  erro.loja := codLoja;
+  corpo := uJsonUtils.DelphiObjectToJson(erro);
+
+  jsonResponse := APIPost('/erroPdv', corpo);
+
+  result := jsonResponse = '{"message":"SINCRONIZADO"}';
+
+  if not result then
+    LogFalhaEnvio('POST_ERRO_PDV',
+      Format('Erro %d caixa %d', [erro.codigo, erro.caixa]),
+      corpo, 'resposta inesperada: ' + jsonResponse);
+  except
+  on E:Exception do
+  begin
+    result := false;
+    LogFalhaEnvio('POST_ERRO_PDV',
+      Format('Erro %d caixa %d', [erro.codigo, erro.caixa]),
+      corpo, DescreveErro(E));
+  end;
   end;
 end;
 

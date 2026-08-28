@@ -22,6 +22,7 @@ import naofiscal from "./modules/naofiscal";
 import error from "./modules/error";
 import download from "./modules/download";
 import ibpt from "./modules/ibpt";
+import erroPdv from "./modules/erroPdv";
 import notificacao from "./modules/notificacao";
 Vue.use(Vuex);
 
@@ -49,6 +50,7 @@ export default new Vuex.Store({
     error,
     download,
     ibpt,
+    erroPdv,
     notificacao,
   },
   state: {

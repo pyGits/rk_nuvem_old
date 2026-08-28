@@ -21,6 +21,7 @@ import VendaRouter from "./src/routes/venda";
 import CompraRouter from "./src/routes/compra";
 import DownloadRouter from "./src/routes/downloads";
 import IbptRouter from "./src/routes/ibpt";
+import ErroPdvRouter from "./src/routes/erropdv";
 import NotificacaoRouter from "./src/routes/notificacoes";
 import FeedbackRouter from "./src/routes/feedback";
 
@@ -47,6 +48,7 @@ router.use(UsuarioRouter);
 router.use(CompraRouter);
 router.use(DownloadRouter);
 router.use(IbptRouter);
+router.use(ErroPdvRouter);
 router.use(NotificacaoRouter);
 router.use(FeedbackRouter);
 
