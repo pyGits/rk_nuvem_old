@@ -94,6 +94,32 @@ export default {
       return res.data;
     },
 
+    // Consulta um GTIN de verdade, para validar a integração antes da varredura.
+    async testarSefazGtin(_: any, gtin: string) {
+      const res = await Vue.prototype.$http.post("/admin/ibpt/sefaz/teste", { gtin });
+      return res.data;
+    },
+
+    // Certificado A1 do painel. A resposta nunca traz o certificado nem a senha.
+    async getCertificadoSefaz() {
+      const res = await Vue.prototype.$http.get("/admin/ibpt/certificado");
+      return res.data;
+    },
+    async enviarCertificadoSefaz(_: any, payload: any) {
+      const form = new FormData();
+      form.append("arquivo", payload.arquivo);
+      form.append("senha", payload.senha);
+
+      const res = await Vue.prototype.$http.post("/admin/ibpt/certificado", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return res.data;
+    },
+    async removerCertificadoSefaz() {
+      const res = await Vue.prototype.$http.delete("/admin/ibpt/certificado");
+      return res.data;
+    },
+
     async getIbptProdutosSemNcm({ commit }: any, filtro: any = {}) {
       const res = await Vue.prototype.$http.get("/admin/ibpt/produtos-sem-ncm", { params: filtro });
       commit("setIbptProdutosSemNcm", res.data);

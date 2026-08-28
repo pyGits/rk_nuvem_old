@@ -49,6 +49,9 @@ export type CertificadoLoja = {
   uf: string;
   certificado: string;
   senha: string;
+  // "painel" = certificado proprio; "loja" = emprestado de um cliente.
+  origem: "painel" | "loja";
+  titular: string;
 };
 
 // Aceita GTIN-8/12/13/14 e recusa o resto. Codigo interno de loja (prefixo 2)
@@ -62,11 +65,40 @@ export function gtinConsultavel(valor: string): boolean {
 }
 
 // Qualquer certificado valido serve para consultar qualquer GTIN - o servico
-// autentica quem pergunta, nao restringe sobre o que se pergunta. Pega o de
-// validade mais longa para nao trocar de certificado no meio do mutirao.
+// autentica quem pergunta, nao restringe sobre o que se pergunta.
+//
+// O certificado PROPRIO do painel vem primeiro, e essa ordem importa: o CCG
+// bloqueia por consumo indevido e o bloqueio recai sobre o CNPJ do certificado.
+// Varrer o parque inteiro com o certificado de um cliente penalizaria justo ele.
+// O de loja fica como plano B, para nao deixar a funcao morta em quem ainda nao
+// subiu certificado no painel.
 export async function certificadoDisponivel(): Promise<CertificadoLoja | null> {
-  const linhas: any[] = await db.query(
-    `select codigo, tenant_id, cnpjcpf, uf, certificado, senha
+  const proprios: any[] = await db.query(
+    `select certificado, senha, titular, documento
+       from sefaz_certificado
+      where validade is null or validade > now()
+      order by validade desc nulls last
+      limit 1`,
+    { type: QueryTypes.SELECT }
+  );
+
+  if (proprios.length > 0) {
+    return {
+      codigo: "PAINEL",
+      tenant_id: 0,
+      cnpjcpf: String(proprios[0].documento || ""),
+      uf: "",
+      certificado: proprios[0].certificado,
+      senha: proprios[0].senha,
+      origem: "painel",
+      titular: String(proprios[0].titular || ""),
+    };
+  }
+
+  // Sem certificado proprio: pega o de validade mais longa entre as lojas, para
+  // nao trocar de certificado no meio do mutirao.
+  const lojas: any[] = await db.query(
+    `select codigo, tenant_id, cnpjcpf, uf, certificado, senha, certificado_titular
        from lojas
       where coalesce(certificado, '') <> ''
         and coalesce(senha, '') <> ''
@@ -76,7 +108,18 @@ export async function certificadoDisponivel(): Promise<CertificadoLoja | null> {
     { type: QueryTypes.SELECT }
   );
 
-  return linhas.length > 0 ? (linhas[0] as CertificadoLoja) : null;
+  if (lojas.length === 0) return null;
+
+  return {
+    codigo: lojas[0].codigo,
+    tenant_id: Number(lojas[0].tenant_id),
+    cnpjcpf: String(lojas[0].cnpjcpf || ""),
+    uf: String(lojas[0].uf || ""),
+    certificado: lojas[0].certificado,
+    senha: lojas[0].senha,
+    origem: "loja",
+    titular: String(lojas[0].certificado_titular || ""),
+  };
 }
 
 function envelope(gtin: string): string {

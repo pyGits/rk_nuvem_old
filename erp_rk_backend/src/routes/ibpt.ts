@@ -45,5 +45,12 @@ router.delete("/admin/ibpt/mutirao-ia", verifyJWTADMIN, seguro(IbptController.pa
 router.post("/admin/ibpt/sefaz", verifyJWTADMIN, seguro(IbptController.iniciarMutiraoSefaz));
 router.get("/admin/ibpt/sefaz", verifyJWTADMIN, seguro(IbptController.situacaoMutiraoSefaz));
 router.delete("/admin/ibpt/sefaz", verifyJWTADMIN, seguro(IbptController.pararMutiraoSefaz));
+// Teste real de um GTIN: valida a integracao antes da varredura inteira.
+router.post("/admin/ibpt/sefaz/teste", verifyJWTADMIN, seguro(IbptController.testarSefaz));
+// Certificado A1 do painel. O upload nao passa pelo `seguro` porque o proprio
+// handler ja trata o erro - multer precisa responder o dele.
+router.get("/admin/ibpt/certificado", verifyJWTADMIN, seguro(IbptController.situacaoCertificado));
+router.post("/admin/ibpt/certificado", verifyJWTADMIN, IbptController.enviarCertificado);
+router.delete("/admin/ibpt/certificado", verifyJWTADMIN, seguro(IbptController.removerCertificado));
 
 export default router;

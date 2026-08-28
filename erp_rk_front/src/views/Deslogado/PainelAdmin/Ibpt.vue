@@ -126,7 +126,7 @@
               </span>
             </div>
             <v-spacer></v-spacer>
-            <v-btn v-if="!sefaz.rodando" color="teal" dark :loading="iniciandoSefaz" @click="iniciarSefaz">
+            <v-btn v-if="!sefaz.rodando" color="teal" dark :loading="iniciandoSefaz" :disabled="!certificado.emUso" @click="iniciarSefaz">
               <v-icon left>mdi-barcode-scan</v-icon>
               Buscar pela SEFAZ
             </v-btn>
@@ -151,6 +151,123 @@
               {{ sefaz.ultimoErro }}
             </v-alert>
           </template>
+
+          <v-divider class="my-4"></v-divider>
+
+          <!-- Certificado digital que assina as consultas -->
+          <div class="d-flex align-center flex-wrap mb-2">
+            <v-icon small class="mr-2" :color="certificado.emUso ? 'teal' : 'grey'">mdi-certificate-outline</v-icon>
+            <span class="text-subtitle-2 font-weight-medium">Certificado digital</span>
+            <v-spacer></v-spacer>
+            <v-btn v-if="certificado.temProprio" small text color="error" :disabled="sefaz.rodando" @click="removerCertificado">
+              <v-icon left small>mdi-delete-outline</v-icon>
+              Remover
+            </v-btn>
+          </div>
+
+          <v-alert v-if="certificado.temProprio" :type="certificado.vencido ? 'error' : 'success'" text dense class="mb-3">
+            <div class="font-weight-medium">{{ certificado.titular }}</div>
+            <div class="text-caption">
+              {{ certificado.documento }} · válido até {{ formatarDataHora(certificado.validade) }}
+              <span v-if="certificado.vencido"> — VENCIDO</span>
+            </div>
+          </v-alert>
+
+          <!-- Sem certificado proprio o sistema cai no de um cliente, e isso
+               precisa estar visivel: o bloqueio da SEFAZ recai sobre o CNPJ de
+               quem assina. -->
+          <v-alert v-else-if="certificado.emUso" type="warning" text dense class="mb-3">
+            Sem certificado próprio. As consultas sairiam assinadas por
+            <strong>{{ certificado.emUso.titular || certificado.emUso.documento }}</strong>, de uma loja cliente —
+            e um bloqueio da SEFAZ por excesso de consultas recairia sobre esse CNPJ.
+          </v-alert>
+          <v-alert v-else type="error" text dense class="mb-3">
+            Nenhum certificado digital disponível. Envie um certificado A1 para consultar a SEFAZ.
+          </v-alert>
+
+          <v-row dense align="center">
+            <v-col cols="12" sm="5">
+              <v-file-input
+                v-model="certificadoArquivo"
+                accept=".pfx,.p12"
+                label="Certificado A1 (.pfx)"
+                prepend-icon="mdi-certificate-outline"
+                outlined
+                dense
+                hide-details
+                show-size
+                :disabled="enviandoCertificado"
+              ></v-file-input>
+            </v-col>
+            <v-col cols="12" sm="4">
+              <v-text-field
+                v-model="certificadoSenha"
+                label="Senha do certificado"
+                type="password"
+                outlined
+                dense
+                hide-details
+                autocomplete="new-password"
+                :disabled="enviandoCertificado"
+              ></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="3">
+              <v-btn block color="teal" dark :loading="enviandoCertificado" @click="enviarCertificado">
+                <v-icon left>mdi-upload</v-icon>
+                Enviar
+              </v-btn>
+            </v-col>
+          </v-row>
+
+          <v-alert v-if="erroCertificado" type="error" text dense class="mt-2 mb-0">{{ erroCertificado }}</v-alert>
+
+          <v-divider class="my-4"></v-divider>
+
+          <!-- Teste de um GTIN: primeira validacao real da integracao -->
+          <div class="d-flex align-center mb-2">
+            <v-icon small class="mr-2" color="grey darken-1">mdi-test-tube</v-icon>
+            <span class="text-subtitle-2 font-weight-medium">Testar um código de barras</span>
+            <span class="text-caption grey--text text--darken-1 ml-2">confirme a integração antes de rodar a varredura inteira</span>
+          </div>
+
+          <v-row dense align="center">
+            <v-col cols="12" sm="5">
+              <v-text-field
+                v-model="gtinTeste"
+                label="GTIN (código de barras)"
+                placeholder="7891962036984"
+                outlined
+                dense
+                hide-details
+                :disabled="testando"
+                @keyup.enter="testarGtin"
+              ></v-text-field>
+            </v-col>
+            <v-col cols="12" sm="3">
+              <v-btn block outlined color="teal" :loading="testando" :disabled="!certificado.emUso" @click="testarGtin">
+                <v-icon left>mdi-play</v-icon>
+                Testar
+              </v-btn>
+            </v-col>
+          </v-row>
+
+          <v-alert v-if="resultadoTeste" :type="resultadoTeste.ncm ? 'success' : 'info'" text dense class="mt-3 mb-0">
+            <div class="text-caption">cStat {{ resultadoTeste.cStat }} · {{ resultadoTeste.xMotivo }}</div>
+            <template v-if="resultadoTeste.ncm">
+              <div class="font-weight-medium mt-1">NCM {{ resultadoTeste.ncm }}<span v-if="resultadoTeste.cest"> · CEST {{ resultadoTeste.cest }}</span></div>
+              <div class="text-caption">{{ resultadoTeste.xProd }}</div>
+              <div v-if="!resultadoTeste.noIbpt" class="text-caption error--text mt-1">
+                Atenção: este NCM não existe na tabela IBPT carregada, então não poderia ser gravado.
+              </div>
+            </template>
+            <div v-else-if="!resultadoTeste.consultavel" class="text-caption mt-1">
+              GTIN fora da faixa da GS1 Brasil (789/790) — o serviço não atende esse código, e isso não é falha da integração.
+            </div>
+            <div class="text-caption grey--text text--darken-1 mt-1">
+              assinado por {{ resultadoTeste.certificado.titular || resultadoTeste.certificado.documento }}
+              ({{ resultadoTeste.certificado.origem === "painel" ? "certificado do painel" : "certificado de loja cliente" }})
+            </div>
+          </v-alert>
         </v-sheet>
 
         <!-- Conferência de NCM -->
@@ -323,6 +440,14 @@ export default {
       sefaz: { rodando: false, total: 0, processados: 0, comNcm: 0, ultimoErro: "", bloqueado: false },
       iniciandoSefaz: false,
       timerSefaz: null,
+      certificado: { temProprio: false, emUso: null },
+      certificadoArquivo: null,
+      certificadoSenha: "",
+      enviandoCertificado: false,
+      erroCertificado: "",
+      gtinTeste: "",
+      testando: false,
+      resultadoTeste: null,
       selecionados: [],
       normalizando: false,
       snackbar: false,
@@ -406,7 +531,7 @@ export default {
     try {
       await Promise.all([this.$store.dispatch("getIbptSituacao"), this.$store.dispatch("getAdminTenantList")]);
       // O mutirão pode já estar rodando de uma sessão anterior.
-      await Promise.all([this.atualizarMutirao(), this.atualizarSefaz()]);
+      await Promise.all([this.atualizarMutirao(), this.atualizarSefaz(), this.atualizarCertificado()]);
     } finally {
       this.carregando = false;
     }
@@ -545,6 +670,66 @@ export default {
       await this.$store.dispatch("pararSefazGtin");
       this.avisar("A busca na SEFAZ vai parar na próxima consulta.");
       await this.atualizarSefaz();
+    },
+    async atualizarCertificado() {
+      try {
+        this.certificado = await this.$store.dispatch("getCertificadoSefaz");
+      } catch {
+        // Painel sem resposta não pode derrubar a tela.
+      }
+    },
+    async enviarCertificado() {
+      this.erroCertificado = "";
+
+      if (!this.certificadoArquivo) {
+        this.erroCertificado = "Selecione o certificado A1 (.pfx ou .p12).";
+        return;
+      }
+      if (!this.certificadoSenha) {
+        this.erroCertificado = "Informe a senha do certificado.";
+        return;
+      }
+
+      this.enviandoCertificado = true;
+      try {
+        const resposta = await this.$store.dispatch("enviarCertificadoSefaz", {
+          arquivo: this.certificadoArquivo,
+          senha: this.certificadoSenha,
+        });
+
+        // A senha nao fica na tela depois de enviada.
+        this.certificadoArquivo = null;
+        this.certificadoSenha = "";
+
+        this.avisar(`Certificado de ${resposta.titular} cadastrado.`);
+        await this.atualizarCertificado();
+      } catch (erro) {
+        this.erroCertificado = erro?.response?.data?.message || "Não foi possível ler o certificado.";
+      } finally {
+        this.enviandoCertificado = false;
+      }
+    },
+    async removerCertificado() {
+      if (!window.confirm("Remover o certificado do painel?\n\nSem ele, as consultas passam a usar o certificado de uma loja cliente.")) return;
+
+      try {
+        await this.$store.dispatch("removerCertificadoSefaz");
+        this.avisar("Certificado removido.");
+        await this.atualizarCertificado();
+      } catch (erro) {
+        this.avisar(erro?.response?.data?.message || "Não foi possível remover.", "error");
+      }
+    },
+    async testarGtin() {
+      this.resultadoTeste = null;
+      this.testando = true;
+      try {
+        this.resultadoTeste = await this.$store.dispatch("testarSefazGtin", this.gtinTeste);
+      } catch (erro) {
+        this.avisar(erro?.response?.data?.message || "Não foi possível consultar a SEFAZ.", "error");
+      } finally {
+        this.testando = false;
+      }
     },
     // Grava o NCM que a SEFAZ devolveu, no mesmo caminho validado da IA.
     normalizarSefaz(itens) {

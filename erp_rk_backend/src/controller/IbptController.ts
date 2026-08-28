@@ -7,6 +7,8 @@ import Ibpt from "../models/Ibpt";
 import IbptCarga from "../models/IbptCarga";
 import IbptSugestaoIa from "../models/IbptSugestaoIa";
 import GtinSefaz from "../models/GtinSefaz";
+import SefazCertificado from "../models/SefazCertificado";
+import SefazService from "../infra/service/sefaz/SefazService";
 import { certificadoDisponivel, consultarGTIN, gtinConsultavel } from "../infra/service/sefaz/ConsultaGTIN";
 import { escolherNCM, iaDisponivel, modeloConfigurado, PerguntaIA } from "../infra/service/IbptSugestaoIA";
 
@@ -99,6 +101,23 @@ const storage: Multer = multer({
       cb(null, true);
     } else {
       cb(new Error("Formato inválido. Envie o arquivo .csv do IBPT."));
+    }
+  },
+});
+
+// Upload do certificado A1. Limite pequeno de proposito: um .pfx real tem
+// poucos KB, e aceitar arquivo grande aqui so abriria espaco para engano.
+const TAMANHO_CERTIFICADO = 512 * 1024;
+
+const storageCertificado: Multer = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: TAMANHO_CERTIFICADO },
+  fileFilter: (req, file, cb) => {
+    const nome = file.originalname.toLowerCase();
+    if (nome.endsWith(".pfx") || nome.endsWith(".p12")) {
+      cb(null, true);
+    } else {
+      cb(new Error("Formato inválido. Envie o certificado A1 (.pfx ou .p12)."));
     }
   },
 });
@@ -832,6 +851,103 @@ export default {
   async pararMutiraoSefaz(req: Request, res: Response) {
     mutiraoSefaz.parar = true;
     res.status(200).json({ parando: mutiraoSefaz.rodando });
+  },
+
+  // ---------- Certificado digital do painel ----------
+
+  // Nunca devolve o certificado nem a senha - so o que identifica quem esta
+  // assinando as consultas.
+  async situacaoCertificado(req: Request, res: Response) {
+    const proprio: any = await SefazCertificado.findOne({ order: [["id", "DESC"]] });
+
+    // Mostra tambem o plano B, para o operador saber com qual CNPJ as consultas
+    // sairiam se ele nao subir um certificado proprio.
+    const emUso = await certificadoDisponivel();
+
+    res.status(200).json({
+      temProprio: !!proprio,
+      titular: proprio?.titular || null,
+      documento: proprio?.documento || null,
+      validade: proprio?.validade || null,
+      vencido: proprio?.validade ? new Date(proprio.validade) < new Date() : false,
+      emUso: emUso ? { origem: emUso.origem, titular: emUso.titular, documento: emUso.cnpjcpf } : null,
+    });
+  },
+
+  enviarCertificado: [
+    storageCertificado.single("arquivo"),
+    async (req: Request, res: Response) => {
+      try {
+        const arquivo = (req as any).file;
+        if (!arquivo) return res.status(400).json({ message: "Envie o certificado A1 (.pfx ou .p12)." });
+
+        const senha = String(req.body?.senha || "");
+        if (senha === "") return res.status(400).json({ message: "Informe a senha do certificado." });
+
+        const base64 = arquivo.buffer.toString("base64");
+
+        // Abre o .pfx aqui: senha errada ou certificado vencido tem que falhar
+        // no upload, e nao no meio de uma varredura de horas.
+        const info = SefazService.validarCertificado(base64, senha);
+
+        // Uma linha so: o novo substitui o anterior.
+        await db.transaction(async (transaction) => {
+          await SefazCertificado.destroy({ where: {}, transaction });
+          await SefazCertificado.create(
+            {
+              certificado: base64,
+              senha,
+              titular: info.titular,
+              documento: info.documento,
+              validade: info.validade,
+            } as any,
+            { transaction }
+          );
+        });
+
+        res.status(201).json({
+          message: "Certificado cadastrado com sucesso !",
+          titular: info.titular,
+          documento: info.documento,
+          validade: info.validade,
+        });
+      } catch (error: any) {
+        res.status(400).json({ message: error.message || "Erro ao ler o certificado." });
+      }
+    },
+  ],
+
+  async removerCertificado(req: Request, res: Response) {
+    if (mutiraoSefaz.rodando) throw new Error("Pare a busca pela SEFAZ antes de remover o certificado.");
+
+    await SefazCertificado.destroy({ where: {} });
+    res.status(200).json({ message: "Certificado removido." });
+  },
+
+  // Consulta UM GTIN de verdade e devolve a resposta crua da SEFAZ.
+  //
+  // Serve para validar a integracao antes de disparar a varredura inteira: o
+  // namespace do wsdl nao pode ser confirmado sem certificado (o WSDL responde
+  // 403), entao este botao e o primeiro teste real possivel.
+  async testarSefaz(req: Request, res: Response) {
+    const gtin = String(req.body?.gtin || "").replace(/[^0-9]/g, "");
+    if (![8, 12, 13, 14].includes(gtin.length)) throw new Error("Informe um GTIN de 8, 12, 13 ou 14 dígitos.");
+
+    const loja = await certificadoDisponivel();
+    if (!loja) throw new Error("Cadastre um certificado digital antes de testar.");
+
+    const resposta = await consultarGTIN(gtin, loja);
+
+    res.status(200).json({
+      ...resposta,
+      // Confere na tabela: NCM que a SEFAZ devolve mas o IBPT nao tem seria
+      // recusado na hora de gravar, e e melhor descobrir isso no teste.
+      noIbpt: resposta.ncm ? (await Ibpt.count({ where: { codigo: resposta.ncm } })) > 0 : false,
+      certificado: { origem: loja.origem, titular: loja.titular, documento: loja.cnpjcpf },
+      // Sem GTIN consultavel a resposta vem vazia por regra do servico, nao por
+      // erro nosso - dizer isso evita caca a bug inexistente.
+      consultavel: gtinConsultavel(gtin),
+    });
   },
 
   // ---------- Clientes ----------
