@@ -363,6 +363,210 @@ async function rodarMutirao(): Promise<void> {
   }
 }
 
+
+// ---------- Normalizacao em massa ----------
+//
+// Antes isto era uma requisicao so, com a lista inteira no corpo e um loop que
+// fazia DUAS queries por produto (um count no IBPT + o update) dentro de uma
+// unica transacao. Com 5.000 itens eram 10.000 queries numa requisicao: batia
+// timeout, a transacao voltava atras e NADA era gravado - parecia que o botao
+// nao funcionava.
+//
+// E, pior, "todos" nunca era todos: a tela carrega no maximo LIMITE_CONFERENCIA
+// produtos, entao o que ia no corpo era o pedaco visivel, nao a base.
+//
+// Agora o servidor monta o alvo por conta propria, sobre a base INTEIRA, e
+// aplica em blocos com progresso - a tela pode ser fechada.
+
+const LOTE_NORMALIZACAO = 500;
+
+export type OrigemNcm = "sefaz" | "tabela" | "ia";
+
+const normalizacao = {
+  rodando: false,
+  parar: false,
+  origem: "" as string,
+  total: 0,
+  processados: 0,
+  alterados: 0,
+  ultimoErro: "",
+  iniciadoEm: null as Date | null,
+  terminadoEm: null as Date | null,
+};
+
+// Produtos com NCM irregular, com os mesmos filtros da conferencia.
+function sqlIrregular(onde: string): string {
+  return `with produto_ncm as (
+     select p.tenant_id, p.codigo, p.codigo_barras, p.descricao, p.ncm,
+            nullif(regexp_replace(coalesce(p.ncm, ''), ${RX}, '', 'g'), '') as ncm_limpo
+       from produtos p
+      where 1 = 1 ${onde}
+   ),
+   irregular as (
+     select * from produto_ncm p
+      where p.ncm_limpo is null
+         or length(p.ncm_limpo) <> ${DIGITOS_NCM}
+         or not exists (select 1 from ibpt i where i.codigo = p.ncm_limpo)
+   )`;
+}
+
+// Alvos por origem: (tenant_id, codigo, codigo_barras, ncm_novo).
+//
+// Todas as origens conferem o NCM contra a tabela do IBPT antes de entregar -
+// e a mesma garantia do caminho manual, e sem ela a normalizacao poderia
+// gravar um codigo que a conferencia do dia seguinte acusaria de novo.
+function sqlAlvos(origem: OrigemNcm, onde: string): string {
+  const base = sqlIrregular(onde);
+
+  if (origem === "sefaz") {
+    return `${base}
+     select r.tenant_id, r.codigo, r.codigo_barras, g.ncm as ncm_novo
+       from irregular r
+       join gtin_sefaz g
+         on g.gtin = nullif(regexp_replace(coalesce(r.codigo_barras, ''), ${RX}, '', 'g'), '')
+      where g.ncm is not null
+        and exists (select 1 from ibpt i where i.codigo = g.ncm)`;
+  }
+
+  if (origem === "ia") {
+    return `${base}
+     select r.tenant_id, r.codigo, r.codigo_barras, s.ncm as ncm_novo
+       from irregular r
+       join ibpt_sugestao_ia s on s.descricao = r.descricao
+      where s.ncm is not null
+        and exists (select 1 from ibpt i where i.codigo = s.ncm)`;
+  }
+
+  // Hierarquia da propria tabela. Mesma logica de anexarSugestaoPrefixo - ver
+  // o comentario de la para o porque de cada criterio de ordenacao. O ambiguo
+  // fica DE FORA: em massa, uma leitura duvidosa vira erro em escala.
+  return `${base},
+   distintos as (
+     select distinct left(regexp_replace(coalesce(r.ncm, ''), ${RX}, '', 'g'), ${DIGITOS_NCM}) as d
+       from irregular r
+   ),
+   norm as (
+     select d, lpad(d, ${DIGITOS_NCM}, '0') as pad from distintos where d <> ''
+   ),
+   cand as (
+     select n.d, g.i as dropados, p.prefixo, length(p.prefixo) as tam
+       from norm n
+       cross join generate_series(0, ${DIGITOS_NCM - 1}) as g(i)
+       cross join lateral (
+         select * from (values
+           (left(substr(n.pad, g.i + 1), 6)),
+           (left(substr(n.pad, g.i + 1), 4))
+         ) as t(prefixo)
+       ) p
+      where (g.i = 0 or left(n.pad, g.i) ~ '^0+$')
+        and length(p.prefixo) >= 4
+   ),
+   casou as (
+     select c.d, c.dropados, c.prefixo, c.tam, i.codigo, left(i.codigo, 2) as capitulo
+       from cand c
+       join ibpt i on i.codigo like c.prefixo || '%'
+      where i.codigo !~ '^0+$'
+   ),
+   escolha as (
+     select distinct on (x.d) x.d, x.codigo, x.tam, x.capitulo
+       from casou x
+      order by x.d, x.tam desc, x.dropados, x.codigo desc
+   ),
+   confiavel as (
+     select e.d, e.codigo
+       from escolha e
+      where not exists (
+        select 1 from casou c
+         where c.d = e.d and c.capitulo <> e.capitulo and c.tam >= e.tam - 1
+      )
+   )
+   select r.tenant_id, r.codigo, r.codigo_barras, f.codigo as ncm_novo
+     from irregular r
+     join confiavel f
+       on f.d = left(regexp_replace(coalesce(r.ncm, ''), ${RX}, '', 'g'), ${DIGITOS_NCM})`;
+}
+
+function filtrosConferencia(query: any): { onde: string; parametros: any } {
+  const filtros: string[] = [];
+  const parametros: any = {};
+
+  if (query.tenant_id) {
+    filtros.push("p.tenant_id = :tenant_id");
+    parametros.tenant_id = Number(query.tenant_id);
+  }
+  if (String(query.incluirInativos || "0") !== "1") {
+    filtros.push("coalesce(p.ativo, 'S') = 'S'");
+  }
+
+  return { onde: filtros.length > 0 ? `and ${filtros.join(" and ")}` : "", parametros };
+}
+
+// Quantos produtos cada origem resolveria na base inteira - nao so no pedaco
+// carregado. E o numero que os botoes de "todos" precisam mostrar.
+async function contarAlvos(query: any): Promise<{ sefaz: number; tabela: number; ia: number }> {
+  const { onde, parametros } = filtrosConferencia(query);
+
+  const contar = async (origem: OrigemNcm): Promise<number> => {
+    const linhas: any[] = await db.query(`select count(*) as total from (${sqlAlvos(origem, onde)}) alvo`, {
+      replacements: parametros,
+      type: QueryTypes.SELECT,
+    });
+    return Number(linhas[0]?.total || 0);
+  };
+
+  return { sefaz: await contar("sefaz"), tabela: await contar("tabela"), ia: await contar("ia") };
+}
+
+async function rodarNormalizacao(origem: OrigemNcm, query: any): Promise<void> {
+  try {
+    const { onde, parametros } = filtrosConferencia(query);
+
+    const alvos: any[] = await db.query(sqlAlvos(origem, onde), { replacements: parametros, type: QueryTypes.SELECT });
+
+    normalizacao.total = alvos.length;
+    normalizacao.processados = 0;
+    normalizacao.alterados = 0;
+
+    for (let i = 0; i < alvos.length && !normalizacao.parar; i += LOTE_NORMALIZACAO) {
+      const lote = alvos.slice(i, i + LOTE_NORMALIZACAO);
+
+      // Um UPDATE por lote, nao um por produto. Os arrays vao por bind: com
+      // replacements o Sequelize expandiria como lista de virgulas e quebraria
+      // o ::text[].
+      const [, afetados] = await db.query(
+        `update produtos p
+            set ncm = v.ncm, updated_at = now()
+           from (select unnest($1::int[]) as tenant_id,
+                        unnest($2::text[]) as codigo,
+                        unnest($3::text[]) as codigo_barras,
+                        unnest($4::text[]) as ncm) v
+          where p.tenant_id = v.tenant_id
+            and p.codigo = v.codigo
+            -- codigo_barras pode ser nulo, e "= null" nunca casa.
+            and p.codigo_barras is not distinct from nullif(v.codigo_barras, '')`,
+        {
+          bind: [
+            lote.map((a: any) => Number(a.tenant_id)),
+            lote.map((a: any) => String(a.codigo)),
+            lote.map((a: any) => (a.codigo_barras === null ? "" : String(a.codigo_barras))),
+            lote.map((a: any) => String(a.ncm_novo)),
+          ],
+          type: QueryTypes.UPDATE,
+        }
+      );
+
+      normalizacao.alterados += Number(afetados || 0);
+      normalizacao.processados += lote.length;
+    }
+  } catch (erro: any) {
+    normalizacao.ultimoErro = erro?.message || "falha ao normalizar";
+  } finally {
+    normalizacao.rodando = false;
+    normalizacao.parar = false;
+    normalizacao.terminadoEm = new Date();
+  }
+}
+
 // ---------- Mutirao da SEFAZ (consulta por codigo de barras) ----------
 
 // Pausa entre consultas. A SEFAZ recusa por "consumo indevido" (cStat 656) quem
@@ -612,9 +816,15 @@ export default {
     await anexarSefaz(lista as any[]);
     await anexarSugestaoPrefixo(lista as any[]);
 
+    // Totais da BASE INTEIRA, nao do pedaco carregado: e o numero que os
+    // botoes de "aplicar em todos" precisam mostrar, senao prometem menos do
+    // que fazem.
+    const totaisGerais = await contarAlvos(req.query);
+
     res.status(200).json({
       tabelaCarregada: true,
       produtos: lista,
+      totaisGerais,
       // O front avisa que ha mais: normalizar "todos" so pode valer para o que
       // esta na tela, senao alteraria em massa o que ninguem viu.
       truncado,
@@ -636,6 +846,15 @@ export default {
     let alterados = 0;
     const rejeitados: { codigo: string; erro: string }[] = [];
 
+    // Uma consulta ao IBPT para a lista toda, em vez de um count por produto.
+    // Era o gargalo: com centenas de itens selecionados, o count por item
+    // dominava o tempo da requisicao.
+    const pedidos = Array.from(
+      new Set(itens.map((item: any) => String(item.ncm || "").replace(/[^0-9]/g, "")).filter((n: string) => n.length === DIGITOS_NCM))
+    );
+    const encontrados: any[] = pedidos.length > 0 ? await Ibpt.findAll({ where: { codigo: pedidos }, attributes: ["codigo"] }) : [];
+    const validos = new Set(encontrados.map((linha: any) => linha.codigo));
+
     await db.transaction(async (transaction) => {
       for (const item of itens) {
         const ncm = String(item.ncm || "").replace(/[^0-9]/g, "");
@@ -647,8 +866,7 @@ export default {
 
         // Confere na tabela: sem isto a normalizacao poderia gravar um NCM que
         // a propria conferencia acusaria como irregular no dia seguinte.
-        const existe = await Ibpt.count({ where: { codigo: ncm }, transaction });
-        if (existe === 0) {
+        if (!validos.has(ncm)) {
           rejeitados.push({ codigo: item.codigo, erro: "NCM não existe na tabela IBPT" });
           continue;
         }
@@ -852,6 +1070,38 @@ export default {
   async pararMutiraoSefaz(req: Request, res: Response) {
     mutiraoSefaz.parar = true;
     res.status(200).json({ parando: mutiraoSefaz.rodando });
+  },
+
+  // ---------- Normalizacao em massa, sobre a base inteira ----------
+
+  async iniciarNormalizacao(req: Request, res: Response) {
+    const origem = String(req.body?.origem || "") as OrigemNcm;
+    if (!["sefaz", "tabela", "ia"].includes(origem)) throw new Error("Origem inválida.");
+    if (normalizacao.rodando) throw new Error("Já existe uma normalização em andamento.");
+
+    normalizacao.rodando = true;
+    normalizacao.parar = false;
+    normalizacao.origem = origem;
+    normalizacao.total = 0;
+    normalizacao.processados = 0;
+    normalizacao.alterados = 0;
+    normalizacao.ultimoErro = "";
+    normalizacao.iniciadoEm = new Date();
+    normalizacao.terminadoEm = null;
+
+    // Sem await: a resposta volta agora e o trabalho segue no servidor.
+    rodarNormalizacao(origem, req.body || {});
+
+    res.status(200).json({ iniciado: true });
+  },
+
+  async situacaoNormalizacao(req: Request, res: Response) {
+    res.status(200).json({ ...normalizacao });
+  },
+
+  async pararNormalizacao(req: Request, res: Response) {
+    normalizacao.parar = true;
+    res.status(200).json({ parando: normalizacao.rodando });
   },
 
   // ---------- Certificado digital do painel ----------

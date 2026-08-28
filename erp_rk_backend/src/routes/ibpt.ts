@@ -45,6 +45,10 @@ router.delete("/admin/ibpt/mutirao-ia", verifyJWTADMIN, seguro(IbptController.pa
 router.post("/admin/ibpt/sefaz", verifyJWTADMIN, seguro(IbptController.iniciarMutiraoSefaz));
 router.get("/admin/ibpt/sefaz", verifyJWTADMIN, seguro(IbptController.situacaoMutiraoSefaz));
 router.delete("/admin/ibpt/sefaz", verifyJWTADMIN, seguro(IbptController.pararMutiraoSefaz));
+// Normalizacao em massa: roda no servidor sobre a base inteira, com progresso.
+router.post("/admin/ibpt/normalizar-tudo", verifyJWTADMIN, seguro(IbptController.iniciarNormalizacao));
+router.get("/admin/ibpt/normalizar-tudo", verifyJWTADMIN, seguro(IbptController.situacaoNormalizacao));
+router.delete("/admin/ibpt/normalizar-tudo", verifyJWTADMIN, seguro(IbptController.pararNormalizacao));
 // Teste real de um GTIN: valida a integracao antes da varredura inteira.
 router.post("/admin/ibpt/sefaz/teste", verifyJWTADMIN, seguro(IbptController.testarSefaz));
 // Certificado A1 do painel. O upload nao passa pelo `seguro` porque o proprio

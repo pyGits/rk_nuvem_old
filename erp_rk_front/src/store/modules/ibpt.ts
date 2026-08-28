@@ -120,6 +120,21 @@ export default {
       return res.data;
     },
 
+    // Normalização em massa: o servidor monta o alvo sobre a base inteira, e
+    // não sobre o pedaço carregado na tela. Roda em segundo plano.
+    async iniciarNormalizacaoTudo(_: any, payload: any) {
+      const res = await Vue.prototype.$http.post("/admin/ibpt/normalizar-tudo", payload);
+      return res.data;
+    },
+    async getNormalizacao() {
+      const res = await Vue.prototype.$http.get("/admin/ibpt/normalizar-tudo");
+      return res.data;
+    },
+    async pararNormalizacao() {
+      const res = await Vue.prototype.$http.delete("/admin/ibpt/normalizar-tudo");
+      return res.data;
+    },
+
     async getIbptProdutosSemNcm({ commit }: any, filtro: any = {}) {
       const res = await Vue.prototype.$http.get("/admin/ibpt/produtos-sem-ncm", { params: filtro });
       commit("setIbptProdutosSemNcm", res.data);

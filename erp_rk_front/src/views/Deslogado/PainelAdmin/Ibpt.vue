@@ -296,7 +296,7 @@
 
           <template v-else>
             <v-alert v-if="conferencia.truncado" type="warning" text dense>
-              Mostrando os primeiros {{ conferencia.limite }} produtos. Filtre por inquilino para ver o resto — a normalização só age sobre o que está na tela.
+              Mostrando os primeiros {{ conferencia.limite }} produtos. Os botões <strong>"todos"</strong> não se limitam a esta lista — eles agem sobre a base inteira, no servidor. Já os botões de <strong>selecionados</strong> agem só sobre o que está marcado aqui.
             </v-alert>
 
             <div class="d-flex align-center flex-wrap mb-2">
@@ -317,24 +317,24 @@
                 <v-icon left small>mdi-barcode</v-icon>
                 SEFAZ: selecionados ({{ selecionadosComSefaz.length }})
               </v-btn>
-              <v-btn small color="teal" outlined class="mr-4 mb-1" :disabled="!comSefaz.length" :loading="normalizando" @click="normalizarSefaz(comSefaz)">
-                todos ({{ comSefaz.length }})
+              <v-btn small color="teal" outlined class="mr-4 mb-1" :disabled="!totaisGerais.sefaz || normalizacao.rodando" @click="normalizarTudo('sefaz')">
+                todos ({{ totaisGerais.sefaz }})
               </v-btn>
 
               <v-btn small color="indigo" dark class="mr-1 mb-1" :disabled="!selecionadosComTabela.length" :loading="normalizando" @click="normalizarTabela(selecionadosComTabela)">
                 <v-icon left small>mdi-table-search</v-icon>
                 Tabela: selecionados ({{ selecionadosComTabela.length }})
               </v-btn>
-              <v-btn small color="indigo" outlined class="mr-4 mb-1" :disabled="!comTabelaConfiavel.length" :loading="normalizando" @click="normalizarTabela(comTabelaConfiavel)" title="Aplica só as leituras inequívocas; as ambíguas ficam de fora e podem ser aplicadas pela seleção.">
-                todos ({{ comTabelaConfiavel.length }})
+              <v-btn small color="indigo" outlined class="mr-4 mb-1" :disabled="!totaisGerais.tabela || normalizacao.rodando" @click="normalizarTudo('tabela')" title="Aplica só as leituras inequívocas de toda a base; as ambíguas ficam de fora e podem ser aplicadas pela seleção.">
+                todos ({{ totaisGerais.tabela }})
               </v-btn>
 
               <v-btn small color="purple" dark class="mr-1 mb-1" :disabled="!selecionadosComIA.length" :loading="normalizando" @click="normalizarIA(selecionadosComIA)">
                 <v-icon left small>mdi-robot</v-icon>
                 IA: selecionados ({{ selecionadosComIA.length }})
               </v-btn>
-              <v-btn small color="purple" outlined class="mr-4 mb-1" :disabled="!comSugestaoIA.length" :loading="normalizando" @click="normalizarIA(comSugestaoIA)">
-                todos ({{ comSugestaoIA.length }})
+              <v-btn small color="purple" outlined class="mr-4 mb-1" :disabled="!totaisGerais.ia || normalizacao.rodando" @click="normalizarTudo('ia')">
+                todos ({{ totaisGerais.ia }})
               </v-btn>
 
               <v-btn small text color="purple" class="mr-1 mb-1" :disabled="!semRespostaIA.length" :loading="buscandoIA" @click="buscarIA(false)">
@@ -346,6 +346,33 @@
                 Reconsultar vazios ({{ semNcmIA.length }})
               </v-btn>
             </div>
+
+            <!-- Progresso da normalização em massa. Antes ela ia numa
+                 requisição só, sem retorno nenhum: parecia travada. -->
+            <v-sheet v-if="normalizacao.total || normalizacao.rodando" outlined rounded class="pa-3 mb-3">
+              <div class="d-flex align-center">
+                <span class="text-subtitle-2 font-weight-medium">
+                  Aplicando NCM ({{ normalizacao.origem }})
+                </span>
+                <v-spacer></v-spacer>
+                <v-btn v-if="normalizacao.rodando" small color="error" outlined @click="pararNormalizacao">
+                  <v-icon left small>mdi-stop</v-icon>
+                  Parar
+                </v-btn>
+              </div>
+
+              <v-progress-linear :value="progressoNormalizacao" height="22" rounded :color="normalizacao.rodando ? 'green' : 'grey'" class="mt-2">
+                <span class="text-caption white--text">{{ normalizacao.processados }} / {{ normalizacao.total }}</span>
+              </v-progress-linear>
+
+              <div class="text-caption grey--text text--darken-1 mt-1">
+                {{ normalizacao.alterados }} produto(s) atualizado(s) ·
+                <span v-if="normalizacao.rodando">em andamento</span>
+                <span v-else>concluído</span>
+              </div>
+
+              <v-alert v-if="normalizacao.ultimoErro" type="error" text dense class="mt-2 mb-0">{{ normalizacao.ultimoErro }}</v-alert>
+            </v-sheet>
 
             <v-data-table
               v-model="selecionados"
@@ -475,6 +502,8 @@ export default {
       sefaz: { rodando: false, total: 0, processados: 0, comNcm: 0, ultimoErro: "", bloqueado: false },
       iniciandoSefaz: false,
       timerSefaz: null,
+      normalizacao: { rodando: false, origem: "", total: 0, processados: 0, alterados: 0, ultimoErro: "" },
+      timerNormalizacao: null,
       certificado: { temProprio: false, emUso: null },
       certificadoArquivo: null,
       certificadoSenha: "",
@@ -534,6 +563,16 @@ export default {
     semNcmIA() {
       return this.produtos.filter((produto) => produto.ia_consultada && !produto.ncm_ia);
     },
+    // Quantos a base INTEIRA resolveria por origem. O que está na tela é no
+    // máximo LIMITE_CONFERENCIA; usar a contagem da tela nos botões de "todos"
+    // prometia menos do que o servidor faz.
+    totaisGerais() {
+      return this.conferencia.totaisGerais || { sefaz: 0, tabela: 0, ia: 0 };
+    },
+    progressoNormalizacao() {
+      if (!this.normalizacao.total) return 0;
+      return Math.round((this.normalizacao.processados / this.normalizacao.total) * 100);
+    },
     selecionadosComTabela() {
       return this.selecionados.filter((produto) => !!produto.ncm_tabela);
     },
@@ -581,7 +620,7 @@ export default {
     try {
       await Promise.all([this.$store.dispatch("getIbptSituacao"), this.$store.dispatch("getAdminTenantList")]);
       // O mutirão pode já estar rodando de uma sessão anterior.
-      await Promise.all([this.atualizarMutirao(), this.atualizarSefaz(), this.atualizarCertificado()]);
+      await Promise.all([this.atualizarMutirao(), this.atualizarSefaz(), this.atualizarCertificado(), this.atualizarNormalizacao()]);
     } finally {
       this.carregando = false;
     }
@@ -589,6 +628,7 @@ export default {
   beforeDestroy() {
     clearTimeout(this.timerMutirao);
     clearTimeout(this.timerSefaz);
+    clearTimeout(this.timerNormalizacao);
   },
   methods: {
     formatarData(data) {
@@ -780,6 +820,48 @@ export default {
       } finally {
         this.testando = false;
       }
+    },
+    async atualizarNormalizacao() {
+      try {
+        this.normalizacao = await this.$store.dispatch("getNormalizacao");
+      } catch {
+        // Painel sem resposta não pode derrubar a tela.
+      }
+
+      clearTimeout(this.timerNormalizacao);
+      if (this.normalizacao.rodando) {
+        this.timerNormalizacao = setTimeout(() => this.atualizarNormalizacao(), 2000);
+      } else if (this.normalizacao.total) {
+        // Terminou: recarrega a conferência para a lista refletir o que foi
+        // gravado, senão os produtos já corrigidos continuariam na tela.
+        await this.conferir();
+      }
+    },
+    // Aplica sobre a BASE INTEIRA, no servidor. Diferente dos botões de
+    // seleção, que agem só sobre o que o operador marcou na tela.
+    async normalizarTudo(origem) {
+      const quantos = this.totaisGerais[origem] || 0;
+      const nomes = { sefaz: "consultado na SEFAZ", tabela: "deduzido pela tabela IBPT", ia: "sugerido pela IA" };
+
+      if (!window.confirm(`Gravar o NCM ${nomes[origem]} em ${quantos} produto(s) de todos os inquilinos${this.tenantId ? " do filtro atual" : ""}?
+
+A alteração não pode ser desfeita. O processo roda no servidor e você pode fechar esta tela.`)) return;
+
+      try {
+        await this.$store.dispatch("iniciarNormalizacaoTudo", {
+          origem,
+          ...(this.tenantId ? { tenant_id: this.tenantId } : {}),
+          incluirInativos: this.incluirInativos ? "1" : "0",
+        });
+        await this.atualizarNormalizacao();
+      } catch (erro) {
+        this.avisar(erro?.response?.data?.message || "Não foi possível iniciar a normalização.", "error");
+      }
+    },
+    async pararNormalizacao() {
+      await this.$store.dispatch("pararNormalizacao");
+      this.avisar("A normalização vai parar ao terminar o lote atual.");
+      await this.atualizarNormalizacao();
     },
     // Grava o NCM deduzido pela hierarquia da própria tabela do IBPT.
     normalizarTabela(itens) {
