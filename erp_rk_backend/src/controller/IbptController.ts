@@ -1112,26 +1112,29 @@ async function anexarSefaz(produtos: any[]): Promise<void> {
 // Vale mais que adivinhar pela descricao porque aproveita a intencao de quem
 // cadastrou - o codigo errado quase sempre erra no fim, nao no comeco.
 //
-// Duas leituras do mesmo numero, nesta ordem de prioridade:
+// O PROBLEMA DOS ZEROS. Todo NCM na base tem 8 digitos, mas parte deles ganhou
+// zeros a esquerda que nao sao do codigo: 00007113 e a posicao 7113 (joalharia)
+// com quatro zeros posticos, enquanto 00910900 e 0910 (especiarias) com apenas
+// um. Nao da para saber quantos zeros sao lixo olhando so o numero.
 //
-//  1. ZERO-PADDED. O valor e um NCM de 8 digitos que perdeu zeros a esquerda
-//     (o PDV guarda NCM como numero). 4031000 -> 04031000. Trunca em 6 e em 4.
+// Entao tenta TODAS as remocoes possiveis de zeros a esquerda e deixa a tabela
+// decidir, ordenando por:
+//   1. prefixo mais longo (6 digitos e subposicao, 4 e posicao);
+//   2. menos zeros removidos, no empate - remocao e reparo, faca o minimo;
+//   3. maior codigo do grupo. Pela convencao da NCM o residual "Outros" e o
+//      maior (termina em 90/99), e e ele o certo quando a subposicao foi
+//      desmembrada - caso do 08109000, que virou 08109011..17 mais 08109090.
 //
-//  2. PURO. Os digitos SAO o prefixo, sem padding: 00003922 e a posicao 3922,
-//     nao algo que comeca em 0000.
+// AMBIGUIDADE. Ha casos que nenhuma regra numerica resolve: 00910900 le tanto
+// como 0910 (especiarias) quanto como 9109 (relojoaria), e so a descricao do
+// produto desempata - era um cominho recebendo NCM de relojoaria. Quando existe
+// leitura concorrente em OUTRO CAPITULO com especificidade parecida, a sugestao
+// vai marcada como ambigua: aparece na tela, mas fica fora do "aplicar em
+// todos". Sao 27 produtos em 11.782 - o resto e inequivoco.
 //
-// A ordem importa e nao e cosmetica: 08109000 (frutas) lido como puro viraria
-// 8109000 -> prefixo 810900, que cai no capitulo 81, metais. Tentar o padded
-// primeiro evita sugerir metal para fruta.
-//
-// Piso de 4 digitos de proposito. Casar so o capitulo (2 digitos) e vago demais
-// para gravar: o capitulo 30 inteiro e "produtos farmaceuticos", e qualquer
-// codigo dele teria tributacao propria. Melhor nao sugerir do que sugerir mal.
-//
-// Desempate dentro do grupo: o codigo MAIS ALTO. Pela convencao da NCM o
-// residual "Outros" e o maior do grupo (termina em 90/99), e e ele o certo
-// quando a subposicao foi desmembrada - caso do 08109000, que virou
-// 08109011..17 mais 08109090.
+// Piso de 4 digitos de proposito. Casar so o capitulo e vago demais para
+// gravar: o capitulo 30 inteiro e "produtos farmaceuticos". Melhor nao sugerir
+// do que sugerir mal.
 async function anexarSugestaoPrefixo(produtos: any[]): Promise<void> {
   const chave = (ncm: any) => String(ncm || "").replace(/[^0-9]/g, "").substring(0, DIGITOS_NCM);
 
@@ -1146,36 +1149,44 @@ async function anexarSugestaoPrefixo(produtos: any[]): Promise<void> {
          from unnest($1::text[]) as t(n)
      ),
      norm as (
-       select d,
-              lpad(d, ${DIGITOS_NCM}, '0') as pad,
-              nullif(ltrim(lpad(d, ${DIGITOS_NCM}, '0'), '0'), '') as puro
-         from alvo
-        where d <> ''
+       select d, lpad(d, ${DIGITOS_NCM}, '0') as pad from alvo where d <> ''
      ),
      cand as (
-       select n.d, p.prefixo, p.ordem
+       select n.d, g.i as dropados, p.prefixo, length(p.prefixo) as tam
          from norm n
+         cross join generate_series(0, ${DIGITOS_NCM - 1}) as g(i)
          cross join lateral (
            select * from (values
-             (left(n.pad, 6), 1),
-             (left(n.pad, 4), 2),
-             (n.puro, 3),
-             (left(n.puro, 6), 4),
-             (left(n.puro, 4), 5)
-           ) as t(prefixo, ordem)
-          where prefixo is not null and length(prefixo) >= 4
+             (left(substr(n.pad, g.i + 1), 6)),
+             (left(substr(n.pad, g.i + 1), 4))
+           ) as t(prefixo)
          ) p
+        -- So remove zero: cortar um digito significativo inventaria um NCM.
+        where (g.i = 0 or left(n.pad, g.i) ~ '^0+$')
+          and length(p.prefixo) >= 4
+     ),
+     casou as (
+       select c.d, c.dropados, c.prefixo, c.tam,
+              i.codigo, i.descricao, left(i.codigo, 2) as capitulo
+         from cand c
+         join ibpt i on i.codigo like c.prefixo || '%'
+        -- A tabela do IBPT traz um 00000000 "PRODUTO NAO ESPECIFICADO NA LISTA
+        -- DE NCM". Ele casa com qualquer prefixo de zeros, e pior: passaria na
+        -- validacao do normalizar, marcando o produto como resolvido sem dizer
+        -- nada.
+        where i.codigo !~ '^0+$'
+     ),
+     escolha as (
+       select distinct on (x.d) x.d, x.prefixo, x.codigo, x.descricao, x.tam, x.capitulo
+         from casou x
+        order by x.d, x.tam desc, x.dropados, x.codigo desc
      )
-     select distinct on (c.d) c.d, c.prefixo, i.codigo, i.descricao
-       from cand c
-       join ibpt i on i.codigo like c.prefixo || '%'
-      -- A tabela do IBPT traz um 00000000 "PRODUTO NAO ESPECIFICADO NA LISTA DE
-      -- NCM". Ele casa com qualquer prefixo de zeros e sequestrava a leitura
-      -- pura: 00003922 sugeria 00000000 em vez de 39229000. Pior, passaria na
-      -- validacao do normalizar e marcaria o produto como resolvido sem dizer
-      -- nada.
-      where i.codigo !~ '^0+$'
-      order by c.d, c.ordem, i.codigo desc`,
+     select e.d, e.prefixo, e.codigo, e.descricao,
+            exists (
+              select 1 from casou c
+               where c.d = e.d and c.capitulo <> e.capitulo and c.tam >= e.tam - 1
+            ) as ambiguo
+       from escolha e`,
     { bind: [ncms], type: QueryTypes.SELECT }
   );
 
@@ -1191,6 +1202,7 @@ async function anexarSugestaoPrefixo(produtos: any[]): Promise<void> {
     // Quantos digitos casaram: 6 e bem mais confiavel que 4, e quem le precisa
     // saber disso antes de aplicar em massa.
     produto.prefixo_tabela = linha.prefixo;
+    produto.ambiguo_tabela = linha.ambiguo === true;
   });
 }
 

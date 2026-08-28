@@ -303,7 +303,8 @@
               <span class="text-caption grey--text text--darken-1">
                 {{ conferencia.totais.produtos }} produto(s) em {{ conferencia.totais.clientes }} cliente(s) ·
                 <span class="teal--text text--darken-2">{{ comSefaz.length }} pela SEFAZ</span> ·
-                <span class="indigo--text">{{ comTabela.length }} pela tabela</span> ·
+                <span class="indigo--text">{{ comTabelaConfiavel.length }} pela tabela</span>
+                <span v-if="ambiguosTabela.length" class="orange--text text--darken-3"> (+{{ ambiguosTabela.length }} ambígua(s))</span> ·
                 <span class="purple--text">{{ comSugestaoIA.length }} pela IA</span> ·
                 {{ semRespostaIA.length }} ainda não consultados
               </span>
@@ -324,8 +325,8 @@
                 <v-icon left small>mdi-table-search</v-icon>
                 Tabela: selecionados ({{ selecionadosComTabela.length }})
               </v-btn>
-              <v-btn small color="indigo" outlined class="mr-4 mb-1" :disabled="!comTabela.length" :loading="normalizando" @click="normalizarTabela(comTabela)">
-                todos ({{ comTabela.length }})
+              <v-btn small color="indigo" outlined class="mr-4 mb-1" :disabled="!comTabelaConfiavel.length" :loading="normalizando" @click="normalizarTabela(comTabelaConfiavel)" title="Aplica só as leituras inequívocas; as ambíguas ficam de fora e podem ser aplicadas pela seleção.">
+                todos ({{ comTabelaConfiavel.length }})
               </v-btn>
 
               <v-btn small color="purple" dark class="mr-1 mb-1" :disabled="!selecionadosComIA.length" :loading="normalizando" @click="normalizarIA(selecionadosComIA)">
@@ -382,12 +383,21 @@
               </template>
               <template #[`item.ncm_tabela`]="{ item }">
                 <template v-if="item.ncm_tabela">
-                  <div class="font-weight-medium indigo--text">{{ item.ncm_tabela }}</div>
+                  <div class="font-weight-medium" :class="item.ambiguo_tabela ? 'orange--text text--darken-3' : 'indigo--text'">
+                    {{ item.ncm_tabela }}
+                  </div>
                   <div class="text-caption grey--text text--darken-1">{{ item.descricao_tabela }}</div>
                   <!-- Quantos dígitos casaram é a medida de confiança: 6 é
                        subposição (estreito), 4 é posição (largo). -->
                   <div class="text-caption" :class="item.prefixo_tabela.length >= 6 ? 'grey--text' : 'orange--text text--darken-2'">
                     casou {{ item.prefixo_tabela.length }} dígitos ({{ item.prefixo_tabela }})
+                  </div>
+                  <!-- O número admite leitura em outro capítulo. Foi assim que
+                       um cominho recebeu NCM de relojoaria: 00910900 lê tanto
+                       0910 (especiarias) quanto 9109 (relógios). -->
+                  <div v-if="item.ambiguo_tabela" class="text-caption orange--text text--darken-3 font-weight-medium" title="O número admite leitura em outro capítulo da NCM. Confira antes de aplicar — ou use SEFAZ/IA neste item.">
+                    <v-icon x-small color="orange darken-3">mdi-alert-outline</v-icon>
+                    leitura ambígua — confira
                   </div>
                 </template>
                 <span v-else class="grey--text">sem correspondência</span>
@@ -529,6 +539,14 @@ export default {
     },
     comTabela() {
       return this.produtos.filter((produto) => !!produto.ncm_tabela);
+    },
+    // O "aplicar em todos" só age sobre o inequívoco. O ambíguo continua
+    // aplicável pela seleção, que é uma escolha explícita de quem olhou.
+    comTabelaConfiavel() {
+      return this.produtos.filter((produto) => produto.ncm_tabela && !produto.ambiguo_tabela);
+    },
+    ambiguosTabela() {
+      return this.produtos.filter((produto) => produto.ncm_tabela && produto.ambiguo_tabela);
     },
     selecionadosComSefaz() {
       return this.selecionados.filter((produto) => !!produto.ncm_sefaz);
@@ -868,6 +886,7 @@ A alteração não pode ser desfeita.`);
         ncm_tabela: produto.ncm_tabela,
         descricao_tabela: produto.descricao_tabela,
         prefixo_tabela: produto.prefixo_tabela,
+        ambiguo_tabela: produto.ambiguo_tabela ? "SIM" : "",
         ncm_ia: produto.ncm_ia,
         descricao_ia: produto.descricao_ia,
         motivo: produto.motivo,
