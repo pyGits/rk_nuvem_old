@@ -14,6 +14,34 @@ const TAMANHO_MAXIMO = 20 * 1024 * 1024; // o arquivo de referencia tem ~2 MB
 const LOTE_INSERCAO = 1000;
 const LIMITE_BUSCA = 50;
 const DIGITOS_NCM = 8;
+const LIMITE_SUGESTAO = 10;
+// Teto da conferencia. Sem limite, um tenant grande com o cadastro todo errado
+// traria dezenas de milhares de linhas para a tela - e para uma alteracao em
+// massa de dado fiscal, ver o que vai mudar e parte do trabalho.
+const LIMITE_CONFERENCIA = 500;
+
+// Embalagem e unidade nao identificam o produto e so atrapalham a busca.
+const RUIDO = new Set(["kg", "gr", "ml", "lt", "und", "uni", "pct", "cx", "fd", "sc", "dz", "mg", "cm", "mt", "pacote", "caixa", "unidade", "com", "para", "sem", "tipo"]);
+
+// Monta os termos de busca a partir da descricao do produto.
+//
+// Tira acento de proposito: as descricoes do arquivo do IBPT sao todas sem
+// acento ("Acucar", "Feijao"), entao normalizar os dois lados faz a busca casar
+// sem depender da extensao unaccent no Postgres.
+export function termosDaDescricao(texto: string): string[] {
+  const palavras = String(texto || "")
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    // Numero e pontuacao viram separador: "REFRIG. 2L" nao ajuda a achar NCM.
+    .replace(/[^a-z]+/g, " ")
+    .split(" ")
+    .filter((palavra) => palavra.length >= 3 && !RUIDO.has(palavra));
+
+  // As primeiras palavras sao as que nomeiam o produto; o resto e marca e
+  // embalagem, que nunca aparecem no IBPT.
+  return Array.from(new Set(palavras)).slice(0, 6);
+}
 
 // Em memoria: o arquivo e pequeno, e processado numa unica requisicao e nao
 // precisa sobreviver a ela - o que vale e a tabela, nao o CSV.
@@ -269,21 +297,100 @@ export default {
         where p.ncm_limpo is null
            or length(p.ncm_limpo) <> 8
            or not exists (select 1 from ibpt i where i.codigo = p.ncm_limpo )
-        order by t.name nulls last, p.descricao`,
+        order by t.name nulls last, p.descricao
+        limit ${LIMITE_CONFERENCIA + 1}`,
       { replacements: parametros, type: QueryTypes.SELECT }
     );
 
+    const truncado = produtos.length > LIMITE_CONFERENCIA;
+    const lista = truncado ? produtos.slice(0, LIMITE_CONFERENCIA) : produtos;
+
+    await anexarSugestoes(lista as any[]);
+
     res.status(200).json({
       tabelaCarregada: true,
-      produtos,
+      produtos: lista,
+      // O front avisa que ha mais: normalizar "todos" so pode valer para o que
+      // esta na tela, senao alteraria em massa o que ninguem viu.
+      truncado,
+      limite: LIMITE_CONFERENCIA,
       totais: {
-        produtos: produtos.length,
-        clientes: new Set(produtos.map((linha: any) => linha.tenant_id)).size,
+        produtos: lista.length,
+        clientes: new Set(lista.map((linha: any) => linha.tenant_id)).size,
       },
     });
   },
 
+  // Grava o NCM escolhido nos produtos indicados. Recebe a lista explicita, e
+  // nao um "faz tudo": alteracao em massa de dado fiscal de cliente precisa
+  // passar pelo que o operador viu na tela.
+  async normalizar(req: Request, res: Response) {
+    const itens = Array.isArray(req.body?.produtos) ? req.body.produtos : [];
+    if (itens.length === 0) throw new Error("Nenhum produto informado !");
+
+    let alterados = 0;
+    const rejeitados: { codigo: string; erro: string }[] = [];
+
+    await db.transaction(async (transaction) => {
+      for (const item of itens) {
+        const ncm = String(item.ncm || "").replace(/[^0-9]/g, "");
+
+        if (ncm.length !== DIGITOS_NCM) {
+          rejeitados.push({ codigo: item.codigo, erro: "NCM deve ter 8 dígitos" });
+          continue;
+        }
+
+        // Confere na tabela: sem isto a normalizacao poderia gravar um NCM que
+        // a propria conferencia acusaria como irregular no dia seguinte.
+        const existe = await Ibpt.count({ where: { codigo: ncm }, transaction });
+        if (existe === 0) {
+          rejeitados.push({ codigo: item.codigo, erro: "NCM não existe na tabela IBPT" });
+          continue;
+        }
+
+        const [linhas] = await db.query(
+          "update produtos set ncm = :ncm, updated_at = now() where tenant_id = :tenant_id and codigo = :codigo and codigo_barras = :codigo_barras",
+          { replacements: { ncm, tenant_id: Number(item.tenant_id), codigo: item.codigo, codigo_barras: item.codigo_barras }, type: QueryTypes.UPDATE, transaction }
+        );
+
+        alterados += Number(linhas || 0);
+      }
+    });
+
+    res.status(200).json({ alterados, rejeitados });
+  },
+
   // ---------- Clientes ----------
+
+  // Sugere NCM parecidos com a descricao do produto. Existe porque escolher NCM
+  // na mao, em 11 mil linhas, e o que produz justamente os NCM errados que a
+  // conferencia do painel encontra depois.
+  async sugerir(req: Request, res: Response) {
+    const termos = termosDaDescricao(String(req.query.descricao || ""));
+    if (termos.length === 0) return res.status(200).json([]);
+
+    // OR, e nao AND: "ARROZ TIO JOAO" nao pode exigir que "tio" e "joao"
+    // estejam no IBPT. O ts_rank ja coloca na frente quem casou mais termos.
+    const consulta = termos.join(" | ");
+
+    const registros = await db.query(
+      `select codigo, descricao,
+              ts_rank(to_tsvector('portuguese', descricao), to_tsquery('portuguese', :consulta)) as score
+         from ibpt
+        where to_tsvector('portuguese', descricao) @@ to_tsquery('portuguese', :consulta)
+        order by score desc, codigo
+        limit ${LIMITE_SUGESTAO}`,
+      { replacements: { consulta }, type: QueryTypes.SELECT }
+    );
+
+    res.status(200).json(
+      (registros as any[]).map((registro) => ({
+        codigo: registro.codigo,
+        descricao: registro.descricao,
+        score: Number(registro.score),
+      }))
+    );
+  },
 
   // Busca do modal de NCM: por codigo ou por trecho da descricao. Antes a lista
   // inteira ia no bundle do front (4 MB) e o filtro era em memoria.
@@ -313,6 +420,48 @@ export default {
     res.status(200).json(serializar(registro));
   },
 };
+
+// Sugere um NCM para cada produto da lista, numa consulta so.
+//
+// O caminho obvio seria uma consulta por produto; com 500 produtos isso vira
+// 500 idas ao banco. Aqui as consultas de texto vao juntas num array e o
+// Postgres resolve todas com um LATERAL sobre o mesmo indice.
+async function anexarSugestoes(produtos: any[]): Promise<void> {
+  const consultas: string[] = [];
+  const posicoes: number[] = [];
+
+  produtos.forEach((produto, i) => {
+    const termos = termosDaDescricao(produto.descricao);
+    if (termos.length === 0) return;
+
+    consultas.push(termos.join(" | "));
+    posicoes.push(i);
+  });
+
+  if (consultas.length === 0) return;
+
+  const achados: any[] = await db.query(
+    `select entrada.idx, sugerido.codigo, sugerido.descricao
+       from unnest(cast(:consultas as text[])) with ordinality as entrada(consulta, idx)
+       cross join lateral (
+         select codigo, descricao
+           from ibpt
+          where to_tsvector('portuguese', descricao) @@ to_tsquery('portuguese', entrada.consulta)
+          order by ts_rank(to_tsvector('portuguese', descricao), to_tsquery('portuguese', entrada.consulta)) desc, codigo
+          limit 1
+       ) sugerido`,
+    { replacements: { consultas }, type: QueryTypes.SELECT }
+  );
+
+  achados.forEach((achado: any) => {
+    // ordinality comeca em 1
+    const produto = produtos[posicoes[Number(achado.idx) - 1]];
+    if (!produto) return;
+
+    produto.ncm_sugerido = achado.codigo;
+    produto.descricao_sugerida = achado.descricao;
+  });
+}
 
 function serializar(registro: any) {
   return {

@@ -39,6 +39,13 @@ export default {
       return res.data;
     },
 
+    // Grava os NCM escolhidos. A lista vai explicita: e alteracao de dado
+    // fiscal de cliente, entao o servidor aplica o que o operador viu.
+    async normalizarNcm(_: any, produtos: any[]) {
+      const res = await Vue.prototype.$http.post("/admin/ibpt/normalizar", { produtos });
+      return res.data;
+    },
+
     async getIbptProdutosSemNcm({ commit }: any, filtro: any = {}) {
       const res = await Vue.prototype.$http.get("/admin/ibpt/produtos-sem-ncm", { params: filtro });
       commit("setIbptProdutosSemNcm", res.data);

@@ -60,7 +60,8 @@
             <span class="text-caption grey--text text--darken-1"> NCM em branco, com menos de 8 dígitos, ou que não existe no IBPT carregado </span>
           </div>
           <v-spacer></v-spacer>
-          <v-checkbox v-model="incluirInativos" label="Incluir produtos inativos" hide-details dense class="mr-4 mt-0" @change="conferir"></v-checkbox>
+          <v-select v-model="tenantId" :items="inquilinos" item-text="nome" item-value="id" label="Inquilino" outlined dense hide-details clearable style="max-width: 260px" class="mr-4" @change="conferir"></v-select>
+          <v-checkbox v-model="incluirInativos" label="Incluir inativos" hide-details dense class="mr-4 mt-0" @change="conferir"></v-checkbox>
           <v-btn color="primary" outlined :loading="conferindo" @click="conferir">
             <v-icon left>mdi-magnify</v-icon>
             Conferir
@@ -77,16 +78,47 @@
           <v-alert v-if="!produtos.length" type="success" text dense> Nenhum produto com NCM irregular. </v-alert>
 
           <template v-else>
-            <div class="mb-2 text-caption grey--text text--darken-1">{{ conferencia.totais.produtos }} produto(s) em {{ conferencia.totais.clientes }} cliente(s)</div>
+            <v-alert v-if="conferencia.truncado" type="warning" text dense>
+              Mostrando os primeiros {{ conferencia.limite }} produtos. Filtre por inquilino para ver o resto — a normalização só age sobre o que está na tela.
+            </v-alert>
 
-            <v-data-table :headers="headersProdutos" :items="produtos" :items-per-page="20" :footer-props="{ 'items-per-page-text': 'Produtos por página' }" class="elevation-1">
+            <div class="d-flex align-center flex-wrap mb-2">
+              <span class="text-caption grey--text text--darken-1">{{ conferencia.totais.produtos }} produto(s) em {{ conferencia.totais.clientes }} cliente(s) · {{ comSugestao.length }} com sugestão</span>
+              <v-spacer></v-spacer>
+              <v-btn small color="primary" class="mr-2" :disabled="!selecionadosComSugestao.length" :loading="normalizando" @click="normalizar(selecionadosComSugestao)">
+                <v-icon left small>mdi-check</v-icon>
+                Normalizar selecionados ({{ selecionadosComSugestao.length }})
+              </v-btn>
+              <v-btn small color="warning" :disabled="!comSugestao.length" :loading="normalizando" @click="normalizar(comSugestao)">
+                <v-icon left small>mdi-check-all</v-icon>
+                Normalizar todos ({{ comSugestao.length }})
+              </v-btn>
+            </div>
+
+            <v-data-table
+              v-model="selecionados"
+              :headers="headersProdutos"
+              :items="produtos"
+              :items-per-page="20"
+              :footer-props="{ 'items-per-page-text': 'Produtos por página' }"
+              item-key="chave"
+              show-select
+              class="elevation-1"
+            >
               <template #[`item.cliente`]="{ item }">
                 <div class="font-weight-medium">{{ item.cliente || `Cliente ${item.tenant_id}` }}</div>
                 <div v-if="item.cnpjcpf" class="text-caption grey--text text--darken-1">{{ item.cnpjcpf }}</div>
               </template>
               <template #[`item.ncm`]="{ item }">
-                <span v-if="item.ncm">{{ item.ncm }}</span>
+                <span v-if="item.ncm" class="error--text">{{ item.ncm }}</span>
                 <span v-else class="grey--text">(vazio)</span>
+              </template>
+              <template #[`item.ncm_sugerido`]="{ item }">
+                <template v-if="item.ncm_sugerido">
+                  <div class="font-weight-medium success--text">{{ item.ncm_sugerido }}</div>
+                  <div class="text-caption grey--text text--darken-1">{{ item.descricao_sugerida }}</div>
+                </template>
+                <span v-else class="grey--text">sem sugestão</span>
               </template>
               <template #[`item.motivo`]="{ item }">
                 <v-chip x-small :color="item.motivo === 'NCM em branco' ? 'error' : 'warning'" dark>{{ item.motivo }}</v-chip>
@@ -141,16 +173,19 @@ export default {
       arquivo: null,
       erroArquivo: "",
       incluirInativos: false,
+      tenantId: null,
+      selecionados: [],
+      normalizando: false,
       snackbar: false,
       snackbarCor: "success",
       mensagem: "",
       headersProdutos: [
         { text: "Cliente", value: "cliente" },
-        { text: "Código", value: "codigo", width: 110 },
-        { text: "Cód. barras", value: "codigo_barras", width: 150 },
+        { text: "Código", value: "codigo", width: 100 },
         { text: "Descrição", value: "descricao" },
-        { text: "NCM", value: "ncm", width: 110 },
-        { text: "Motivo", value: "motivo", width: 220 },
+        { text: "NCM atual", value: "ncm", width: 110 },
+        { text: "NCM sugerido", value: "ncm_sugerido", width: 260 },
+        { text: "Motivo", value: "motivo", width: 200 },
       ],
     };
   },
@@ -162,7 +197,25 @@ export default {
       return this.$store.state.ibpt.ibptProdutosSemNcm;
     },
     produtos() {
-      return this.conferencia.produtos || [];
+      // Chave propria: produto e identificado por (tenant, codigo, barras), e a
+      // grid precisa de um item-key unico para a selecao funcionar.
+      return (this.conferencia.produtos || []).map((produto) => ({
+        ...produto,
+        chave: `${produto.tenant_id}|${produto.codigo}|${produto.codigo_barras}`,
+      }));
+    },
+    // So da para normalizar o que tem sugestao.
+    comSugestao() {
+      return this.produtos.filter((produto) => !!produto.ncm_sugerido);
+    },
+    selecionadosComSugestao() {
+      return this.selecionados.filter((produto) => !!produto.ncm_sugerido);
+    },
+    inquilinos() {
+      return (this.$store.state.admin.tenantList.tenantList || []).map((tenant) => ({
+        id: tenant.id,
+        nome: `${tenant.id} - ${tenant.name || tenant.user}`,
+      }));
     },
     // A tabela do IBPT é trimestral; passada a vigência, os percentuais deixam
     // de valer mesmo que a consulta de NCM continue funcionando.
@@ -175,7 +228,7 @@ export default {
   async mounted() {
     this.carregando = true;
     try {
-      await this.$store.dispatch("getIbptSituacao");
+      await Promise.all([this.$store.dispatch("getIbptSituacao"), this.$store.dispatch("getAdminTenantList")]);
     } finally {
       this.carregando = false;
     }
@@ -231,14 +284,49 @@ export default {
     async conferir() {
       this.conferindo = true;
       try {
+        this.selecionados = [];
         await this.$store.dispatch("getIbptProdutosSemNcm", {
           incluirInativos: this.incluirInativos ? "1" : "0",
+          ...(this.tenantId ? { tenant_id: this.tenantId } : {}),
         });
         this.jaConferiu = true;
       } catch (erro) {
         this.avisar(erro?.response?.data?.message || "Não foi possível conferir os NCM.", "error");
       } finally {
         this.conferindo = false;
+      }
+    },
+    // Grava o NCM sugerido nos produtos indicados. Confirma antes: e alteracao
+    // de dado fiscal, em cadastro de cliente, e nao tem desfazer.
+    async normalizar(itens) {
+      if (!itens.length) return;
+
+      const clientes = new Set(itens.map((item) => item.tenant_id)).size;
+      const confirmado = window.confirm(`Gravar o NCM sugerido em ${itens.length} produto(s) de ${clientes} cliente(s)?
+
+A alteração não pode ser desfeita.`);
+      if (!confirmado) return;
+
+      this.normalizando = true;
+      try {
+        const resposta = await this.$store.dispatch(
+          "normalizarNcm",
+          itens.map((item) => ({
+            tenant_id: item.tenant_id,
+            codigo: item.codigo,
+            codigo_barras: item.codigo_barras,
+            ncm: item.ncm_sugerido,
+          }))
+        );
+
+        const recusados = resposta.rejeitados?.length ? ` ${resposta.rejeitados.length} recusado(s).` : "";
+        this.avisar(`${resposta.alterados} produto(s) atualizado(s).${recusados}`, resposta.rejeitados?.length ? "warning" : "success");
+
+        await this.conferir();
+      } catch (erro) {
+        this.avisar(erro?.response?.data?.message || "Não foi possível normalizar.", "error");
+      } finally {
+        this.normalizando = false;
       }
     },
     exportar() {
@@ -249,6 +337,8 @@ export default {
         codigo_barras: produto.codigo_barras,
         descricao: produto.descricao,
         ncm: produto.ncm,
+        ncm_sugerido: produto.ncm_sugerido,
+        descricao_sugerida: produto.descricao_sugerida,
         motivo: produto.motivo,
       }));
       gerarExcel(linhas, "produtos_ncm_irregular.xlsx");

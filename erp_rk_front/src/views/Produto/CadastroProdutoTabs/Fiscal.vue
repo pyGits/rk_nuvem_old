@@ -60,8 +60,11 @@
             v-model="ncm_descricao"
             readonly
           />
-          <v-btn icon color="primary" @click="showDialogNCM">
+          <v-btn icon color="primary" title="Procurar NCM" @click="showDialogNCM">
             <v-icon>mdi-magnify</v-icon>
+          </v-btn>
+          <v-btn icon color="primary" title="Sugerir NCM pela descrição do produto" :loading="sugerindo" @click="sugerirNCM">
+            <v-icon>mdi-lightbulb-on-outline</v-icon>
           </v-btn>
         </div>
       </v-col>
@@ -130,6 +133,35 @@
         </div>
       </v-col>
     </v-row>
+    <v-dialog v-model="dialogSugestao" max-width="800">
+      <v-card>
+        <v-card-title class="d-flex justify-space-between align-center">
+          <span>NCM sugeridos</span>
+          <v-btn icon small @click="dialogSugestao = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+        <v-card-text>
+          <div class="text-caption grey--text mb-2">Por semelhança com "{{ descricaoProduto }}". Confira antes de usar — a responsabilidade fiscal continua sendo sua.</div>
+
+          <v-alert v-if="!sugestoes.length" type="info" text dense> Nenhum NCM parecido encontrado. Use a lupa para procurar. </v-alert>
+
+          <v-list v-else dense>
+            <v-list-item v-for="sugestao in sugestoes" :key="sugestao.Codigo" @click="usarSugestao(sugestao)">
+              <v-list-item-content>
+                <v-list-item-title>
+                  <strong>{{ sugestao.Codigo }}</strong> — {{ sugestao.Descricao }}
+                </v-list-item-title>
+              </v-list-item-content>
+              <v-list-item-action>
+                <v-btn small outlined color="primary">Usar</v-btn>
+              </v-list-item-action>
+            </v-list-item>
+          </v-list>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <ModalNCM></ModalNCM>
     <ModalCEST></ModalCEST>
     <ModalTributacao></ModalTributacao>
@@ -143,9 +175,37 @@ import ModalCEST from "@/views/Fiscal/NCM/ModalCEST.vue";
 import ModalTributacao from "@/views/Fiscal/Tributacao/ModalTributacao.vue";
 import ModalFederal from "@/views/Fiscal/Federais/ModalFederal.vue";
 import { maskCEST, zeroEsquerda } from "@/utils/masks";
+import NCM from "@/infra/entity/NCM";
 
 export default {
+  data() {
+    return {
+      dialogSugestao: false,
+      sugerindo: false,
+      sugestoes: [],
+    };
+  },
   methods: {
+    async sugerirNCM() {
+      if (!this.descricaoProduto) {
+        this.$store.dispatch("showToastMessage", "Informe a descrição do produto antes de pedir a sugestão.");
+        return;
+      }
+
+      this.sugerindo = true;
+      try {
+        this.sugestoes = await NCM.sugerir(this.descricaoProduto);
+        this.dialogSugestao = true;
+      } finally {
+        this.sugerindo = false;
+      }
+    },
+    async usarSugestao(sugestao) {
+      this.$store.commit("setProdutoNCM", sugestao.Codigo);
+      this.dialogSugestao = false;
+      // Mesmo caminho de quem digita: recarrega a descrição e o CEST.
+      await this.setNCM();
+    },
     focusNextInput(event, nextInputRef) {
       this.$refs[nextInputRef].focus();
     },
@@ -205,6 +265,10 @@ export default {
     },
   },
   computed: {
+    // A descrição fica na aba de dados gerais; a sugestão parte dela.
+    descricaoProduto() {
+      return this.$store.state.produto.produto.descricao;
+    },
     ncm: {
       get() {
         return this.$store.state.produto.produto.ncm;
