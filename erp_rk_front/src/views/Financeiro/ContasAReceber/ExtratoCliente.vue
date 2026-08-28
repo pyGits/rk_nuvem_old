@@ -12,7 +12,7 @@
     />
 
     <div class="px-6">
-      <FiltroPeriodo :dt-inicio.sync="filtro.dataVencimentoDe" :dt-fim.sync="filtro.dataVencimentoAte" atalho-inicial="" @alterado="gerar">
+      <FiltroPeriodo :dt-inicio.sync="filtro.dataVencimentoDe" :dt-fim.sync="filtro.dataVencimentoAte" :atalhos="atalhosVencimento" atalho-inicial="" @alterado="gerar">
         <template v-slot:acoes-filtro>
           <v-chip small outlined class="mr-2 mb-1" :color="semPeriodo ? 'primary' : ''" @click="limparPeriodo">Tudo (sem período)</v-chip>
         </template>
@@ -111,7 +111,7 @@
 
         <EstadoVazio v-if="!carregando && !titulos.items.length" mensagem="Nenhum título no período selecionado." />
 
-        <v-data-table v-else :headers="headers" :items="titulos.items" :items-per-page="20" show-expand item-key="id" class="elevation-1">
+        <v-data-table v-else :headers="headers" :items="titulos.items" :items-per-page="20" show-expand item-key="id" class="elevation-1" @click:row="verCupom">
           <template v-slot:item.dataEmissao="{ item }">
             {{ formatarData(item.dataEmissao) }}
           </template>
@@ -129,6 +129,10 @@
           </template>
           <template v-slot:item.status="{ item }">
             <v-chip x-small :color="corStatus(item)" dark>{{ item.status }}</v-chip>
+          </template>
+          <template v-slot:item.numero="{ item }">
+            <a v-if="temCupom(item)" href="#" @click.stop.prevent="verCupom(item)">{{ item.numero }}</a>
+            <span v-else>{{ item.numero }}</span>
           </template>
 
           <template v-slot:expanded-item="{ headers: colunas, item }">
@@ -163,6 +167,45 @@
       </template>
     </v-card-text>
 
+    <!-- Detalhe da venda que originou o título. Reaproveita /relatorios/cupom,
+         que já existe para o painel de caixa e recebe exatamente os quatro
+         campos que o título de crediário carrega. -->
+    <v-dialog v-model="dialogCupom" max-width="900">
+      <v-card>
+        <v-card-title class="d-flex justify-space-between align-center">
+          <span>Cupom {{ cupomSelecionado.numero }} · caixa {{ cupomSelecionado.caixa }} · {{ formatarData(cupomSelecionado.dataEmissao) }}</span>
+          <v-btn icon small @click="dialogCupom = false">
+            <v-icon>mdi-close</v-icon>
+          </v-btn>
+        </v-card-title>
+
+        <v-card-text>
+          <div v-if="carregandoCupom" class="text-center py-6">
+            <v-progress-circular indeterminate color="primary"></v-progress-circular>
+          </div>
+
+          <template v-else>
+            <EstadoVazio v-if="!cupom.itens.length" mensagem="Os itens desta venda não estão na nuvem." icone="mdi-receipt-text-outline" />
+
+            <template v-else>
+              <div class="text-subtitle-2 mb-2">Itens</div>
+              <v-data-table :headers="headersItensCupom" :items="cupom.itens" :items-per-page="-1" hide-default-footer dense class="elevation-0">
+                <template v-slot:item.valor_unitario="{ item }">{{ maskMoney(item.valor_unitario) }}</template>
+                <template v-slot:item.valor_desconto="{ item }">{{ maskMoney(item.valor_desconto) }}</template>
+                <template v-slot:item.valor_total="{ item }">{{ maskMoney(item.valor_total) }}</template>
+              </v-data-table>
+
+              <div class="text-subtitle-2 mt-4 mb-2">Formas de pagamento</div>
+              <v-data-table :headers="headersFormasCupom" :items="cupom.formasPagamento" :items-per-page="-1" hide-default-footer dense class="elevation-0">
+                <template v-slot:item.valor="{ item }">{{ maskMoney(item.valor) }}</template>
+                <template v-slot:item.valor_troco="{ item }">{{ maskMoney(item.valor_troco) }}</template>
+              </v-data-table>
+            </template>
+          </template>
+        </v-card-text>
+      </v-card>
+    </v-dialog>
+
     <v-dialog v-model="dialogCliente" max-width="900">
       <LocalizarCliente @selecionar="selecionarCliente" @fechar="dialogCliente = false" />
     </v-dialog>
@@ -188,8 +231,22 @@ export default {
     return {
       carregando: false,
       dialogCliente: false,
+      dialogCupom: false,
+      carregandoCupom: false,
+      cupomSelecionado: {},
+      cupom: { itens: [], formasPagamento: [] },
       clienteNome: "",
       clientes: [],
+      // O extrato filtra por VENCIMENTO, e crediário vence no futuro: os
+      // atalhos padrão (todos para trás, terminando em hoje) escondiam
+      // justamente as parcelas a vencer.
+      atalhosVencimento: [
+        { label: "Vencidos", deDias: null, ateDias: -1 },
+        { label: "Este mês", mesAtual: true, ateFimDoMes: true },
+        { label: "Próximos 30 dias", deDias: 0, ateDias: 30 },
+        { label: "Próximos 90 dias", deDias: 0, ateDias: 90 },
+        { label: "Últimos 30 dias", deDias: -29, ateDias: 0 },
+      ],
       totaisClientes: { clientes: 0, saldo: 0, saldoVencido: 0 },
       titulos: new ContaReceberTituloList(),
       totais: { valor: 0, recebido: 0, aReceber: 0, saldoDevedorCliente: 0 },
@@ -228,6 +285,22 @@ export default {
         { text: "Saldo vencido", value: "saldoVencido" },
         { text: "Vencimento mais antigo", value: "vencimentoMaisAntigo" },
         { text: "Último recebimento", value: "ultimoRecebimento" },
+      ],
+      headersItensCupom: [
+        { text: "Item", value: "item" },
+        { text: "Cód. barras", value: "codigo_barras" },
+        { text: "Descrição", value: "descricao" },
+        { text: "Un.", value: "unidade" },
+        { text: "Qtde", value: "qtde" },
+        { text: "Unitário", value: "valor_unitario" },
+        { text: "Desconto", value: "valor_desconto" },
+        { text: "Total", value: "valor_total" },
+      ],
+      headersFormasCupom: [
+        { text: "Forma", value: "descricao" },
+        { text: "Parc.", value: "prestacao" },
+        { text: "Valor", value: "valor" },
+        { text: "Troco", value: "valor_troco" },
       ],
       headersRecebimento: [
         { text: "Data", value: "dataPagamento" },
@@ -293,6 +366,29 @@ export default {
         this.totais = extrato.totais;
       } finally {
         this.carregando = false;
+      }
+    },
+    // Só título vindo do PDV tem venda por trás; lançamento manual não tem.
+    temCupom(titulo) {
+      return !!titulo.codigoCupom && !!titulo.caixa;
+    },
+    async verCupom(titulo) {
+      if (!this.temCupom(titulo)) return;
+
+      this.cupomSelecionado = titulo;
+      this.cupom = { itens: [], formasPagamento: [] };
+      this.dialogCupom = true;
+      this.carregandoCupom = true;
+      try {
+        await this.$store.dispatch("getCupomUnico", {
+          data: String(titulo.dataEmissao || "").substring(0, 10),
+          codigo: titulo.codigoCupom,
+          caixa: titulo.caixa,
+          loja: titulo.lojaId,
+        });
+        this.cupom = this.$store.state.relatorio.relatorioCupomUnico || { itens: [], formasPagamento: [] };
+      } finally {
+        this.carregandoCupom = false;
       }
     },
     // Do consolidado para o extrato individual, sem passar pela busca.

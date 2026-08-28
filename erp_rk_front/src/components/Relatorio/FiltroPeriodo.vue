@@ -87,8 +87,6 @@
 </template>
 
 <script>
-import { getCurrentDate } from "@/utils/date";
-
 // Período dos relatórios: dois date pickers em pt-BR e atalhos para os
 // intervalos mais usados. Usa o padrão .sync para as duas datas.
 export default {
@@ -99,19 +97,29 @@ export default {
     // Qual atalho nasce destacado. Relatórios que começam com um período
     // pronto usam o padrão; quem começa sem período passa "".
     atalhoInicial: { type: String, default: "Hoje" },
+    // Os atalhos padrão olham todos para trás, o que serve para relatório de
+    // movimento. Uma tela de vencimento (contas a receber) precisa enxergar
+    // para frente, e por isso pode trocar a lista.
+    //
+    // Cada atalho é { label, deDias, ateDias, mesAtual, ateFimDoMes }, com
+    // deDias/ateDias em dias a partir de hoje (negativo = passado) e null para
+    // "sem limite".
+    atalhos: {
+      type: Array,
+      default: () => [
+        { label: "Hoje", deDias: 0, ateDias: 0 },
+        { label: "Ontem", deDias: -1, ateDias: -1 },
+        { label: "Últimos 7 dias", deDias: -6, ateDias: 0 },
+        { label: "Últimos 30 dias", deDias: -29, ateDias: 0 },
+        { label: "Este mês", mesAtual: true, ateDias: 0 },
+      ],
+    },
   },
   data() {
     return {
       menuInicio: false,
       menuFim: false,
       atalhoAtivo: this.atalhoInicial,
-      atalhos: [
-        { label: "Hoje", dias: 0 },
-        { label: "Ontem", dias: 1, apenasDia: true },
-        { label: "Últimos 7 dias", dias: 6 },
-        { label: "Últimos 30 dias", dias: 29 },
-        { label: "Este mês", mesAtual: true },
-      ],
     };
   },
   computed: {
@@ -138,22 +146,16 @@ export default {
         const dia = String(d.getDate()).padStart(2, "0");
         return `${ano}-${mes}-${dia}`;
       };
-
-      let inicio;
-      let fim = getCurrentDate();
-
-      if (atalho.mesAtual) {
-        inicio = iso(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
-      } else if (atalho.apenasDia) {
-        const dia = new Date(hoje);
-        dia.setDate(dia.getDate() - atalho.dias);
-        inicio = iso(dia);
-        fim = iso(dia);
-      } else {
+      // null = sem limite naquela ponta; o backend ignora data em branco.
+      const deslocado = (dias) => {
+        if (dias === null || dias === undefined) return "";
         const d = new Date(hoje);
-        d.setDate(d.getDate() - atalho.dias);
-        inicio = iso(d);
-      }
+        d.setDate(d.getDate() + dias);
+        return iso(d);
+      };
+
+      const inicio = atalho.mesAtual ? iso(new Date(hoje.getFullYear(), hoje.getMonth(), 1)) : deslocado(atalho.deDias);
+      const fim = atalho.ateFimDoMes ? iso(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0)) : deslocado(atalho.ateDias);
 
       this.$emit("update:dtInicio", inicio);
       this.$emit("update:dtFim", fim);
