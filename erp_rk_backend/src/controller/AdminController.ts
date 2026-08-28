@@ -10,6 +10,19 @@ import fs from "fs";
 
 const SECRET = "9#4pG5*XbE";
 
+// Validade do token do painel administrativo.
+//
+// Era `3000`, um NUMERO - e numero no jsonwebtoken sao SEGUNDOS, ou seja 50
+// minutos. Quem opera o painel fica horas numa tarefa so (mutirao de NCM,
+// varredura da SEFAZ, carga do IBPT) e o token vencia no meio: o 401 derrubava
+// para a tela de login sem aviso, no meio do trabalho.
+//
+// Mesma validade do tokenInfinity que ja existe para o PDV, por consistencia.
+//
+// Contrapartida, que e real: um token vazado vale por muito tempo e nao ha
+// revogacao - a unica saida seria trocar o SECRET, o que desloga todo mundo.
+const VALIDADE_TOKEN_ADMIN = "30y";
+
 const storage: Multer = multer({
   storage: multer.diskStorage({
     destination: (req: any, file, cb) => {
@@ -144,7 +157,7 @@ export default {
 
       if (isUserExists) {
         const token = jwt.sign({ userAdmin: user }, SECRET, {
-          expiresIn: 3000,
+          expiresIn: VALIDADE_TOKEN_ADMIN,
         });
         res.status(200).json({ token });
       } else {

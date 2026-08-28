@@ -98,7 +98,9 @@ export default {
                     "x-access-token"
                   ] = null;
                   localStorage.removeItem("access_token");
-                  this.$router.push("/login");
+                  // Sem push para /login: esta tela JA e /login, e navegar para
+                  // a rota atual era outra fonte do erro de navegacao
+                  // redundante. Basta limpar o token e ficar onde estamos.
                 });
 
               this.$store.commit("setLogado", true);

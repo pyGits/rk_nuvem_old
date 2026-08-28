@@ -409,8 +409,11 @@ router.beforeEach((to, from, next) => {
   const requiresAuth = to.matched.some((record) => record.meta.requiresAuth);
   const requiresAuthAdmin = to.matched.some((record) => record.meta.requiresAuthAdmin);
 
+  // O `return` faltava: sem ele a execucao seguia para o bloco abaixo e
+  // chamava next() UMA SEGUNDA VEZ na mesma navegacao. Alem do aviso do
+  // vue-router, era uma das origens do "Avoided redundant navigation".
   if (requiresAuthAdmin && !isTokenAdminExists) {
-    next("/login");
+    return next("/login");
   }
 
   if (requiresAuth && !isTokenExists) {

@@ -49,7 +49,9 @@ export default {
         return res.status(400).json({ message: "Usuário ou senha incorreto !" });
       }
       token = jwt.sign({ tenant_id: id }, "B0RG55!", {
-        expiresIn: "24h", // ✅ 50 minutos (string com unidade)
+        // 24 horas. O comentario anterior dizia "50 minutos", que era o valor
+        // antigo - a validade real e um dia.
+        expiresIn: "24h",
       });
       return res.status(200).json({ token: token });
     } catch (error) {
