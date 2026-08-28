@@ -26,10 +26,17 @@ const RX = "'\\D'";
 const LIMITE_CONFERENCIA = 5000;
 // Produtos por chamada a IA. Lote grande economiza requisicao, mas resposta
 // longa demais o modelo trunca - e ai a metade final volta sem escolha.
-// Lote pequeno de proposito: quando o modelo esta sobrecarregado, o que se
-// perde numa falha e um lote inteiro. Menor = menos retrabalho e resposta mais
-// curta, que o modelo trunca com menos frequencia.
-const LOTE_IA = 8;
+// O gargalo do plano gratuito e REQUISICAO POR MINUTO (20), nao o tamanho de
+// cada uma. Lote pequeno multiplica requisicoes sem ganhar nada: com 8 por lote
+// sao 160 produtos por minuto, com 30 sao 600. O teto pratico e a resposta
+// ficar longa a ponto de o modelo truncar - 30 respostas curtas estao longe
+// disso.
+const LOTE_IA = 30;
+
+// Candidatos enviados por produto. Eram 10, quando a IA era obrigada a escolher
+// entre eles; agora ela responde livre e eles sao so pista, entao 5 bastam - e
+// com lote de 30 isso e a diferenca entre um prompt de 300 e de 150 linhas.
+const CANDIDATOS_POR_PRODUTO = 5;
 // Teto por execucao do botao, para nao estourar a cota do plano gratuito num
 // clique so. O que sobrar fica para a proxima rodada.
 const LIMITE_IA = 300;
@@ -219,8 +226,15 @@ const mutirao = {
   terminadoEm: null as Date | null,
 };
 
-function esperar(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// Espera em fatias, conferindo o pedido de parada entre elas. Dormir os 41
+// segundos que o Google pede de uma vez so deixava o botao Parar sem efeito por
+// todo esse tempo - parecia travado.
+async function esperar(ms: number): Promise<void> {
+  const FATIA = 500;
+
+  for (let restante = ms; restante > 0 && !mutirao.parar; restante -= FATIA) {
+    await new Promise((resolve) => setTimeout(resolve, Math.min(FATIA, restante)));
+  }
 }
 
 // Descricoes que ainda precisam de resposta: produto com NCM irregular e sem
@@ -262,8 +276,11 @@ async function rodarMutirao(): Promise<void> {
 
       const perguntas: PerguntaIA[] = [];
       for (const descricao of lote) {
+        if (mutirao.parar) break;
         perguntas.push({ descricao, candidatos: await candidatosPara(descricao) });
       }
+
+      if (mutirao.parar) break;
 
       try {
         const respostas = await escolherNCM(perguntas);
@@ -739,7 +756,7 @@ async function candidatosPara(descricao: string): Promise<{ codigo: string; desc
        from ibpt
       where to_tsvector('portuguese', descricao) @@ to_tsquery('portuguese', :consulta)
       order by ts_rank(to_tsvector('portuguese', descricao), to_tsquery('portuguese', :consulta)) desc, length(descricao)
-      limit ${LIMITE_SUGESTAO}`,
+      limit ${CANDIDATOS_POR_PRODUTO}`,
     { replacements: { consulta: termos.join(" | ") }, type: QueryTypes.SELECT }
   );
 
