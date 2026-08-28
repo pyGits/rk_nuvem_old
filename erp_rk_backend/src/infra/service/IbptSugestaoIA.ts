@@ -18,11 +18,33 @@ export type PerguntaIA = { descricao: string; candidatos: CandidatoNCM[] };
 export type RespostaIA = { descricao: string; ncm: string | null };
 
 export function modeloConfigurado(): string {
-  return process.env.GEMINI_MODEL || "gemini-2.0-flash";
+  // Confirmado como disponivel na chave em uso. O .env sobrepoe quando o
+  // Google aposentar este nome - e ele aposenta com frequencia.
+  return process.env.GEMINI_MODEL || "gemini-2.5-flash";
 }
 
 export function iaDisponivel(): boolean {
   return !!process.env.GEMINI_API_KEY;
+}
+
+// O axios engole a resposta do Google e devolve so "status code 404". A causa
+// real vem no corpo ("models/X is not found for API version v1beta"), e e ela
+// que precisa chegar na tela.
+async function chamar(url: string, corpo: any, config: any): Promise<any> {
+  try {
+    return await axios.post(url, corpo, config);
+  } catch (erro: any) {
+    const detalhe = erro?.response?.data?.error?.message;
+    const status = erro?.response?.status;
+
+    if (status === 404) {
+      const modelos = await modelosDisponiveis().catch(() => [] as string[]);
+      const sugestao = modelos.length ? ` Modelos disponíveis para esta chave: ${modelos.slice(0, 8).join(", ")}.` : "";
+      throw new Error(`O modelo "${modeloConfigurado()}" não existe para esta chave. Ajuste GEMINI_MODEL no .env.${sugestao}`);
+    }
+
+    throw new Error(detalhe ? `Gemini: ${detalhe}` : erro?.message || "Falha ao consultar a IA.");
+  }
 }
 
 function montarPrompt(perguntas: PerguntaIA[]): string {
@@ -60,11 +82,23 @@ function extrairJSON(texto: string): any[] {
   }
 }
 
+// Lista os modelos que a chave enxerga. Serve para o painel dizer qual nome
+// usar quando o configurado nao existe - "404" sozinho nao ajuda ninguem.
+export async function modelosDisponiveis(): Promise<string[]> {
+  if (!iaDisponivel()) throw new Error("Configure GEMINI_API_KEY no servidor para usar a busca por IA.");
+
+  const resposta = await axios.get(`${URL_BASE}?key=${process.env.GEMINI_API_KEY}`, { timeout: 30000 });
+
+  return (resposta.data?.models || [])
+    .filter((modelo: any) => (modelo.supportedGenerationMethods || []).includes("generateContent"))
+    .map((modelo: any) => String(modelo.name || "").replace("models/", ""));
+}
+
 export async function escolherNCM(perguntas: PerguntaIA[]): Promise<RespostaIA[]> {
   if (perguntas.length === 0) return [];
   if (!iaDisponivel()) throw new Error("Configure GEMINI_API_KEY no servidor para usar a busca por IA.");
 
-  const resposta = await axios.post(
+  const resposta = await chamar(
     `${URL_BASE}/${modeloConfigurado()}:generateContent?key=${process.env.GEMINI_API_KEY}`,
     {
       contents: [{ parts: [{ text: montarPrompt(perguntas) }] }],
