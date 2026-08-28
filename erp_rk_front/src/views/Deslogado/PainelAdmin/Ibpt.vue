@@ -116,6 +116,43 @@
           </template>
         </v-sheet>
 
+        <!-- Busca na SEFAZ pelo código de barras: consulta exata, não palpite -->
+        <v-sheet outlined rounded class="pa-4 mb-4">
+          <div class="d-flex align-center flex-wrap">
+            <div>
+              <h3 class="text-subtitle-1 font-weight-medium mb-0">Buscar NCM na SEFAZ (por código de barras)</h3>
+              <span class="text-caption grey--text text--darken-1">
+                Consulta o Cadastro Centralizado de GTIN com o certificado digital de uma loja cadastrada. Só atende GTIN da GS1 Brasil (789/790). Pode fechar esta tela.
+              </span>
+            </div>
+            <v-spacer></v-spacer>
+            <v-btn v-if="!sefaz.rodando" color="teal" dark :loading="iniciandoSefaz" @click="iniciarSefaz">
+              <v-icon left>mdi-barcode-scan</v-icon>
+              Buscar pela SEFAZ
+            </v-btn>
+            <v-btn v-else color="error" outlined @click="pararSefaz">
+              <v-icon left>mdi-stop</v-icon>
+              Parar
+            </v-btn>
+          </div>
+
+          <template v-if="sefaz.total">
+            <v-progress-linear :value="progressoSefaz" height="22" rounded :color="sefaz.rodando ? 'teal' : 'grey'" class="mt-3">
+              <span class="text-caption white--text">{{ sefaz.processados }} / {{ sefaz.total }}</span>
+            </v-progress-linear>
+
+            <div class="text-caption grey--text text--darken-1 mt-1">
+              {{ sefaz.comNcm }} com NCM ·
+              <span v-if="sefaz.rodando">em andamento</span>
+              <span v-else>parado</span>
+            </div>
+
+            <v-alert v-if="sefaz.ultimoErro" :type="sefaz.bloqueado ? 'error' : 'warning'" text dense class="mt-2 mb-0">
+              {{ sefaz.ultimoErro }}
+            </v-alert>
+          </template>
+        </v-sheet>
+
         <!-- Conferência de NCM -->
         <div class="d-flex align-center flex-wrap mb-3">
           <div>
@@ -148,10 +185,19 @@
             <div class="d-flex align-center flex-wrap mb-2">
               <span class="text-caption grey--text text--darken-1">
                 {{ conferencia.totais.produtos }} produto(s) em {{ conferencia.totais.clientes }} cliente(s) ·
+                <span class="teal--text text--darken-2">{{ comSefaz.length }} com NCM da SEFAZ</span> ·
                 <span class="purple--text">{{ comSugestaoIA.length }} com NCM da IA</span> ·
                 {{ semRespostaIA.length }} ainda não consultados
               </span>
               <v-spacer></v-spacer>
+              <v-btn small color="teal" dark class="mr-2" :disabled="!selecionadosComSefaz.length" :loading="normalizando" @click="normalizarSefaz(selecionadosComSefaz)">
+                <v-icon left small>mdi-check</v-icon>
+                Usar SEFAZ nos selecionados ({{ selecionadosComSefaz.length }})
+              </v-btn>
+              <v-btn small color="teal" dark class="mr-2" :disabled="!comSefaz.length" :loading="normalizando" @click="normalizarSefaz(comSefaz)">
+                <v-icon left small>mdi-barcode</v-icon>
+                Usar SEFAZ em todos ({{ comSefaz.length }})
+              </v-btn>
               <v-btn small color="purple" dark class="mr-2" :disabled="!selecionadosComIA.length" :loading="normalizando" @click="normalizarIA(selecionadosComIA)">
                 <v-icon left small>mdi-check</v-icon>
                 Usar IA nos selecionados ({{ selecionadosComIA.length }})
@@ -187,6 +233,22 @@
               <template #[`item.ncm`]="{ item }">
                 <span v-if="item.ncm" class="error--text">{{ item.ncm }}</span>
                 <span v-else class="grey--text">(vazio)</span>
+              </template>
+              <template #[`item.codigo_barras`]="{ item }">
+                <span v-if="item.codigo_barras">{{ item.codigo_barras }}</span>
+                <span v-else class="grey--text">(sem código)</span>
+                <div v-if="item.codigo_barras && !item.gtin_consultavel" class="text-caption grey--text" title="A SEFAZ só publica GTIN da GS1 Brasil (prefixo 789/790). Código interno de loja e importado não respondem.">
+                  fora da GS1 Brasil
+                </div>
+              </template>
+              <template #[`item.ncm_sefaz`]="{ item }">
+                <template v-if="item.ncm_sefaz">
+                  <div class="font-weight-medium teal--text text--darken-2">{{ item.ncm_sefaz }}</div>
+                  <div class="text-caption grey--text text--darken-1">{{ item.descricao_sefaz }}</div>
+                </template>
+                <span v-else-if="item.sefaz_consultada" class="grey--text" :title="item.motivo_sefaz">SEFAZ não tem este GTIN</span>
+                <span v-else-if="!item.gtin_consultavel" class="grey--text">GTIN não atendido</span>
+                <span v-else class="grey--text">não consultado</span>
               </template>
               <template #[`item.ncm_ia`]="{ item }">
                 <template v-if="item.ncm_ia">
@@ -258,6 +320,9 @@ export default {
       mutiraoReconsultar: false,
       mutirao: { rodando: false, total: 0, processados: 0, comSugestao: 0, tentativas: 0, ultimoErro: "", cotaDiaria: false },
       timerMutirao: null,
+      sefaz: { rodando: false, total: 0, processados: 0, comNcm: 0, ultimoErro: "", bloqueado: false },
+      iniciandoSefaz: false,
+      timerSefaz: null,
       selecionados: [],
       normalizando: false,
       snackbar: false,
@@ -266,9 +331,13 @@ export default {
       headersProdutos: [
         { text: "Cliente", value: "cliente" },
         { text: "Código", value: "codigo", width: 100 },
+        { text: "GTIN", value: "codigo_barras", width: 150 },
         { text: "Descrição", value: "descricao" },
         { text: "NCM atual", value: "ncm", width: 110 },
-        { text: "Sugestão da IA", value: "ncm_ia", width: 300 },
+        // A SEFAZ vem antes da IA de propósito: é consulta ao cadastro do dono
+        // da marca, não palpite. Quando as duas respondem, é a que vale.
+        { text: "NCM da SEFAZ", value: "ncm_sefaz", width: 280 },
+        { text: "Sugestão da IA", value: "ncm_ia", width: 280 },
         { text: "Motivo", value: "motivo", width: 200 },
       ],
     };
@@ -304,6 +373,16 @@ export default {
     semNcmIA() {
       return this.produtos.filter((produto) => produto.ia_consultada && !produto.ncm_ia);
     },
+    selecionadosComSefaz() {
+      return this.selecionados.filter((produto) => !!produto.ncm_sefaz);
+    },
+    comSefaz() {
+      return this.produtos.filter((produto) => !!produto.ncm_sefaz);
+    },
+    progressoSefaz() {
+      if (!this.sefaz.total) return 0;
+      return Math.round((this.sefaz.processados / this.sefaz.total) * 100);
+    },
     progressoMutirao() {
       if (!this.mutirao.total) return 0;
       return Math.round((this.mutirao.processados / this.mutirao.total) * 100);
@@ -327,13 +406,14 @@ export default {
     try {
       await Promise.all([this.$store.dispatch("getIbptSituacao"), this.$store.dispatch("getAdminTenantList")]);
       // O mutirão pode já estar rodando de uma sessão anterior.
-      await this.atualizarMutirao();
+      await Promise.all([this.atualizarMutirao(), this.atualizarSefaz()]);
     } finally {
       this.carregando = false;
     }
   },
   beforeDestroy() {
     clearTimeout(this.timerMutirao);
+    clearTimeout(this.timerSefaz);
   },
   methods: {
     formatarData(data) {
@@ -437,6 +517,42 @@ export default {
       this.avisar("O mutirão vai parar ao terminar o lote atual.");
       await this.atualizarMutirao();
     },
+
+    async atualizarSefaz() {
+      try {
+        this.sefaz = await this.$store.dispatch("getSefazGtin");
+      } catch {
+        // Painel sem resposta não pode derrubar a tela.
+      }
+
+      clearTimeout(this.timerSefaz);
+      if (this.sefaz.rodando) this.timerSefaz = setTimeout(() => this.atualizarSefaz(), 5000);
+    },
+    async iniciarSefaz() {
+      if (!window.confirm("Buscar o NCM na SEFAZ pelo código de barras?\n\nUsa o certificado digital de uma loja cadastrada e percorre os GTIN de todos os inquilinos. Continua rodando no servidor com esta tela fechada.")) return;
+
+      this.iniciandoSefaz = true;
+      try {
+        await this.$store.dispatch("iniciarSefazGtin");
+        await this.atualizarSefaz();
+      } catch (erro) {
+        this.avisar(erro?.response?.data?.message || "Não foi possível iniciar a busca na SEFAZ.", "error");
+      } finally {
+        this.iniciandoSefaz = false;
+      }
+    },
+    async pararSefaz() {
+      await this.$store.dispatch("pararSefazGtin");
+      this.avisar("A busca na SEFAZ vai parar na próxima consulta.");
+      await this.atualizarSefaz();
+    },
+    // Grava o NCM que a SEFAZ devolveu, no mesmo caminho validado da IA.
+    normalizarSefaz(itens) {
+      return this.normalizar(
+        itens.map((produto) => ({ ...produto, ncm_sugerido: produto.ncm_sefaz })),
+        "da SEFAZ"
+      );
+    },
     async buscarIA(reconsultar) {
       const alvo = reconsultar ? this.semNcmIA : this.semRespostaIA;
       const texto = reconsultar ? "Perguntar de novo para" : "Consultar a IA para";
@@ -484,11 +600,11 @@ A resposta fica gravada, então a conferência seguinte já vem preenchida.`)) r
     },
     // Grava o NCM sugerido nos produtos indicados. Confirma antes: e alteracao
     // de dado fiscal, em cadastro de cliente, e nao tem desfazer.
-    async normalizar(itens) {
+    async normalizar(itens, origem = "sugerido pela IA") {
       if (!itens.length) return;
 
       const clientes = new Set(itens.map((item) => item.tenant_id)).size;
-      const confirmado = window.confirm(`Gravar o NCM sugerido pela IA em ${itens.length} produto(s) de ${clientes} cliente(s)?
+      const confirmado = window.confirm(`Gravar o NCM ${origem} em ${itens.length} produto(s) de ${clientes} cliente(s)?
 
 A alteração não pode ser desfeita.`);
       if (!confirmado) return;
@@ -523,6 +639,8 @@ A alteração não pode ser desfeita.`);
         codigo_barras: produto.codigo_barras,
         descricao: produto.descricao,
         ncm: produto.ncm,
+        ncm_sefaz: produto.ncm_sefaz,
+        descricao_sefaz: produto.descricao_sefaz,
         ncm_ia: produto.ncm_ia,
         descricao_ia: produto.descricao_ia,
         motivo: produto.motivo,

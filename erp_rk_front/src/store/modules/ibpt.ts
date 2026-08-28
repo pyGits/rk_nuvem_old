@@ -79,6 +79,21 @@ export default {
       return res.data;
     },
 
+    // Busca pela SEFAZ: consulta o Cadastro Centralizado de GTIN pelo código de
+    // barras. Também roda no servidor, com a tela fechada.
+    async iniciarSefazGtin() {
+      const res = await Vue.prototype.$http.post("/admin/ibpt/sefaz");
+      return res.data;
+    },
+    async getSefazGtin() {
+      const res = await Vue.prototype.$http.get("/admin/ibpt/sefaz");
+      return res.data;
+    },
+    async pararSefazGtin() {
+      const res = await Vue.prototype.$http.delete("/admin/ibpt/sefaz");
+      return res.data;
+    },
+
     async getIbptProdutosSemNcm({ commit }: any, filtro: any = {}) {
       const res = await Vue.prototype.$http.get("/admin/ibpt/produtos-sem-ncm", { params: filtro });
       commit("setIbptProdutosSemNcm", res.data);

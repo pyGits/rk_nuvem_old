@@ -6,6 +6,8 @@ import db from "../database/config";
 import Ibpt from "../models/Ibpt";
 import IbptCarga from "../models/IbptCarga";
 import IbptSugestaoIa from "../models/IbptSugestaoIa";
+import GtinSefaz from "../models/GtinSefaz";
+import { certificadoDisponivel, consultarGTIN, gtinConsultavel } from "../infra/service/sefaz/ConsultaGTIN";
 import { escolherNCM, iaDisponivel, modeloConfigurado, PerguntaIA } from "../infra/service/IbptSugestaoIA";
 
 // O arquivo do IBPT sai em ANSI (cp1252), nao em UTF-8. Ler como UTF-8 corrompe
@@ -342,6 +344,117 @@ async function rodarMutirao(): Promise<void> {
   }
 }
 
+// ---------- Mutirao da SEFAZ (consulta por codigo de barras) ----------
+
+// Pausa entre consultas. A SEFAZ recusa por "consumo indevido" (cStat 656) quem
+// consulta rapido demais, e o bloqueio vale por cerca de uma hora PARA O CNPJ do
+// certificado - que aqui e de um cliente real. A pausa protege esse cliente.
+const PAUSA_SEFAZ_MS = Number(process.env.SEFAZ_GTIN_PAUSA_MS || 500);
+
+const mutiraoSefaz = {
+  rodando: false,
+  parar: false,
+  total: 0,
+  processados: 0,
+  comNcm: 0,
+  ultimoErro: "",
+  bloqueado: false,
+  iniciadoEm: null as Date | null,
+  terminadoEm: null as Date | null,
+};
+
+async function esperarSefaz(ms: number): Promise<void> {
+  const FATIA = 500;
+
+  for (let restante = ms; restante > 0 && !mutiraoSefaz.parar; restante -= FATIA) {
+    await new Promise((resolve) => setTimeout(resolve, Math.min(FATIA, restante)));
+  }
+}
+
+// GTIN que vale consultar: de produto com NCM irregular, da GS1 Brasil
+// (789/790, o unico atendido pelo CCG) e ainda sem nada no cache - inclusive
+// sem resposta negativa, senao o mutirao repetiria sempre os que nunca voltam.
+async function gtinsPendentes(): Promise<string[]> {
+  const linhas: any[] = await db.query(
+    `with produto_gtin as (
+       select nullif(regexp_replace(coalesce(p.codigo_barras, ''), ${RX}, '', 'g'), '') as gtin,
+              nullif(regexp_replace(coalesce(p.ncm, ''), ${RX}, '', 'g'), '') as ncm_limpo
+         from produtos p
+        where coalesce(p.ativo, 'S') = 'S'
+     )
+     select distinct g.gtin
+       from produto_gtin g
+      where (g.ncm_limpo is null
+             or length(g.ncm_limpo) <> ${DIGITOS_NCM}
+             or not exists (select 1 from ibpt i where i.codigo = g.ncm_limpo))
+        and g.gtin is not null
+        and length(g.gtin) in (8, 12, 13, 14)
+        and (lpad(g.gtin, 13, '0') like '789%' or lpad(g.gtin, 13, '0') like '790%')
+        and not exists (select 1 from gtin_sefaz s where s.gtin = g.gtin)
+      order by g.gtin`,
+    { type: QueryTypes.SELECT }
+  );
+
+  return linhas.map((linha: any) => linha.gtin);
+}
+
+async function rodarMutiraoSefaz(): Promise<void> {
+  try {
+    const loja = await certificadoDisponivel();
+    if (!loja) throw new Error("Nenhuma loja com certificado digital valido cadastrado.");
+
+    const pendentes = await gtinsPendentes();
+
+    mutiraoSefaz.total = pendentes.length;
+    mutiraoSefaz.processados = 0;
+    mutiraoSefaz.comNcm = 0;
+
+    for (const gtin of pendentes) {
+      if (mutiraoSefaz.parar) break;
+
+      try {
+        const resposta = await consultarGTIN(gtin, loja);
+
+        if (resposta.bloqueado) {
+          mutiraoSefaz.bloqueado = true;
+          mutiraoSefaz.ultimoErro =
+            `A SEFAZ bloqueou temporariamente as consultas por consumo indevido (${resposta.xMotivo}). ` +
+            `O bloqueio dura cerca de uma hora. O que ja foi consultado esta gravado - ao recomecar, ` +
+            `ele continua de onde parou.`;
+          break;
+        }
+
+        // Grava tambem a resposta negativa: "a SEFAZ nao tem este GTIN" e
+        // definitivo o bastante para nao perguntar de novo toda rodada.
+        await GtinSefaz.upsert({
+          gtin,
+          ncm: resposta.ncm,
+          cest: resposta.cest,
+          xprod: resposta.xProd,
+          cstat: resposta.cStat,
+          xmotivo: resposta.xMotivo,
+        } as any);
+
+        if (resposta.ncm) mutiraoSefaz.comNcm++;
+        mutiraoSefaz.ultimoErro = "";
+      } catch (erro: any) {
+        // Falha num GTIN nao derruba o mutirao: fica sem cache e volta na
+        // proxima rodada. Parar tudo por causa de um seria pior.
+        mutiraoSefaz.ultimoErro = erro?.message || "falha ao consultar a SEFAZ";
+      }
+
+      mutiraoSefaz.processados++;
+      await esperarSefaz(PAUSA_SEFAZ_MS);
+    }
+  } catch (erro: any) {
+    mutiraoSefaz.ultimoErro = erro?.message || "falha inesperada";
+  } finally {
+    mutiraoSefaz.rodando = false;
+    mutiraoSefaz.parar = false;
+    mutiraoSefaz.terminadoEm = new Date();
+  }
+}
+
 export default {
   // ---------- Painel administrativo ----------
 
@@ -477,6 +590,7 @@ export default {
     // Só a sugestão da IA: a busca por texto acertava pouco (para "ANEL DE
     // OURO" oferecia po de ouro) e virava ruído ao lado de uma resposta boa.
     await anexarSugestoesIA(lista as any[]);
+    await anexarSefaz(lista as any[]);
 
     res.status(200).json({
       tabelaCarregada: true,
@@ -682,6 +796,44 @@ export default {
     res.status(200).json({ parando: mutirao.rodando });
   },
 
+  // ---------- Busca pela SEFAZ ----------
+
+  async iniciarMutiraoSefaz(req: Request, res: Response) {
+    if ((await Ibpt.count()) === 0) throw new Error("Carregue a tabela do IBPT antes de buscar pela SEFAZ.");
+    if (mutiraoSefaz.rodando) throw new Error("A busca pela SEFAZ ja esta rodando.");
+
+    // Falha aqui, e nao la dentro: sem certificado o mutirao rodaria so para
+    // terminar em erro, e o operador nao saberia por que.
+    const loja = await certificadoDisponivel();
+    if (!loja) {
+      throw new Error(
+        "Nenhuma loja com certificado digital valido cadastrado. A consulta ao Cadastro Centralizado " +
+          "de GTIN exige certificado A1 de um emitente de NF-e/NFC-e."
+      );
+    }
+
+    mutiraoSefaz.rodando = true;
+    mutiraoSefaz.parar = false;
+    mutiraoSefaz.bloqueado = false;
+    mutiraoSefaz.ultimoErro = "";
+    mutiraoSefaz.iniciadoEm = new Date();
+    mutiraoSefaz.terminadoEm = null;
+
+    // Sem await: a resposta volta agora e o trabalho segue no servidor.
+    rodarMutiraoSefaz();
+
+    res.status(200).json({ iniciado: true });
+  },
+
+  async situacaoMutiraoSefaz(req: Request, res: Response) {
+    res.status(200).json({ ...mutiraoSefaz });
+  },
+
+  async pararMutiraoSefaz(req: Request, res: Response) {
+    mutiraoSefaz.parar = true;
+    res.status(200).json({ parando: mutiraoSefaz.rodando });
+  },
+
   // ---------- Clientes ----------
 
   // Sugere NCM parecidos com a descricao do produto. Existe porque escolher NCM
@@ -801,6 +953,36 @@ async function anexarSugestoesIA(produtos: any[]): Promise<void> {
     produto.descricao_ia = linha.ncm_descricao;
     // Diferente de "sem cache": a IA ja foi consultada e nao soube dizer.
     produto.ia_consultada = true;
+  });
+}
+
+// Anexa o que a SEFAZ respondeu para o codigo de barras do produto. Vem do
+// cache: a consulta em si roda no mutirao, nao a cada abertura da tela.
+async function anexarSefaz(produtos: any[]): Promise<void> {
+  const porGtin = new Map<string, any>();
+
+  const gtins = Array.from(
+    new Set(produtos.map((p) => String(p.codigo_barras || "").replace(/[^0-9]/g, "")).filter((g) => g.length > 0))
+  );
+  if (gtins.length === 0) return;
+
+  const cache: any[] = await GtinSefaz.findAll({ where: { gtin: gtins } });
+  cache.forEach((linha: any) => porGtin.set(linha.gtin, linha));
+
+  produtos.forEach((produto) => {
+    const gtin = String(produto.codigo_barras || "").replace(/[^0-9]/g, "");
+    // Util na tela mesmo sem resposta: explica por que este produto nunca vai
+    // ter NCM pela SEFAZ (codigo interno da loja, ou GTIN importado).
+    produto.gtin_consultavel = gtinConsultavel(gtin);
+
+    const linha = porGtin.get(gtin);
+    if (!linha) return;
+
+    produto.ncm_sefaz = linha.ncm;
+    produto.descricao_sefaz = linha.xprod;
+    produto.motivo_sefaz = linha.xmotivo;
+    // Diferente de "sem consulta": a SEFAZ ja foi perguntada e nao tem o GTIN.
+    produto.sefaz_consultada = true;
   });
 }
 

@@ -40,5 +40,10 @@ router.post("/admin/ibpt/buscar-ia", verifyJWTADMIN, seguro(IbptController.busca
 router.post("/admin/ibpt/mutirao-ia", verifyJWTADMIN, seguro(IbptController.iniciarMutiraoIA));
 router.get("/admin/ibpt/mutirao-ia", verifyJWTADMIN, seguro(IbptController.situacaoMutiraoIA));
 router.delete("/admin/ibpt/mutirao-ia", verifyJWTADMIN, seguro(IbptController.pararMutiraoIA));
+// Busca pela SEFAZ: consulta o Cadastro Centralizado de GTIN pelo codigo de
+// barras. E consulta exata, nao palpite - tem precedencia sobre a IA.
+router.post("/admin/ibpt/sefaz", verifyJWTADMIN, seguro(IbptController.iniciarMutiraoSefaz));
+router.get("/admin/ibpt/sefaz", verifyJWTADMIN, seguro(IbptController.situacaoMutiraoSefaz));
+router.delete("/admin/ibpt/sefaz", verifyJWTADMIN, seguro(IbptController.pararMutiraoSefaz));
 
 export default router;
