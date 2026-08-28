@@ -26,7 +26,10 @@ const RX = "'\\D'";
 const LIMITE_CONFERENCIA = 5000;
 // Produtos por chamada a IA. Lote grande economiza requisicao, mas resposta
 // longa demais o modelo trunca - e ai a metade final volta sem escolha.
-const LOTE_IA = 25;
+// Lote pequeno de proposito: quando o modelo esta sobrecarregado, o que se
+// perde numa falha e um lote inteiro. Menor = menos retrabalho e resposta mais
+// curta, que o modelo trunca com menos frequencia.
+const LOTE_IA = 8;
 // Teto por execucao do botao, para nao estourar a cota do plano gratuito num
 // clique so. O que sobrar fica para a proxima rodada.
 const LIMITE_IA = 300;
@@ -194,6 +197,108 @@ export function converterCSV(conteudo: string): { registros: LinhaIbpt[]; ignora
   return { registros, ignorados };
 }
 
+// Estado do mutirao da IA. Vive na memoria do processo de proposito: o que
+// importa preservar - a resposta de cada descricao - ja vai para a tabela a
+// cada lote. Se o backend reiniciar no meio, basta iniciar de novo: as
+// descricoes ja respondidas sao puladas e ele continua de onde parou.
+const mutirao = {
+  rodando: false,
+  parar: false,
+  total: 0,
+  processados: 0,
+  comSugestao: 0,
+  tentativas: 0,
+  ultimoErro: "",
+  iniciadoEm: null as Date | null,
+  terminadoEm: null as Date | null,
+};
+
+function esperar(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Descricoes que ainda precisam de resposta: produto com NCM irregular e sem
+// nada gravado no cache. Sai do banco, nao do navegador - o mutirao roda com a
+// tela fechada.
+async function descricoesPendentes(): Promise<string[]> {
+  const linhas: any[] = await db.query(
+    `with produto_ncm as (
+       select p.descricao,
+              nullif(regexp_replace(coalesce(p.ncm, ''), ${RX}, '', 'g'), '') as ncm_limpo
+         from produtos p
+        where coalesce(p.ativo, 'S') = 'S' and coalesce(p.descricao, '') <> ''
+     )
+     select distinct p.descricao
+       from produto_ncm p
+      where (p.ncm_limpo is null
+             or length(p.ncm_limpo) <> ${DIGITOS_NCM}
+             or not exists (select 1 from ibpt i where i.codigo = p.ncm_limpo))
+        and not exists (select 1 from ibpt_sugestao_ia s where s.descricao = p.descricao)
+      order by p.descricao`,
+    { type: QueryTypes.SELECT }
+  );
+
+  return linhas.map((linha: any) => linha.descricao);
+}
+
+// Roda ate acabar. Erro temporario nao interrompe: espera e tenta o mesmo lote
+// de novo, quantas vezes precisar - e para isso que o mutirao existe.
+async function rodarMutirao(): Promise<void> {
+  try {
+    const pendentes = await descricoesPendentes();
+
+    mutirao.total = pendentes.length;
+    mutirao.processados = 0;
+    mutirao.comSugestao = 0;
+
+    for (let i = 0; i < pendentes.length && !mutirao.parar; ) {
+      const lote = pendentes.slice(i, i + LOTE_IA);
+
+      const perguntas: PerguntaIA[] = [];
+      for (const descricao of lote) {
+        perguntas.push({ descricao, candidatos: await candidatosPara(descricao) });
+      }
+
+      try {
+        const respostas = await escolherNCM(perguntas);
+
+        for (const resposta of respostas) {
+          const registro: any = resposta.ncm ? await Ibpt.findOne({ where: { codigo: resposta.ncm } }) : null;
+          if (registro) mutirao.comSugestao++;
+
+          await IbptSugestaoIa.upsert({
+            descricao: resposta.descricao,
+            ncm: registro ? registro.codigo : null,
+            ncm_descricao: registro ? registro.descricao : null,
+            modelo: modeloConfigurado(),
+          } as any);
+        }
+
+        mutirao.processados += lote.length;
+        mutirao.ultimoErro = "";
+        i += LOTE_IA;
+
+        // Respiro entre lotes: o erro de sobrecarga vem de rajada, e insistir
+        // sem pausa mantem o modelo ocupado com a nossa propria fila.
+        await esperar(1500);
+      } catch (erro: any) {
+        // NAO avanca o indice: o mesmo lote sera tentado de novo.
+        mutirao.tentativas++;
+        mutirao.ultimoErro = erro?.message || "falha ao consultar";
+
+        // Espera crescente ate 2 minutos - sobrecarga costuma passar nessa faixa.
+        await esperar(Math.min(15000 * mutirao.tentativas, 120000));
+      }
+    }
+  } catch (erro: any) {
+    mutirao.ultimoErro = erro?.message || "falha inesperada";
+  } finally {
+    mutirao.rodando = false;
+    mutirao.parar = false;
+    mutirao.terminadoEm = new Date();
+  }
+}
+
 export default {
   // ---------- Painel administrativo ----------
 
@@ -326,7 +431,8 @@ export default {
     const truncado = produtos.length > LIMITE_CONFERENCIA;
     const lista = truncado ? produtos.slice(0, LIMITE_CONFERENCIA) : produtos;
 
-    await anexarSugestoes(lista as any[]);
+    // Só a sugestão da IA: a busca por texto acertava pouco (para "ANEL DE
+    // OURO" oferecia po de ouro) e virava ruído ao lado de uma resposta boa.
     await anexarSugestoesIA(lista as any[]);
 
     res.status(200).json({
@@ -456,10 +562,23 @@ export default {
     }
 
     let comSugestao = 0;
+    let falharam = 0;
+    let ultimoErro = "";
 
     for (let i = 0; i < perguntas.length; i += LOTE_IA) {
       const lote = perguntas.slice(i, i + LOTE_IA);
-      const respostas = await escolherNCM(lote);
+
+      let respostas;
+      try {
+        respostas = await escolherNCM(lote);
+      } catch (erro: any) {
+        // Um lote que falha nao pode levar junto o que ja foi respondido: o que
+        // deu certo ja esta gravado, e este segue para o proximo. O operador
+        // repete o botao depois e so o que faltou e consultado de novo.
+        falharam += lote.length;
+        ultimoErro = erro?.message || "falha ao consultar";
+        continue;
+      }
 
       for (const resposta of respostas) {
         // Segunda conferencia, agora contra o banco: mesmo escolhendo entre as
@@ -477,10 +596,46 @@ export default {
     }
 
     res.status(200).json({
-      consultados: pendentes.length,
+      consultados: pendentes.length - falharam,
       comSugestao,
+      falharam,
+      // Quando falha por sobrecarga, o texto do Google explica melhor que
+      // qualquer resumo meu - e diz se e para tentar de novo agora ou depois.
+      erro: falharam ? ultimoErro : "",
       restantes: descricoes.filter((d) => !conhecidas.has(d)).length - pendentes.length,
     });
+  },
+
+  // Mutirao: roda no servidor ate terminar. A tela pode ser fechada.
+  async iniciarMutiraoIA(req: Request, res: Response) {
+    if (!iaDisponivel()) throw new Error("Configure GEMINI_API_KEY no servidor para usar a busca por IA.");
+    if ((await Ibpt.count()) === 0) throw new Error("Carregue a tabela do IBPT antes de usar a busca por IA.");
+    if (mutirao.rodando) throw new Error("O mutirão já está rodando.");
+
+    if (String(req.body?.reconsultarVazios || "") === "1") {
+      await IbptSugestaoIa.destroy({ where: { ncm: null } });
+    }
+
+    mutirao.rodando = true;
+    mutirao.parar = false;
+    mutirao.tentativas = 0;
+    mutirao.ultimoErro = "";
+    mutirao.iniciadoEm = new Date();
+    mutirao.terminadoEm = null;
+
+    // Sem await: a resposta volta agora e o trabalho segue no servidor.
+    rodarMutirao();
+
+    res.status(200).json({ iniciado: true });
+  },
+
+  async situacaoMutiraoIA(req: Request, res: Response) {
+    res.status(200).json({ ...mutirao });
+  },
+
+  async pararMutiraoIA(req: Request, res: Response) {
+    mutirao.parar = true;
+    res.status(200).json({ parando: mutirao.rodando });
   },
 
   // ---------- Clientes ----------
@@ -561,40 +716,6 @@ export default {
   },
 };
 
-// NCM com menos de 8 digitos quase sempre e o codigo certo que perdeu o zero a
-// esquerda pelo caminho (o PDV guarda em campo numerico). "4039000" e o iogurte
-// 04039000; "2071411" e o peito de frango 02071411.
-//
-// Isto nao e sugestao, e correcao: se o codigo completado existe no IBPT, ele e
-// o NCM que o cadastro sempre quis dizer. Vem antes da busca por texto para nao
-// trocar um NCM certo por um palpite.
-async function sugerirPorZeroAEsquerda(produtos: any[]): Promise<void> {
-  const candidatos = new Map<string, any[]>();
-
-  produtos.forEach((produto) => {
-    const limpo = String(produto.ncm || "").replace(/[^0-9]/g, "");
-    if (limpo.length === 0 || limpo.length >= DIGITOS_NCM) return;
-
-    const completo = limpo.padStart(DIGITOS_NCM, "0");
-    if (!candidatos.has(completo)) candidatos.set(completo, []);
-    candidatos.get(completo).push(produto);
-  });
-
-  if (candidatos.size === 0) return;
-
-  const encontrados: any[] = await Ibpt.findAll({
-    where: { codigo: Array.from(candidatos.keys()) },
-    attributes: ["codigo", "descricao"],
-  });
-
-  encontrados.forEach((registro: any) => {
-    (candidatos.get(registro.codigo) || []).forEach((produto) => {
-      produto.ncm_sugerido = registro.codigo;
-      produto.descricao_sugerida = registro.descricao;
-      produto.sugestao_origem = "zero";
-    });
-  });
-}
 
 // Candidatos do IBPT para uma descricao: e o que a IA recebe para escolher.
 async function candidatosPara(descricao: string): Promise<{ codigo: string; descricao: string }[]> {
@@ -639,85 +760,6 @@ async function anexarSugestoesIA(produtos: any[]): Promise<void> {
   });
 }
 
-// Sugere um NCM para cada produto da lista, numa consulta so.
-//
-// O caminho obvio seria uma consulta por produto; com 500 produtos isso vira
-// 500 idas ao banco. Aqui as consultas de texto vao juntas num array e o
-// Postgres resolve todas com um LATERAL sobre o mesmo indice.
-async function anexarSugestoes(produtos: any[]): Promise<void> {
-  await sugerirPorZeroAEsquerda(produtos);
-
-  const primeiros: string[] = [];
-  const consultas: string[] = [];
-  const posicoes: number[] = [];
-
-  produtos.forEach((produto, i) => {
-    // Ja resolvido pelo zero a esquerda: nao vale trocar um NCM certo por um
-    // palpite de texto.
-    if (produto.ncm_sugerido) return;
-
-    const termos = termosDaDescricao(produto.descricao);
-    if (termos.length === 0) return;
-
-    // A primeira palavra e a que nomeia o produto ("ARROZ tio joao"). Ela e
-    // obrigatoria; as demais so ordenam. Sem essa exigencia, uma palavra
-    // qualquer da descricao casa com qualquer coisa e a sugestao vira ruido.
-    primeiros.push(termos[0]);
-    consultas.push(termos.join(" | "));
-    posicoes.push(i);
-  });
-
-  if (consultas.length === 0) return;
-
-  // bind, e nao replacements: o replacements do Sequelize expande array como
-  // lista "a','b" (para IN), o que aqui geraria SQL invalido. O bind vai pelo
-  // driver, que converte JS array em array do Postgres de verdade.
-  const achados: any[] = await db.query(
-    `select entrada.idx, sugerido.codigo, sugerido.descricao
-       from unnest($1::text[], $2::text[]) with ordinality as entrada(primeiro, consulta, idx)
-       cross join lateral (
-         select codigo, descricao
-           from ibpt
-          -- filtra pela primeira palavra, ordena pela descricao inteira
-          where to_tsvector('portuguese', descricao) @@ to_tsquery('portuguese', entrada.primeiro)
-          order by
-            -- Descricao que COMECA pelo termo e do produto, nao uma mencao de
-            -- passagem: "Aguas minerais naturais" ganha de "Produtos quimicos
-            -- (...) incluindo as aguas destiladas".
-            case when lower(descricao) like lower(entrada.primeiro) || '%' then 0 else 1 end,
-            ts_rank(to_tsvector('portuguese', descricao), to_tsquery('portuguese', entrada.consulta)) desc,
-            -- Descricao curta e o item especifico; a longa e o texto do capitulo.
-            length(descricao),
-            codigo
-          limit 1
-       ) sugerido`,
-    { bind: [primeiros, consultas], type: QueryTypes.SELECT }
-  );
-
-  achados.forEach((achado: any) => {
-    // ordinality comeca em 1
-    const produto = produtos[posicoes[Number(achado.idx) - 1]];
-    if (!produto) return;
-
-    produto.ncm_sugerido = achado.codigo;
-    produto.descricao_sugerida = achado.descricao;
-    produto.sugestao_origem = "texto";
-  });
-
-  // Sem correspondencia, cai no padrao - e marcado como tal, para a tela
-  // mostrar diferente. Um palpite errado disfarcado de acerto e pior que
-  // nenhuma sugestao.
-  const padrao: any = await Ibpt.findOne({ where: { codigo: NCM_PADRAO } });
-
-  produtos.forEach((produto) => {
-    if (produto.ncm_sugerido) return;
-
-    produto.ncm_sugerido = NCM_PADRAO;
-    produto.descricao_sugerida = padrao ? padrao.descricao : "";
-    produto.sugestao_padrao = true;
-    produto.sugestao_origem = "padrao";
-  });
-}
 
 function serializar(registro: any) {
   return {

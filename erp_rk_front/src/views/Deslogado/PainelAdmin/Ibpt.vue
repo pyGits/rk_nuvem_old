@@ -77,6 +77,45 @@
           </div>
         </v-sheet>
 
+        <!-- Mutirão da IA: roda no servidor, a tela pode ser fechada -->
+        <v-sheet outlined rounded class="pa-4 mb-4">
+          <div class="d-flex align-center flex-wrap">
+            <div>
+              <h3 class="text-subtitle-1 font-weight-medium mb-0">Mutirão de NCM por IA</h3>
+              <span class="text-caption grey--text text--darken-1">
+                Percorre os produtos de todos os inquilinos no servidor, repetindo sozinho quando a IA está sobrecarregada. Pode fechar esta tela.
+              </span>
+            </div>
+            <v-spacer></v-spacer>
+            <v-checkbox v-model="mutiraoReconsultar" label="Reconsultar os sem resposta" hide-details dense class="mr-4 mt-0" :disabled="mutirao.rodando"></v-checkbox>
+            <v-btn v-if="!mutirao.rodando" color="purple" dark :loading="iniciandoMutirao" @click="iniciarMutirao">
+              <v-icon left>mdi-robot-outline</v-icon>
+              Iniciar
+            </v-btn>
+            <v-btn v-else color="error" outlined @click="pararMutirao">
+              <v-icon left>mdi-stop</v-icon>
+              Parar
+            </v-btn>
+          </div>
+
+          <template v-if="mutirao.total">
+            <v-progress-linear :value="progressoMutirao" height="22" rounded :color="mutirao.rodando ? 'purple' : 'grey'" class="mt-3">
+              <span class="text-caption white--text">{{ mutirao.processados }} / {{ mutirao.total }}</span>
+            </v-progress-linear>
+
+            <div class="text-caption grey--text text--darken-1 mt-1">
+              {{ mutirao.comSugestao }} com NCM ·
+              <span v-if="mutirao.rodando">em andamento</span>
+              <span v-else>parado</span>
+              <span v-if="mutirao.tentativas"> · {{ mutirao.tentativas }} nova(s) tentativa(s)</span>
+            </div>
+
+            <v-alert v-if="mutirao.ultimoErro" type="warning" text dense class="mt-2 mb-0">
+              {{ mutirao.ultimoErro }} — repetindo automaticamente.
+            </v-alert>
+          </template>
+        </v-sheet>
+
         <!-- Conferência de NCM -->
         <div class="d-flex align-center flex-wrap mb-3">
           <div>
@@ -109,19 +148,13 @@
             <div class="d-flex align-center flex-wrap mb-2">
               <span class="text-caption grey--text text--darken-1">
                 {{ conferencia.totais.produtos }} produto(s) em {{ conferencia.totais.clientes }} cliente(s) ·
-                <span class="primary--text">{{ porZero.length }} zero à esquerda</span> ·
-                {{ comSugestao.length - comPadrao.length - porZero.length }} por descrição ·
-                <span class="warning--text">{{ comPadrao.length }} sem correspondência</span>
+                <span class="purple--text">{{ comSugestaoIA.length }} com NCM da IA</span> ·
+                {{ semRespostaIA.length }} ainda não consultados
               </span>
               <v-spacer></v-spacer>
-              <v-spacer></v-spacer>
-              <v-btn small color="primary" class="mr-2" :disabled="!selecionadosComSugestao.length" :loading="normalizando" @click="normalizar(selecionadosComSugestao)">
+              <v-btn small color="purple" dark class="mr-2" :disabled="!selecionadosComIA.length" :loading="normalizando" @click="normalizarIA(selecionadosComIA)">
                 <v-icon left small>mdi-check</v-icon>
-                Normalizar selecionados ({{ selecionadosComSugestao.length }})
-              </v-btn>
-              <v-btn small color="warning" class="mr-2" :disabled="!comSugestao.length" :loading="normalizando" @click="normalizar(comSugestao)">
-                <v-icon left small>mdi-check-all</v-icon>
-                Normalizar todos ({{ comSugestao.length }})
+                Usar IA nos selecionados ({{ selecionadosComIA.length }})
               </v-btn>
               <v-btn small color="purple" dark class="mr-2" :disabled="!semRespostaIA.length" :loading="buscandoIA" @click="buscarIA(false)">
                 <v-icon left small>mdi-robot-outline</v-icon>
@@ -131,9 +164,9 @@
                 <v-icon left small>mdi-robot-confused-outline</v-icon>
                 Reconsultar vazios ({{ semNcmIA.length }})
               </v-btn>
-              <v-btn small color="purple" outlined :disabled="!comSugestaoIA.length" :loading="normalizando" @click="normalizarIA">
+              <v-btn small color="purple" outlined :disabled="!comSugestaoIA.length" :loading="normalizando" @click="normalizarIA(comSugestaoIA)">
                 <v-icon left small>mdi-robot</v-icon>
-                Usar sugestão da IA ({{ comSugestaoIA.length }})
+                Usar IA em todos ({{ comSugestaoIA.length }})
               </v-btn>
             </div>
 
@@ -154,18 +187,6 @@
               <template #[`item.ncm`]="{ item }">
                 <span v-if="item.ncm" class="error--text">{{ item.ncm }}</span>
                 <span v-else class="grey--text">(vazio)</span>
-              </template>
-              <template #[`item.ncm_sugerido`]="{ item }">
-                <template v-if="item.ncm_sugerido">
-                  <div class="font-weight-medium" :class="corSugestao(item)">
-                    {{ item.ncm_sugerido }}
-                    <v-chip v-if="item.sugestao_origem === 'zero'" x-small color="primary" dark class="ml-1" title="O NCM atual já estava certo, só faltava o zero à esquerda">zero à esquerda</v-chip>
-                    <v-chip v-else-if="item.sugestao_padrao" x-small color="warning" dark class="ml-1">padrão</v-chip>
-                    <v-chip v-else x-small color="success" dark class="ml-1">por descrição</v-chip>
-                  </div>
-                  <div class="text-caption grey--text text--darken-1">{{ item.descricao_sugerida }}</div>
-                </template>
-                <span v-else class="grey--text">sem sugestão</span>
               </template>
               <template #[`item.ncm_ia`]="{ item }">
                 <template v-if="item.ncm_ia">
@@ -233,6 +254,10 @@ export default {
       contandoZero: false,
       corrigindoZero: false,
       buscandoIA: false,
+      iniciandoMutirao: false,
+      mutiraoReconsultar: false,
+      mutirao: { rodando: false, total: 0, processados: 0, comSugestao: 0, tentativas: 0, ultimoErro: "" },
+      timerMutirao: null,
       selecionados: [],
       normalizando: false,
       snackbar: false,
@@ -243,8 +268,7 @@ export default {
         { text: "Código", value: "codigo", width: 100 },
         { text: "Descrição", value: "descricao" },
         { text: "NCM atual", value: "ncm", width: 110 },
-        { text: "NCM sugerido", value: "ncm_sugerido", width: 240 },
-        { text: "Sugestão da IA", value: "ncm_ia", width: 240 },
+        { text: "Sugestão da IA", value: "ncm_ia", width: 300 },
         { text: "Motivo", value: "motivo", width: 200 },
       ],
     };
@@ -264,20 +288,9 @@ export default {
         chave: `${produto.tenant_id}|${produto.codigo}|${produto.codigo_barras}`,
       }));
     },
-    // So da para normalizar o que tem sugestao.
-    comSugestao() {
-      return this.produtos.filter((produto) => !!produto.ncm_sugerido);
+    selecionadosComIA() {
+      return this.selecionados.filter((produto) => !!produto.ncm_ia);
     },
-    selecionadosComSugestao() {
-      return this.selecionados.filter((produto) => !!produto.ncm_sugerido);
-    },
-    // Sem correspondência no IBPT: recebe o NCM padrão. Contado à parte porque
-    // aplicar padrão em massa é decisão diferente de aceitar uma sugestão.
-    comPadrao() {
-      return this.produtos.filter((produto) => produto.sugestao_padrao);
-    },
-    // Correção determinística, não palpite: o NCM atual já era o certo e só
-    // perdeu o zero à esquerda. Pode ser aplicada em massa com segurança.
     // Ainda não perguntados à IA. Quem já foi e voltou vazio não entra: seria
     // pagar de novo pela mesma resposta.
     semRespostaIA() {
@@ -291,8 +304,9 @@ export default {
     semNcmIA() {
       return this.produtos.filter((produto) => produto.ia_consultada && !produto.ncm_ia);
     },
-    porZero() {
-      return this.produtos.filter((produto) => produto.sugestao_origem === "zero");
+    progressoMutirao() {
+      if (!this.mutirao.total) return 0;
+      return Math.round((this.mutirao.processados / this.mutirao.total) * 100);
     },
     inquilinos() {
       return (this.$store.state.admin.tenantList.tenantList || []).map((tenant) => ({
@@ -312,15 +326,16 @@ export default {
     this.carregando = true;
     try {
       await Promise.all([this.$store.dispatch("getIbptSituacao"), this.$store.dispatch("getAdminTenantList")]);
+      // O mutirão pode já estar rodando de uma sessão anterior.
+      await this.atualizarMutirao();
     } finally {
       this.carregando = false;
     }
   },
+  beforeDestroy() {
+    clearTimeout(this.timerMutirao);
+  },
   methods: {
-    corSugestao(item) {
-      if (item.sugestao_origem === "zero") return "primary--text";
-      return item.sugestao_padrao ? "warning--text" : "success--text";
-    },
     formatarData(data) {
       if (!data) return "-";
       const [ano, mes, dia] = String(data).substring(0, 10).split("-");
@@ -393,6 +408,35 @@ export default {
         this.corrigindoZero = false;
       }
     },
+    async atualizarMutirao() {
+      try {
+        this.mutirao = await this.$store.dispatch("getMutiraoIA");
+      } catch {
+        // Painel sem resposta não pode derrubar a tela.
+      }
+
+      clearTimeout(this.timerMutirao);
+      // Só continua perguntando enquanto houver o que acompanhar.
+      if (this.mutirao.rodando) this.timerMutirao = setTimeout(() => this.atualizarMutirao(), 5000);
+    },
+    async iniciarMutirao() {
+      if (!window.confirm("Iniciar o mutirão de NCM por IA?\n\nEle percorre os produtos de todos os inquilinos e continua rodando no servidor mesmo com esta tela fechada.")) return;
+
+      this.iniciandoMutirao = true;
+      try {
+        await this.$store.dispatch("iniciarMutiraoIA", { reconsultarVazios: this.mutiraoReconsultar });
+        await this.atualizarMutirao();
+      } catch (erro) {
+        this.avisar(erro?.response?.data?.message || "Não foi possível iniciar.", "error");
+      } finally {
+        this.iniciandoMutirao = false;
+      }
+    },
+    async pararMutirao() {
+      await this.$store.dispatch("pararMutiraoIA");
+      this.avisar("O mutirão vai parar ao terminar o lote atual.");
+      await this.atualizarMutirao();
+    },
     async buscarIA(reconsultar) {
       const alvo = reconsultar ? this.semNcmIA : this.semRespostaIA;
       const texto = reconsultar ? "Perguntar de novo para" : "Consultar a IA para";
@@ -407,7 +451,11 @@ A resposta fica gravada, então a conferência seguinte já vem preenchida.`)) r
           reconsultarVazios: reconsultar,
         });
         const sobra = res.restantes ? ` ${res.restantes} ficaram para a próxima rodada.` : "";
-        this.avisar(res.message || `${res.consultados} descrição(ões) consultada(s), ${res.comSugestao} com NCM.${sobra}`);
+        // Falha parcial não é erro: o que respondeu já está gravado e some da
+        // próxima rodada. Basta clicar de novo para pegar o que faltou.
+        const falha = res.falharam ? ` ${res.falharam} falharam (${res.erro}) — clique de novo para tentar só essas.` : "";
+
+        this.avisar(res.message || `${res.consultados} descrição(ões) consultada(s), ${res.comSugestao} com NCM.${sobra}${falha}`, res.falharam ? "warning" : "success");
         await this.conferir();
       } catch (erro) {
         this.avisar(erro?.response?.data?.message || "Não foi possível consultar a IA.", "error");
@@ -416,8 +464,8 @@ A resposta fica gravada, então a conferência seguinte já vem preenchida.`)) r
       }
     },
     // Grava o NCM que a IA escolheu, no mesmo caminho validado da normalização.
-    normalizarIA() {
-      return this.normalizar(this.comSugestaoIA.map((produto) => ({ ...produto, ncm_sugerido: produto.ncm_ia, sugestao_padrao: false })));
+    normalizarIA(itens) {
+      return this.normalizar(itens.map((produto) => ({ ...produto, ncm_sugerido: produto.ncm_ia })));
     },
     async conferir() {
       this.conferindo = true;
@@ -440,12 +488,7 @@ A resposta fica gravada, então a conferência seguinte já vem preenchida.`)) r
       if (!itens.length) return;
 
       const clientes = new Set(itens.map((item) => item.tenant_id)).size;
-      const padroes = itens.filter((item) => item.sugestao_padrao).length;
-      const avisoPadrao = padroes ? `
-
-ATENÇÃO: ${padroes} deles não tiveram correspondência no IBPT e vão receber o NCM padrão.` : "";
-
-      const confirmado = window.confirm(`Gravar o NCM sugerido em ${itens.length} produto(s) de ${clientes} cliente(s)?${avisoPadrao}
+      const confirmado = window.confirm(`Gravar o NCM sugerido pela IA em ${itens.length} produto(s) de ${clientes} cliente(s)?
 
 A alteração não pode ser desfeita.`);
       if (!confirmado) return;
@@ -480,9 +523,6 @@ A alteração não pode ser desfeita.`);
         codigo_barras: produto.codigo_barras,
         descricao: produto.descricao,
         ncm: produto.ncm,
-        ncm_sugerido: produto.ncm_sugerido,
-        descricao_sugerida: produto.descricao_sugerida,
-        origem_sugestao: produto.sugestao_origem || "",
         ncm_ia: produto.ncm_ia,
         descricao_ia: produto.descricao_ia,
         motivo: produto.motivo,

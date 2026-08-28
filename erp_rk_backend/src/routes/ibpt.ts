@@ -36,5 +36,9 @@ router.get("/admin/ibpt/zero-esquerda", verifyJWTADMIN, seguro(IbptController.ze
 router.post("/admin/ibpt/zero-esquerda", verifyJWTADMIN, seguro(IbptController.zeroAEsquerda));
 // Busca por IA: consulta o modelo e GRAVA. A conferencia depois so le o cache.
 router.post("/admin/ibpt/buscar-ia", verifyJWTADMIN, seguro(IbptController.buscarComIA));
+// Mutirao: roda no servidor ate terminar, com retry, e a tela pode ser fechada.
+router.post("/admin/ibpt/mutirao-ia", verifyJWTADMIN, seguro(IbptController.iniciarMutiraoIA));
+router.get("/admin/ibpt/mutirao-ia", verifyJWTADMIN, seguro(IbptController.situacaoMutiraoIA));
+router.delete("/admin/ibpt/mutirao-ia", verifyJWTADMIN, seguro(IbptController.pararMutiraoIA));
 
 export default router;

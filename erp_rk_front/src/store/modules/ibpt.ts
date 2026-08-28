@@ -65,6 +65,20 @@ export default {
       return res.data;
     },
 
+    // Mutirão: começa no servidor e continua com a tela fechada.
+    async iniciarMutiraoIA(_: any, payload: any = {}) {
+      const res = await Vue.prototype.$http.post("/admin/ibpt/mutirao-ia", { reconsultarVazios: payload.reconsultarVazios ? "1" : "0" });
+      return res.data;
+    },
+    async getMutiraoIA() {
+      const res = await Vue.prototype.$http.get("/admin/ibpt/mutirao-ia");
+      return res.data;
+    },
+    async pararMutiraoIA() {
+      const res = await Vue.prototype.$http.delete("/admin/ibpt/mutirao-ia");
+      return res.data;
+    },
+
     async getIbptProdutosSemNcm({ commit }: any, filtro: any = {}) {
       const res = await Vue.prototype.$http.get("/admin/ibpt/produtos-sem-ncm", { params: filtro });
       commit("setIbptProdutosSemNcm", res.data);

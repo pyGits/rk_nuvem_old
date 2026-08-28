@@ -20,6 +20,16 @@ import axios from "axios";
 // descricao (FANDANGOS, YOPRO) e palavra generica (DOCE BRIGADEIRO virava peixe
 // ornamental de agua doce). O modelo entende o produto, nao so a palavra.
 
+// Sobrecarga do modelo e indisponibilidade momentanea sao comuns e passam
+// sozinhas; nao faz sentido devolver erro ao operador na primeira recusa.
+const TENTATIVAS = 3;
+const ESPERA_BASE_MS = 4000;
+const STATUS_TEMPORARIOS = [429, 500, 502, 503, 504];
+
+function esperar(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 const URL_BASE = "https://generativelanguage.googleapis.com/v1beta/models";
 
 export type CandidatoNCM = { codigo: string; descricao: string };
@@ -42,11 +52,26 @@ export function iaDisponivel(): boolean {
 // real vem no corpo ("models/X is not found for API version v1beta"), e e ela
 // que precisa chegar na tela.
 async function chamar(url: string, corpo: any, config: any): Promise<any> {
-  try {
-    return await axios.post(url, corpo, config);
-  } catch (erro: any) {
-    const detalhe = erro?.response?.data?.error?.message;
-    const status = erro?.response?.status;
+  for (let tentativa = 1; ; tentativa++) {
+    try {
+      return await axios.post(url, corpo, config);
+    } catch (erro: any) {
+      const detalhe = erro?.response?.data?.error?.message;
+      const status = erro?.response?.status;
+
+      // Espera crescente: 4s, 8s. O modelo sobrecarregado costuma voltar nesse
+      // intervalo, e insistir de imediato so piora a fila.
+      if (STATUS_TEMPORARIOS.includes(status) && tentativa < TENTATIVAS) {
+        await esperar(ESPERA_BASE_MS * tentativa);
+        continue;
+      }
+
+      return tratarErro(detalhe, status, erro);
+    }
+  }
+}
+
+async function tratarErro(detalhe: string, status: number, erro: any): Promise<never> {
 
     // A mensagem do Google e mais precisa que qualquer deducao a partir do
     // status: no 404 do gemini-2.5-flash ela dizia "no longer available to new
@@ -60,8 +85,7 @@ async function chamar(url: string, corpo: any, config: any): Promise<any> {
       throw new Error(`Falha 404 no modelo "${modeloConfigurado()}". Ajuste GEMINI_MODEL no .env.${sugestao}`);
     }
 
-    throw new Error(erro?.message || "Falha ao consultar a IA.");
-  }
+  throw new Error(erro?.message || "Falha ao consultar a IA.");
 }
 
 function montarPrompt(perguntas: PerguntaIA[]): string {
