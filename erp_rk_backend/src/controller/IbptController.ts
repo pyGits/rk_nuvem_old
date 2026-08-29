@@ -871,12 +871,16 @@ export default {
           continue;
         }
 
-        const [linhas] = await db.query(
+        const resultado: any = await db.query(
           "update produtos set ncm = :ncm, updated_at = now() where tenant_id = :tenant_id and codigo = :codigo and codigo_barras = :codigo_barras",
           { replacements: { ncm, tenant_id: Number(item.tenant_id), codigo: item.codigo, codigo_barras: item.codigo_barras }, type: QueryTypes.UPDATE, transaction }
         );
 
-        alterados += Number(linhas || 0);
+        // QueryTypes.UPDATE no Postgres devolve [linhas, rowCount] - e num
+        // UPDATE `linhas` vem VAZIO. Ler o primeiro elemento dava
+        // Number([]) === 0, entao a tela sempre relatava "0 produto(s)
+        // atualizado(s)" mesmo tendo gravado tudo. O contador esta no segundo.
+        alterados += Array.isArray(resultado) ? Number(resultado[1] || 0) : 0;
       }
     });
 
