@@ -5,12 +5,50 @@ interface Relatorio {
   dtFim: string;
   // 0 = todas as lojas
   loja: number;
+  numero: string;
+  caixa: string;
+  cpfConsumidor: string;
+  vendedor: string;
+  valorTotal: string;
+  xmlVenda: string;
+  cliente: string;
+  clienteDescricao: string;
+  finalizadora: string;
+  finalizadoraDescricao: string;
+  // "" = todos, "0" = normais, "1" = cancelados
+  cancelado: string;
 }
+
+// Filtros de venda: ficam no topo do painel e valem para todas as abas. As
+// abas agregadas (Lojas, Caixas, Produtos, Seção, Finalizadora) vêm somadas do
+// banco, então quem aplica esses filtros é o backend, não a tela.
+const filtroVendaInicial = {
+  numero: "",
+  caixa: "",
+  cpfConsumidor: "",
+  vendedor: "",
+  valorTotal: "",
+  xmlVenda: "",
+  cliente: "",
+  clienteDescricao: "",
+  finalizadora: "",
+  finalizadoraDescricao: "",
+  cancelado: "0",
+};
+
 const initialRelatorio: Relatorio = {
   dtInicio: getCurrentDate(),
   dtFim: getCurrentDate(),
   loja: 0,
+  ...filtroVendaInicial,
 };
+
+// Params comuns a todas as consultas do painel. As descrições de cliente e
+// finalizadora existem só para o rótulo da tela e não vão para a consulta.
+function paramsPainel(filtro: any) {
+  const { clienteDescricao, finalizadoraDescricao, ...params } = filtro;
+  return params;
+}
 
 export default {
   state: (): {
@@ -44,6 +82,16 @@ export default {
     },
     setRelatorioLoja(state: any, payload: any) {
       state.filtro.loja = payload;
+    },
+    // Recebe só os campos alterados, para a barra de filtros não precisar
+    // reenviar o filtro inteiro a cada aplicação.
+    setRelatorioFiltroVenda(state: any, payload: any) {
+      Object.keys(payload).forEach((campo) => {
+        Vue.set(state.filtro, campo, payload[campo]);
+      });
+    },
+    limparRelatorioFiltroVenda(state: any) {
+      Object.assign(state.filtro, filtroVendaInicial);
     },
     setRelatorioPainelVendasLojas(state: any, payload: any) {
       state.relatorioPainelVendasLojas = payload;
@@ -84,11 +132,7 @@ export default {
     async getPainelVendasProdutos({ state, commit }: any) {
       await Vue.prototype.$http
         .get("/relatorios/painel/produtos", {
-          params: {
-            dtInicio: state.filtro.dtInicio,
-            dtFim: state.filtro.dtFim,
-            loja: state.filtro.loja,
-          },
+          params: paramsPainel(state.filtro),
         })
         .then((res: any) => {
           commit("setRelatorioPainelVendasProdutos", res.data);
@@ -97,11 +141,7 @@ export default {
     async getPainelVendasLojas({ state, commit }: any) {
       await Vue.prototype.$http
         .get("/relatorios/painel/lojas", {
-          params: {
-            dtInicio: state.filtro.dtInicio,
-            dtFim: state.filtro.dtFim,
-            loja: state.filtro.loja,
-          },
+          params: paramsPainel(state.filtro),
         })
         .then((res: any) => {
           commit("setRelatorioPainelVendasLojas", res.data);
@@ -110,11 +150,7 @@ export default {
     async getPainelVendasCaixas({ state, commit }: any) {
       await Vue.prototype.$http
         .get("/relatorios/painel/caixas", {
-          params: {
-            dtInicio: state.filtro.dtInicio,
-            dtFim: state.filtro.dtFim,
-            loja: state.filtro.loja,
-          },
+          params: paramsPainel(state.filtro),
         })
         .then((res: any) => {
           commit("setRelatorioPainelVendasCaixas", res.data);
@@ -123,11 +159,7 @@ export default {
     async getPainelVendasFinalizadoras({ state, commit }: any) {
       await Vue.prototype.$http
         .get("/relatorios/painel/finalizadoras", {
-          params: {
-            dtInicio: state.filtro.dtInicio,
-            dtFim: state.filtro.dtFim,
-            loja: state.filtro.loja,
-          },
+          params: paramsPainel(state.filtro),
         })
         .then((res: any) => {
           commit("setRelatorioPainelVendasFinalizadoras", res.data);
@@ -136,11 +168,7 @@ export default {
     async getPainelVendasSecoes({ state, commit }: any) {
       await Vue.prototype.$http
         .get("/relatorios/painel/secoes", {
-          params: {
-            dtInicio: state.filtro.dtInicio,
-            dtFim: state.filtro.dtFim,
-            loja: state.filtro.loja,
-          },
+          params: paramsPainel(state.filtro),
         })
         .then((res: any) => {
           commit("setRelatorioPainelVendasSecoes", res.data);
@@ -150,11 +178,7 @@ export default {
     async getPainelVendasCupom({ state, commit }: any) {
       await Vue.prototype.$http
         .get("/relatorios/painel/cupom", {
-          params: {
-            dtInicio: state.filtro.dtInicio,
-            dtFim: state.filtro.dtFim,
-            loja: state.filtro.loja,
-          },
+          params: paramsPainel(state.filtro),
         })
         .then((res: any) => {
           commit("setRelatorioPainelVendasCupom", res.data);
@@ -163,11 +187,7 @@ export default {
     async getPainelVendasCupomAnalitico({ state, commit }: any) {
       await Vue.prototype.$http
         .get("/relatorios/painel/cupom/analitico", {
-          params: {
-            dtInicio: state.filtro.dtInicio,
-            dtFim: state.filtro.dtFim,
-            loja: state.filtro.loja,
-          },
+          params: paramsPainel(state.filtro),
         })
         .then((res: any) => {
           commit("setRelatorioPainelVendasCupomAnalitico", res.data);

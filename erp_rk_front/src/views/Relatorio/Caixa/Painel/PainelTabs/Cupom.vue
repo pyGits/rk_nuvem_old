@@ -1,92 +1,15 @@
 <template>
   <v-app>
     <v-container>
-      <!-- Botão para exibir/ocultar filtros -->
-      <v-row>
-        <v-col cols="12">
-          <v-btn color="primary" @click="toggleFilters">
-            <v-icon left>mdi-filter-variant</v-icon>
-            {{ showFilters ? "Ocultar Filtros" : "Exibir Filtros" }}
-          </v-btn>
-        </v-col>
-      </v-row>
-
-      <!-- Campos de filtro -->
-      <v-row v-if="showFilters">
-        <v-col cols="12">
-          <v-sheet class="pa-4" elevation="1" rounded color="grey lighten-4">
-            <v-row dense align="center">
-              <v-col cols="12" sm="6">
-                <v-subheader class="pl-0">Tipo de Relatório</v-subheader>
-                <v-radio-group v-model="tipoRelatorio" row dense hide-details>
-                  <v-radio label="Sintético" value="sintetico"></v-radio>
-                  <v-radio label="Analítico" value="analitico"></v-radio>
-                </v-radio-group>
-              </v-col>
-            </v-row>
-            <v-row dense>
-              <v-col cols="6" sm="2">
-                <v-text-field v-model="filterValues.numero" label="Número" outlined dense clearable></v-text-field>
-              </v-col>
-              <v-col cols="6" sm="2">
-                <v-text-field v-model="filterValues.caixa" label="Caixa" outlined dense clearable></v-text-field>
-              </v-col>
-              <v-col cols="6" sm="2">
-                <v-text-field v-model="filterValues.cpf_consumidor" label="CPF Consumidor" outlined dense clearable></v-text-field>
-              </v-col>
-              <v-col cols="6" sm="2">
-                <v-text-field v-model="filterValues.vendedor" label="Vendedor" outlined dense clearable></v-text-field>
-              </v-col>
-              <v-col cols="6" sm="2">
-                <v-text-field v-model="filterValues.valor_total" label="Valor da Venda" outlined dense clearable></v-text-field>
-              </v-col>
-              <v-col cols="6" sm="2">
-                <v-text-field v-model="filterValues.xml_venda" label="Chave XML" outlined dense clearable></v-text-field>
-              </v-col>
-            </v-row>
-
-            <v-row dense class="mt-2">
-              <v-col cols="12" sm="4" md="3">
-                <label class="form-label">Finalizadora:</label>
-                <input type="text" class="form-control" placeholder="Cód. Finalizadora" :value="finalizadoraFiltro" readonly />
-              </v-col>
-              <v-col cols="12" sm="8" md="6">
-                <label class="form-label">Descrição Finalizadora:</label>
-                <input type="text" class="form-control" placeholder="Todas" :value="finalizadoraFiltroDescricao" readonly />
-              </v-col>
-              <v-col cols="12" md="3" class="d-flex align-end">
-                <v-btn text small color="primary" @click="abrirDialogFinalizadora">
-                  <v-icon left small>mdi-magnify</v-icon>
-                  Localizar finalizadora
-                </v-btn>
-                <v-btn v-if="finalizadoraFiltro" text small color="grey darken-1" class="ml-1" @click="limparFinalizadora">
-                  <v-icon left small>mdi-close</v-icon>
-                  Limpar
-                </v-btn>
-              </v-col>
-            </v-row>
-
-            <v-row dense align="center">
-              <v-col cols="12" sm="6">
-                <v-subheader class="pl-0">Situação</v-subheader>
-                <v-radio-group v-model="filterValues.cancelado" row dense hide-details>
-                  <v-radio label="Todos" value=""></v-radio>
-                  <v-radio label="Cancelados" value="1"></v-radio>
-                  <v-radio label="Normais" value="0"></v-radio>
-                </v-radio-group>
-              </v-col>
-              <v-col cols="12" sm="6" class="d-flex justify-end align-center">
-                <v-btn color="primary" @click="applyFilter">
-                  <v-icon left>mdi-filter</v-icon>
-                  Aplicar Filtro
-                </v-btn>
-                <v-btn class="ml-2" outlined @click="limparFiltro">
-                  <v-icon left>mdi-filter-remove</v-icon>
-                  Limpar Filtros
-                </v-btn>
-              </v-col>
-            </v-row>
-          </v-sheet>
+      <!-- Os filtros de venda ficam no topo do painel, valendo para todas as
+           abas. Aqui sobra só a forma de apresentar o cupom. -->
+      <v-row dense align="center">
+        <v-col cols="12" sm="6">
+          <v-subheader class="pl-0">Tipo de Relatório</v-subheader>
+          <v-radio-group v-model="tipoRelatorio" row dense hide-details class="mt-0">
+            <v-radio label="Sintético" value="sintetico"></v-radio>
+            <v-radio label="Analítico" value="analitico"></v-radio>
+          </v-radio-group>
         </v-col>
       </v-row>
 
@@ -94,7 +17,7 @@
       <v-data-table
         v-if="tipoRelatorio === 'sintetico'"
         :headers="headers"
-        :items="filteredPrecosMascarados"
+        :items="cupons"
         :items-per-page="10"
         class="elevation-1 linha-clicavel"
         style="margin-top: 20px"
@@ -105,6 +28,10 @@
       >
         <template v-slot:item.data="{ item }">
           {{ formatDateBR(item.data) }}
+        </template>
+        <template v-slot:item.cliente_nome="{ item }">
+          <span v-if="item.cliente_nome">{{ descricaoCliente(item) }}</span>
+          <span v-else class="grey--text">-</span>
         </template>
         <template v-slot:item.xml_venda="{ item }">
           <span class="chave-xml-text">{{ item.xml_venda || "-" }}</span>
@@ -123,6 +50,7 @@
             <th class="title"></th>
             <th class="title">{{ sumField("valor_total_original") }}</th>
             <th class="title"></th>
+            <th class="title"></th>
             <th class="title">{{ sumField("qtde_item_original") }}</th>
             <th class="title"></th>
             <th class="title"></th>
@@ -134,7 +62,7 @@
       <div v-else style="margin-top: 20px">
         <v-progress-linear v-if="carregandoAnalitico" indeterminate color="primary" class="mb-4"></v-progress-linear>
 
-        <div v-if="!carregandoAnalitico && !filteredPrecosMascarados.length" class="grey--text text-center pa-6">Nenhum cupom encontrado</div>
+        <div v-if="!carregandoAnalitico && !cupons.length" class="grey--text text-center pa-6">Nenhum cupom encontrado</div>
 
         <v-card v-for="cupom in cuponsAnaliticoPaginados" :key="cupom.data + '_' + cupom.caixa + '_' + cupom.codigo" outlined class="mb-4" :class="{ 'cupom-cancelado-card': cupom.cancelado == 1 }">
           <v-card-title class="d-flex align-center flex-wrap">
@@ -144,8 +72,12 @@
               {{ cupom.cancelado == 1 ? "CANCELADO" : "NORMAL" }}
             </v-chip>
             <v-chip v-if="cupom.cpf_consumidor" small outlined class="ml-2">
-              <v-icon left x-small>mdi-account-outline</v-icon>
+              <v-icon left x-small>mdi-card-account-details-outline</v-icon>
               {{ cupom.cpf_consumidor }}
+            </v-chip>
+            <v-chip v-if="cupom.cliente_nome" small outlined color="primary" class="ml-2">
+              <v-icon left x-small>mdi-account-outline</v-icon>
+              {{ descricaoCliente(cupom) }}
             </v-chip>
             <v-spacer></v-spacer>
             <span class="chave-xml-text grey--text">{{ cupom.xml_venda || "-" }}</span>
@@ -170,6 +102,10 @@
               <v-col cols="6" sm="3">
                 <div class="text-caption grey--text">Valor Total</div>
                 <div class="font-weight-bold">{{ cupom.valor_total_format }}</div>
+              </v-col>
+              <v-col cols="12" sm="6">
+                <div class="text-caption grey--text">Cliente</div>
+                <div>{{ cupom.cliente_nome ? descricaoCliente(cupom) : "Não identificado" }}</div>
               </v-col>
             </v-row>
 
@@ -205,30 +141,6 @@
       </div>
     </v-container>
 
-    <!-- Modal para localizar finalizadora -->
-    <v-dialog v-model="dialogFinalizadora" max-width="500">
-      <v-card>
-        <v-card-title>
-          <span class="headline">Localizar Finalizadora</span>
-        </v-card-title>
-        <v-card-text>
-          <v-text-field v-model="searchFinalizadora" label="Pesquisar" prepend-inner-icon="mdi-magnify" outlined dense clearable autofocus></v-text-field>
-          <v-list dense class="finalizadora-lista">
-            <v-list-item v-for="fin in filteredFinalizadoraList" :key="fin.codigo" @click="selecionarFinalizadora(fin)">
-              <v-list-item-content>
-                <v-list-item-title>{{ fin.codigo }} - {{ fin.nome }}</v-list-item-title>
-              </v-list-item-content>
-            </v-list-item>
-            <v-list-item v-if="!filteredFinalizadoraList.length">
-              <v-list-item-content>
-                <span class="grey--text">Nenhuma finalizadora encontrada</span>
-              </v-list-item-content>
-            </v-list-item>
-          </v-list>
-        </v-card-text>
-      </v-card>
-    </v-dialog>
-
     <!-- Modal com o detalhamento completo do cupom -->
     <v-dialog v-model="dialogCupom" max-width="900" scrollable>
       <v-card>
@@ -236,8 +148,12 @@
           <v-icon left>mdi-receipt-text-outline</v-icon>
           Cupom {{ selectedCupom.numero }}
           <v-chip v-if="selectedCupom.cpf_consumidor" small outlined class="ml-3">
-            <v-icon left x-small>mdi-account-outline</v-icon>
+            <v-icon left x-small>mdi-card-account-details-outline</v-icon>
             {{ selectedCupom.cpf_consumidor }}
+          </v-chip>
+          <v-chip v-if="selectedCupom.cliente_nome" small outlined color="primary" class="ml-2">
+            <v-icon left x-small>mdi-account-outline</v-icon>
+            {{ descricaoCliente(selectedCupom) }}
           </v-chip>
           <v-spacer></v-spacer>
           <v-btn icon @click="dialogCupom = false">
@@ -266,6 +182,10 @@
             <v-col cols="6" sm="3">
               <div class="text-caption grey--text">Valor Total</div>
               <div class="font-weight-bold">{{ selectedCupom.valor_total_format }}</div>
+            </v-col>
+            <v-col cols="12" sm="6">
+              <div class="text-caption grey--text">Cliente</div>
+              <div>{{ selectedCupom.cliente_nome ? descricaoCliente(selectedCupom) : "Não identificado" }}</div>
             </v-col>
           </v-row>
 
@@ -370,61 +290,34 @@ export default {
         { text: "Caixa", value: "caixa" },
         { text: "Valor Total", value: "valor_total_original" },
         { text: "CPF Consumidor", value: "cpf_consumidor" },
+        { text: "Cliente", value: "cliente_nome" },
         { text: "Qtd. Item", value: "qtde_item_original" },
         { text: "Chave XML", value: "xml_venda" },
         { text: "Situação", value: "cancelado" },
       ],
-      filterValues: {
-        numero: "",
-        loja: "",
-        hora: "",
-        caixa: "",
-        valor_total: "",
-        codigo_cliente: "",
-        cancelado: "",
-        cpf_consumidor: "",
-        vendedor: "",
-        xml_venda: "",
-        xml_cancelamento: "",
-      },
-      filteredPrecosMascarados: [],
       selectedCupom: {},
-      showFilters: false,
       tipoRelatorio: "sintetico",
       carregandoAnalitico: false,
       paginaAnalitico: 1,
       itensPorPaginaAnalitico: 10,
-      finalizadoraFiltro: "",
-      finalizadoraFiltroDescricao: "",
-      dialogFinalizadora: false,
-      searchFinalizadora: "",
     };
-  },
-  mounted() {
-    this.$store.dispatch("getLojas");
-    this.$store.dispatch("getClientes");
-    this.$store.dispatch("getFuncionarios");
-    this.$store.dispatch("getFinalizadoras");
-    this.applyFilter();
   },
   watch: {
     relatorio() {
-      this.applyFilter();
-      if (this.tipoRelatorio === "analitico" || this.finalizadoraFiltro) this.carregarAnalitico();
+      this.paginaAnalitico = 1;
+      if (this.tipoRelatorio === "analitico") this.carregarAnalitico();
     },
     tipoRelatorio(valor) {
       this.paginaAnalitico = 1;
       if (valor === "analitico") this.carregarAnalitico();
-    },
-    filteredPrecosMascarados() {
-      this.paginaAnalitico = 1;
     },
   },
   computed: {
     relatorio() {
       return this.$store.state.relatorio.relatorioPainelVendasCupom;
     },
-    precosMascarados() {
+    // A consulta já vem filtrada do backend; aqui só entram os campos de tela.
+    cupons() {
       return this.relatorio.map((item) => ({
         ...item,
         valor_total_original: item.valor_total,
@@ -468,33 +361,6 @@ export default {
     totalTroco() {
       return this.formasPagamentoList.filter((item) => item.cancelado !== 1).reduce((acc, item) => acc + Number(item.valor_troco || 0), 0);
     },
-    lojaList() {
-      return this.$store.state.loja.lojaList;
-    },
-    clienteList() {
-      return this.$store.state.cliente.clienteList;
-    },
-    funcionarioList() {
-      return this.$store.state.funcionario.funcionarioList;
-    },
-    finalizadoraList() {
-      return this.$store.state.finalizadora.finalizadoraList || [];
-    },
-    filteredFinalizadoraList() {
-      if (!this.searchFinalizadora) return this.finalizadoraList;
-      const termo = this.searchFinalizadora.toLowerCase();
-      return this.finalizadoraList.filter((fin) => fin.codigo.toLowerCase().includes(termo) || (fin.nome || "").toLowerCase().includes(termo));
-    },
-    cuponsComFinalizadoraSelecionada() {
-      if (!this.finalizadoraFiltro) return null;
-      const set = new Set();
-      (this.relatorioAnalitico.formasPagamento || []).forEach((forma) => {
-        if (String(forma.codigo_finalizadora) === String(this.finalizadoraFiltro)) {
-          set.add(this.chaveCupom(forma));
-        }
-      });
-      return set;
-    },
     relatorioAnalitico() {
       return this.$store.state.relatorio.relatorioPainelVendasCupomAnalitico || { itens: [], formasPagamento: [] };
     },
@@ -531,11 +397,11 @@ export default {
       return map;
     },
     totalPaginasAnalitico() {
-      return Math.ceil(this.filteredPrecosMascarados.length / this.itensPorPaginaAnalitico) || 1;
+      return Math.ceil(this.cupons.length / this.itensPorPaginaAnalitico) || 1;
     },
     cuponsAnaliticoPaginados() {
       const inicio = (this.paginaAnalitico - 1) * this.itensPorPaginaAnalitico;
-      return this.filteredPrecosMascarados.slice(inicio, inicio + this.itensPorPaginaAnalitico);
+      return this.cupons.slice(inicio, inicio + this.itensPorPaginaAnalitico);
     },
   },
   methods: {
@@ -547,6 +413,12 @@ export default {
       } catch (e) {
         return date;
       }
+    },
+    // O backend resolve o cliente do cupom pelo código gravado na venda ou,
+    // quando só veio o CPF do consumidor, pelo CNPJ/CPF do cadastro.
+    descricaoCliente(cupom) {
+      if (!cupom || !cupom.cliente_nome) return "";
+      return `${cupom.cliente_codigo} - ${cupom.cliente_nome}`.trim();
     },
     rowClass(item) {
       return item.cancelado == 1 ? "cupom-cancelado-row" : "";
@@ -564,9 +436,6 @@ export default {
       this.carregandoAnalitico = true;
       return this.$store.dispatch("getPainelVendasCupomAnalitico").finally(() => {
         this.carregandoAnalitico = false;
-        // Se o usuário aplicou o filtro de finalizadora antes dos dados
-        // carregarem, o resultado ficaria vazio até reaplicar o filtro aqui.
-        if (this.finalizadoraFiltro) this.applyFilter();
       });
     },
     carregarCupom(cupom) {
@@ -579,65 +448,18 @@ export default {
       });
     },
     sumField(field) {
-      let total = 0;
-      if (this.filteredPrecosMascarados) {
-        total = this.filteredPrecosMascarados.reduce((acc, item) => acc + Number(item[field] || 0), 0);
-      }
+      const total = this.cupons.reduce((acc, item) => acc + Number(item[field] || 0), 0);
       return maskQtd(total);
     },
-    abrirDialogFinalizadora() {
-      this.searchFinalizadora = "";
-      this.dialogFinalizadora = true;
-      if (!this.finalizadoraList.length) this.$store.dispatch("getFinalizadoras");
-    },
-    selecionarFinalizadora(finalizadora) {
-      this.finalizadoraFiltro = finalizadora.codigo;
-      this.finalizadoraFiltroDescricao = finalizadora.nome;
-      this.dialogFinalizadora = false;
-      if (!this.relatorioAnalitico.formasPagamento.length && !this.carregandoAnalitico) this.carregarAnalitico();
-    },
-    limparFinalizadora() {
-      this.finalizadoraFiltro = "";
-      this.finalizadoraFiltroDescricao = "";
-    },
-    applyFilter() {
-      this.$store.commit("setRelatorioCupomUnico", { itens: [], formasPagamento: [] });
-      this.filteredPrecosMascarados = this.precosMascarados.filter((item) => {
-        if (this.cuponsComFinalizadoraSelecionada && !this.cuponsComFinalizadoraSelecionada.has(this.chaveCupom(item))) return false;
-        for (let key in this.filterValues) {
-          const filtro = this.filterValues[key];
-          if (filtro === "" || filtro === null || filtro === undefined) continue;
-          const valor = item[key];
-          if (valor === null || valor === undefined) return false;
-          if (!valor.toString().toLowerCase().includes(filtro.toString().toLowerCase())) return false;
-        }
-        return true;
-      });
-    },
-    // Chamado pelo Painel na exportação. O filtro de finalizadora depende do
-    // analítico, então ele é recarregado antes de reaplicar os filtros, para a
-    // planilha sair com os cupons do período que está na tela.
-    async linhasParaExportar() {
-      if (this.finalizadoraFiltro) await this.carregarAnalitico();
-      this.applyFilter();
-      // Os campos *_original/*_format existem só para a tela; no Excel o cupom
-      // vai como veio da consulta.
+    // Chamado pelo Painel na exportação. Os campos *_original/*_format existem
+    // só para a tela; no Excel o cupom vai como veio da consulta.
+    linhasParaExportar() {
       const camposTela = ["valor_total_original", "qtde_item_original", "valor_total_format", "qtde_item_format"];
-      return this.filteredPrecosMascarados.map((item) => {
+      return this.cupons.map((item) => {
         const cupom = { ...item };
         camposTela.forEach((campo) => delete cupom[campo]);
         return cupom;
       });
-    },
-    toggleFilters() {
-      this.showFilters = !this.showFilters;
-    },
-    limparFiltro() {
-      for (let key in this.filterValues) {
-        this.filterValues[key] = "";
-      }
-      this.limparFinalizadora();
-      this.applyFilter();
     },
   },
 };
@@ -664,12 +486,5 @@ export default {
 .cupom-cancelado-card {
   border-color: #ef9a9a !important;
   background-color: #fff5f5;
-}
-.finalizadora-lista {
-  max-height: 300px;
-  overflow-y: auto;
-}
-.finalizadora-lista .v-list-item {
-  cursor: pointer;
 }
 </style>

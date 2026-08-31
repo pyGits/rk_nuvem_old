@@ -34,6 +34,10 @@
           </v-btn>
         </v-col>
       </FiltroPeriodo>
+
+      <!-- Filtros de venda: valem para todas as abas, por isso ficam aqui e não
+           dentro do Cupom, que era onde nasceram. -->
+      <FiltroVenda @alterado="gerarRelatorio()" />
     </div>
 
     <v-tabs v-model="activeTab" show-arrows class="px-4">
@@ -62,13 +66,16 @@ import TabSecoes from "./PainelTabs/Secoes.vue";
 import TabCupom from "./PainelTabs/Cupom.vue";
 import CabecalhoRelatorio from "@/components/Relatorio/CabecalhoRelatorio.vue";
 import FiltroPeriodo from "@/components/Relatorio/FiltroPeriodo.vue";
+import FiltroVenda from "@/components/Relatorio/FiltroVenda.vue";
 import EstadoVazio from "@/components/Relatorio/EstadoVazio.vue";
 import { gerarExcel } from "@/utils/exports";
 import { getCurrentDate } from "@/utils/date";
 
+const ROTULO_SITUACAO = { "": "Todas as situações", "0": "Normais", "1": "Cancelados" };
+
 export default {
   name: "Dashboard",
-  components: { CabecalhoRelatorio, FiltroPeriodo, EstadoVazio },
+  components: { CabecalhoRelatorio, FiltroPeriodo, FiltroVenda, EstadoVazio },
   data() {
     return {
       activeTab: 0,
@@ -87,6 +94,9 @@ export default {
     };
   },
   computed: {
+    filtro() {
+      return this.$store.state.relatorio.filtro;
+    },
     dtInicio: {
       get() {
         return this.$store.state.relatorio.filtro.dtInicio;
@@ -129,7 +139,14 @@ export default {
       return opcao ? opcao.descricao : "Todas as lojas";
     },
     resumoFiltro() {
-      return `${this.formatarData(this.dtInicio)} até ${this.formatarData(this.dtFim)} · ${this.lojaSelecionada}`;
+      const partes = [
+        `${this.formatarData(this.dtInicio)} até ${this.formatarData(this.dtFim)}`,
+        this.lojaSelecionada,
+        ROTULO_SITUACAO[this.filtro.cancelado] || ROTULO_SITUACAO[""],
+      ];
+      if (this.filtro.clienteDescricao) partes.push(this.filtro.clienteDescricao);
+      if (this.filtro.finalizadoraDescricao) partes.push(this.filtro.finalizadoraDescricao);
+      return partes.join(" · ");
     },
     periodoInvalido() {
       return !!this.dtInicio && !!this.dtFim && this.dtFim < this.dtInicio;
@@ -172,9 +189,9 @@ export default {
         this.carregando = false;
       }
     },
-    // O Excel sai com os mesmos dados da tela: reconsulta com o período/loja
-    // atuais e, se a aba tiver filtros próprios (Cupom), pede a ela a lista já
-    // filtrada em vez de exportar o resultado bruto da consulta.
+    // O Excel sai com os mesmos dados da tela: reconsulta com os filtros atuais
+    // e, se a aba tiver um preparo próprio (Cupom), pede a lista a ela em vez
+    // de exportar o resultado bruto da consulta.
     async exportarExcel() {
       if (this.periodoInvalido) return;
 
@@ -189,6 +206,7 @@ export default {
       this.$store.commit("setRelatorioDtInicio", getCurrentDate());
       this.$store.commit("setRelatorioDtFim", getCurrentDate());
       this.$store.commit("setRelatorioLoja", 0);
+      this.$store.commit("limparRelatorioFiltroVenda");
       this.gerarRelatorio();
     },
   },

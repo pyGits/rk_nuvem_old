@@ -12,12 +12,151 @@ function lojaFiltro(query: any): number | null {
   return Number.isInteger(loja) && loja > 0 ? loja : null;
 }
 
+// Filtros de venda do painel. Sobem uma vez no topo da tela e valem para todas
+// as abas: as agregadas (Lojas, Caixas, Produtos, Seção, Finalizadora) somam no
+// banco, então quem os aplica é a consulta, não o front.
+//
+// Pares [param da query, coluna de vendas]. Todos casam por "contém", que é a
+// semântica que a aba Cupom sempre teve quando filtrava na tela.
+const CAMPOS_VENDA: Array<[string, string]> = [
+  ["numero", "numero"],
+  ["caixa", "caixa"],
+  ["cpfConsumidor", "cpf_consumidor"],
+  ["vendedor", "vendedor"],
+  ["valorTotal", "valor_total"],
+  ["xmlVenda", "xml_venda"],
+];
+
+function texto(query: any, param: string): string {
+  const valor = query[param];
+  return valor === undefined || valor === null ? "" : String(valor).trim();
+}
+
+// O restante deste arquivo interpola os parâmetros direto no SQL. Os filtros
+// abaixo vêm digitados pelo usuário, então passam por escape.
+function escapar(valor: string): string {
+  return sequelize.escape(valor);
+}
+
+// CPF do cupom e CNPJ/CPF do cadastro podem estar com ou sem máscara.
+function soDigitos(expr: string): string {
+  return `regexp_replace(coalesce(${expr}, ''), '[^0-9]', '', 'g')`;
+}
+
+/** Condições de texto sobre a tabela vendas, no alias informado. */
+function condicoesVenda(query: any, alias: string): string {
+  return CAMPOS_VENDA.map(([param, coluna]) => {
+    const valor = texto(query, param);
+    if (!valor) return "";
+    return ` and cast(${alias}.${coluna} as text) ilike ${escapar(`%${valor}%`)}`;
+  }).join("");
+}
+
+/**
+ * Filtro de cliente. O cupom pode apontar para o cadastro pelo código ou só
+ * trazer o CPF do consumidor, então os dois caminhos valem.
+ */
+function condicaoCliente(query: any, tenant_id: number, alias: string): string {
+  const cliente = texto(query, "cliente");
+  if (!cliente) return "";
+  return ` and exists (select 1 from clientes cfil
+    where cfil.tenant_id = ${tenant_id} and cfil.codigo = ${escapar(cliente)}
+      and (${alias}.codigo_cliente = cfil.codigo
+        or (coalesce(${alias}.cpf_consumidor, '') <> ''
+            and ${soDigitos(`${alias}.cpf_consumidor`)} = ${soDigitos("cfil.cnpjcpf")})))`;
+}
+
+/**
+ * Situação: "" todos, "0" normais, "1" cancelados. Nas tabelas filhas o alias
+ * aponta para o item ou para a forma de pagamento, que é onde essas consultas
+ * já filtravam cancelamento.
+ */
+function condicaoSituacao(query: any, alias: string): string {
+  const cancelado = texto(query, "cancelado");
+  if (cancelado === "0") return ` and ${alias}.cancelado = 0`;
+  if (cancelado === "1") return ` and ${alias}.cancelado = 1`;
+  return "";
+}
+
+/** Cupons com ao menos uma forma de pagamento na finalizadora escolhida. */
+function condicaoFinalizadora(query: any, tenant_id: number, alias: string, campoCupom: string): string {
+  const finalizadora = texto(query, "finalizadora");
+  if (!finalizadora) return "";
+  return ` and exists (select 1 from venda_formas vffil
+    where vffil.tenant_id = ${tenant_id}
+      and vffil.data = ${alias}.data and vffil.caixa = ${alias}.caixa
+      and vffil.loja = ${alias}.loja and vffil.codigo_cupom = ${alias}.${campoCupom}
+      and vffil.finalizadora = ${escapar(finalizadora)})`;
+}
+
+/** Filtros de venda para consultas que rodam sobre a própria tabela vendas. */
+function filtrosVenda(query: any, tenant_id: number, alias: string): string {
+  return (
+    condicoesVenda(query, alias) +
+    condicaoCliente(query, tenant_id, alias) +
+    condicaoSituacao(query, alias) +
+    condicaoFinalizadora(query, tenant_id, alias, "codigo")
+  );
+}
+
+/**
+ * Os mesmos filtros para venda_items/venda_formas, que só guardam a chave do
+ * cupom: o que é coluna de vendas vira um EXISTS.
+ *
+ * A situação, por padrão, continua sendo lida da própria linha — é o que essas
+ * consultas sempre fizeram, e trocar por cancelamento de cupom mudaria os
+ * totais das abas agregadas. No analítico, onde a linha é o detalhe de um
+ * cupom já filtrado e o item cancelado aparece marcado na tela, ela vale no
+ * nível do cupom (situacaoNoCupom).
+ */
+function filtrosVendaFilho(query: any, tenant_id: number, alias: string, opcoes: { situacaoNoCupom?: boolean } = {}): string {
+  const doCupom =
+    condicoesVenda(query, "vfil") +
+    condicaoCliente(query, tenant_id, "vfil") +
+    (opcoes.situacaoNoCupom ? condicaoSituacao(query, "vfil") : "");
+
+  const existsVenda = doCupom
+    ? ` and exists (select 1 from vendas vfil
+    where vfil.tenant_id = ${tenant_id}
+      and vfil.data = ${alias}.data and vfil.caixa = ${alias}.caixa
+      and vfil.loja = ${alias}.loja and vfil.codigo = ${alias}.codigo_cupom
+      ${doCupom})`
+    : "";
+
+  return (
+    existsVenda +
+    (opcoes.situacaoNoCupom ? "" : condicaoSituacao(query, alias)) +
+    condicaoFinalizadora(query, tenant_id, alias, "codigo_cupom")
+  );
+}
+
+/**
+ * Cliente do cupom: pelo código gravado na venda ou, quando o PDV só registrou
+ * o CPF do consumidor, pelo CNPJ/CPF do cadastro. LATERAL com limit 1 para um
+ * cadastro duplicado não multiplicar a linha do cupom.
+ */
+function joinClienteDoCupom(tenant_id: number, alias: string): string {
+  return `left join lateral (
+      select c.codigo, c.nome, c.cnpjcpf
+      from clientes c
+      where c.tenant_id = ${tenant_id}
+        and (
+          (coalesce(${alias}.codigo_cliente, '') <> '' and c.codigo = ${alias}.codigo_cliente)
+          or (coalesce(${alias}.codigo_cliente, '') = ''
+              and coalesce(${alias}.cpf_consumidor, '') <> ''
+              and ${soDigitos("c.cnpjcpf")} = ${soDigitos(`${alias}.cpf_consumidor`)})
+        )
+      limit 1
+    ) cli on true`;
+}
+
 export default {
   async relPainelLoja(req: any, res: any) {
     const { tenant_id } = req;
     const filtroLoja = lojaFiltro(req.query);
     const dtInicio = req.query.dtInicio;
     const dtFim = req.query.dtFim;
+    const filtros = filtrosVenda(req.query, tenant_id, "v");
 
     if (!dtInicio || !dtFim) {
       res.status(400).json({ error: "data início e fim são obrigatórios" });
@@ -42,16 +181,16 @@ export default {
           SELECT
             CONCAT(${loja.codigo}, ' - ', '${loja.nome}') as loja,
             COUNT(*) as qtd_clientes,
-            COALESCE(SUM(valor_total), 0) as venda,
-            COALESCE(SUM(valor_custo), 0) as venda_custo,
-            COALESCE(SUM(valor_total) / COUNT(*), 0) as ticket_medio
-          FROM vendas
+            COALESCE(SUM(v.valor_total), 0) as venda,
+            COALESCE(SUM(v.valor_custo), 0) as venda_custo,
+            COALESCE(SUM(v.valor_total) / COUNT(*), 0) as ticket_medio
+          FROM vendas v
           WHERE
-            tenant_id = ${tenant_id}
-            AND cancelado = 0
-            AND loja = ${loja.codigo}
-            AND data >= '${dtInicio}'
-            AND data <= '${dtFim}'
+            v.tenant_id = ${tenant_id}
+            AND v.loja = ${loja.codigo}
+            AND v.data >= '${dtInicio}'
+            AND v.data <= '${dtFim}'
+            ${filtros}
           `,
             {
               type: QueryTypes.SELECT,
@@ -83,6 +222,7 @@ export default {
     const dtFim = req.query.dtFim;
     const loja = lojaFiltro(req.query);
     const filtroLoja = loja ? `AND v.loja = ${loja}` : "";
+    const filtros = filtrosVendaFilho(req.query, tenant_id, "v");
 
     const result = await sequelize.query(`SELECT
     p.descricao AS nome_produto,
@@ -98,12 +238,12 @@ export default {
     v.codigo_produto
     FROM venda_items v
     JOIN produtos p ON v.codigo_produto = p.codigo
-    WHERE v.cancelado = 0
-    AND v.tenant_id = ${tenant_id}
+    WHERE v.tenant_id = ${tenant_id}
     AND p.tenant_id = ${tenant_id}
-    AND data >= '${dtInicio}'
-    AND data <= '${dtFim}'
+    AND v.data >= '${dtInicio}'
+    AND v.data <= '${dtFim}'
     ${filtroLoja}
+    ${filtros}
 
 GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
 
@@ -118,19 +258,21 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
     const dtFim = req.query.dtFim;
     const loja = lojaFiltro(req.query);
     const filtroLoja = loja ? `AND v.loja = ${loja}` : "";
+    const filtros = filtrosVenda(req.query, tenant_id, "v");
 
     const result = await sequelize.query(`
-    SELECT l.codigo,l.nome AS nome_loja, v.caixa, 
+    SELECT l.codigo,l.nome AS nome_loja, v.caixa,
     COUNT(*) as qtd_clientes,
     COALESCE(SUM(v.valor_total), 0) as venda,
     COALESCE(SUM(v.valor_custo), 0) as venda_custo,
     CAST(SUM(v.valor_total - v.valor_custo) AS numeric(10,2)) AS venda_liquida
     FROM vendas v
     JOIN lojas l ON v.loja = cast(l.codigo as integer)
-    where l.tenant_id=${tenant_id} and v.tenant_id=${tenant_id} and v.cancelado=0
+    where l.tenant_id=${tenant_id} and v.tenant_id=${tenant_id}
     AND v.data >= '${dtInicio}'
     AND v.data <= '${dtFim}'
     ${filtroLoja}
+    ${filtros}
     GROUP BY l.codigo,l.nome, v.caixa;
 
     `);
@@ -144,9 +286,10 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
     const dtFim = req.query.dtFim;
     const loja = lojaFiltro(req.query);
     const filtroLoja = loja ? `AND v.loja = ${loja}` : "";
+    const filtros = filtrosVendaFilho(req.query, tenant_id, "v");
 
     const result = await sequelize.query(`
-    select 
+    select
     f.codigo as codigo_finalizadora,
     f.nome as nome_finalizadora,
     l.codigo as codigo_loja,
@@ -162,8 +305,8 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
     where l.tenant_id = ${tenant_id} and f.tenant_id = ${tenant_id} and v.tenant_id=${tenant_id}
     AND v.data >= '${dtInicio}'
     AND v.data <= '${dtFim}'
-    and cancelado = 0
     ${filtroLoja}
+    ${filtros}
 
     group by (f.codigo,f.nome,l.codigo,
     l.nome)
@@ -181,6 +324,7 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
     const dtFim = req.query.dtFim;
     const loja = lojaFiltro(req.query);
     const filtroLoja = loja ? `AND v.loja = ${loja}` : "";
+    const filtros = filtrosVendaFilho(req.query, tenant_id, "v");
 
     const result = await sequelize.query(`
   SELECT
@@ -200,10 +344,10 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
     WHERE s.tenant_id = ${tenant_id}
     AND p.tenant_id = ${tenant_id}
     AND v.tenant_id = ${tenant_id}
-    AND v.cancelado = 0
     AND v.data >= '${dtInicio}'
     AND v.data <= '${dtFim}'
     ${filtroLoja}
+    ${filtros}
     GROUP BY s.codigo, s.nome;
 
 
@@ -212,18 +356,28 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
 
     res.status(200).json(result[0]);
   },
+  // O cupom sai com o cliente resolvido (cliente_codigo/cliente_nome): quando o
+  // PDV só gravou o CPF do consumidor, ele é casado com o cadastro pelo
+  // CNPJ/CPF, para o relatório mostrar de quem é a compra.
   async relPainelCupom(req: any, res: any) {
     const { tenant_id } = req;
     const dtInicio = req.query.dtInicio;
     const dtFim = req.query.dtFim;
     const loja = lojaFiltro(req.query);
     const filtroLoja = loja ? `and v.loja = ${loja}` : "";
+    const filtros = filtrosVenda(req.query, tenant_id, "v");
 
-    const result = await sequelize.query(`select * from vendas v
+    const result = await sequelize.query(`select v.*,
+    cli.codigo as cliente_codigo,
+    cli.nome as cliente_nome,
+    cli.cnpjcpf as cliente_cnpjcpf
+    from vendas v
+    ${joinClienteDoCupom(tenant_id, "v")}
     where v.tenant_id = ${tenant_id}
     and v.data >= '${dtInicio}'
     and v.data <= '${dtFim}'
     ${filtroLoja}
+    ${filtros}
     `);
     res.status(200).json(result[0]);
   },
@@ -238,6 +392,8 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
     const loja = lojaFiltro(req.query);
     const filtroLojaItens = loja ? `and vi.loja = ${loja}` : "";
     const filtroLojaFormas = loja ? `and vf.loja = ${loja}` : "";
+    const filtrosItens = filtrosVendaFilho(req.query, tenant_id, "vi", { situacaoNoCupom: true });
+    const filtrosFormas = filtrosVendaFilho(req.query, tenant_id, "vf", { situacaoNoCupom: true });
 
     const itens = await sequelize.query(`select vi.data, vi.codigo_cupom, vi.caixa, vi.loja,
     vi.item, p.codigo_barras, p.descricao,
@@ -249,6 +405,7 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
     and vi.data >= '${dtInicio}'
     and vi.data <= '${dtFim}'
     ${filtroLojaItens}
+    ${filtrosItens}
     order by vi.data, vi.caixa, vi.codigo_cupom, vi.item
     `);
 
@@ -261,6 +418,7 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
     and vf.data >= '${dtInicio}'
     and vf.data <= '${dtFim}'
     ${filtroLojaFormas}
+    ${filtrosFormas}
     order by vf.data, vf.caixa, vf.codigo_cupom, vf.prestacao
     `);
 
