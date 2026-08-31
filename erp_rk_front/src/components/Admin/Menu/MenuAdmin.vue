@@ -63,6 +63,11 @@ export default {
           route: "/administracao/ibpt",
         },
         {
+          title: "Carga para as Lojas",
+          icon: "mdi-cloud-upload-outline",
+          route: "/administracao/cargas",
+        },
+        {
           title: "Erros nos PDVs",
           icon: "mdi-alert-circle-outline",
           route: "/administracao/erros-pdv",

@@ -1,7 +1,9 @@
 import Finalizadora from "../models/Finalizadora";
 import Funcionario from "../models/Funcionario";
+import Loja from "../models/Loja";
 import Preco from "../models/Preco";
 import Produto from "../models/Produto";
+import Tenant from "../models/Tenant";
 import Tributacao from "../models/Tributacao";
 
 type Carga = {
@@ -83,6 +85,19 @@ function percentualDaCarga(carga: Carga) {
 
   const percentual = Math.round(((carga.indice - 0.5) / carga.total) * 100);
   return Math.min(99, Math.max(1, percentual));
+}
+
+// Mesma leitura de estado que o front do cliente ja faz, so que montada aqui
+// porque o painel administrativo lista lojas de varios tenants de uma vez.
+function estadoDaCarga(carga: Carga | undefined) {
+  return {
+    cargaStatus: carga ? carga.status : "CONCLUIDA",
+    cargaTipo: carga ? carga.carga : null,
+    cargaEtapa: carga ? carga.etapa : null,
+    cargaIndice: carga ? carga.indice : null,
+    cargaTotal: carga ? carga.total : null,
+    cargaPercentual: carga ? percentualDaCarga(carga) : null,
+  };
 }
 
 export default {
@@ -193,6 +208,123 @@ export default {
 
     res.status(200).json({
       message: pendente.carga === "ALTERADOS" ? "CARGA_ALTERADOS" : "CARGA_COMPLETA",
+    });
+  },
+
+  // --- Painel administrativo -------------------------------------------------
+  // O suporte enxerga as lojas de todos os clientes. Tudo abaixo reaproveita a
+  // mesma cargaList e o mesmo solicitaCarga do fluxo do cliente: o sync continua
+  // perguntando por /carga/:loja com o token da propria loja e nao sabe (nem
+  // precisa saber) quem pediu a carga. Nada aqui altera o fluxo existente.
+
+  async listaLojasAdmin(req: any, res: any) {
+    const [lojas, tenants]: any[] = await Promise.all([
+      Loja.findAll({
+        attributes: ["tenant_id", "codigo", "nome", "fantasia"],
+        order: [
+          ["tenant_id", "ASC"],
+          ["codigo", "ASC"],
+        ],
+      }),
+      Tenant.findAll({ attributes: ["id", "name", "user", "ativo"] }),
+    ]);
+
+    const clientePorId = new Map<number, any>();
+    tenants.forEach((tenant: any) => clientePorId.set(tenant.id, tenant));
+
+    res.status(200).json(
+      lojas.map((loja: any) => {
+        const tenant = clientePorId.get(loja.tenant_id);
+
+        return {
+          // O par cliente+codigo e o que identifica a loja: o codigo sozinho se
+          // repete entre clientes e nao serve de chave na tabela do front.
+          chave: `${loja.tenant_id}-${loja.codigo}`,
+          tenantId: loja.tenant_id,
+          cliente: tenant?.name || tenant?.user || `Cliente ${loja.tenant_id}`,
+          clienteAtivo: tenant ? tenant.ativo === "S" : false,
+          codigo: String(loja.codigo),
+          nome: loja.nome,
+          fantasia: loja.fantasia,
+          ...estadoDaCarga(achaCarga(loja.tenant_id, String(loja.codigo))),
+        };
+      })
+    );
+  },
+
+  // Consulta so a lista em memoria, para o polling da tela nao bater no banco a
+  // cada 2 segundos.
+  async statusAdmin(req: any, res: any) {
+    res.status(200).json(
+      cargaList.map((c) => ({
+        chave: `${c.tenant_id}-${c.codigo}`,
+        tenantId: c.tenant_id,
+        codigo: c.codigo,
+        ...estadoDaCarga(c),
+      }))
+    );
+  },
+
+  async enviaCargaAdmin(req: any, res: any) {
+    const tipo = req.body?.carga === "ALTERADOS" ? "ALTERADOS" : "COMPLETA";
+    // "todas" e explicito de proposito: uma lista vazia por engano nao pode
+    // virar carga para o parque inteiro.
+    const todas = req.body?.todas === true;
+    const selecionadas = Array.isArray(req.body?.lojas) ? req.body.lojas : [];
+
+    // solicitaCarga e por tenant; o admin e o unico que alcanca mais de um de
+    // uma vez, entao o agrupamento fica aqui. Set porque a mesma loja repetida
+    // na requisicao nao pode contar duas vezes.
+    const porCliente = new Map<number, Set<string>>();
+    const acumula = (tenantId: number, codigo: string) => {
+      if (!tenantId || !codigo) return;
+      if (!porCliente.has(tenantId)) porCliente.set(tenantId, new Set());
+      porCliente.get(tenantId)!.add(codigo);
+    };
+
+    if (todas) {
+      // Cliente desativado nao tem sync rodando: a carga so ficaria presa na
+      // lista ate expirar por TEMPO_MAX_EM_ANDAMENTO.
+      const ativos: any[] = await Tenant.findAll({ where: { ativo: "S" }, attributes: ["id"] });
+      const ids = ativos.map((tenant: any) => tenant.id);
+
+      if (ids.length) {
+        const lojas: any[] = await Loja.findAll({
+          where: { tenant_id: ids },
+          attributes: ["tenant_id", "codigo"],
+        });
+        lojas.forEach((loja: any) => acumula(loja.tenant_id, String(loja.codigo)));
+      }
+    } else {
+      selecionadas.forEach((loja: any) =>
+        acumula(Number(loja?.tenantId ?? loja?.tenant_id), String(loja?.codigo ?? "").trim())
+      );
+    }
+
+    if (!porCliente.size) {
+      return res.status(400).json({ message: "Nenhuma loja para enviar carga." });
+    }
+
+    let lojasSolicitadas = 0;
+    porCliente.forEach((codigos, tenantId) => {
+      solicitaCarga(
+        tenantId,
+        Array.from(codigos).map((codigo) => ({ codigo })),
+        tipo
+      );
+      lojasSolicitadas += codigos.size;
+    });
+
+    console.log(
+      `[CARGA][ADMIN] ${tipo} pedida para ${lojasSolicitadas} loja(s) de ` +
+        `${porCliente.size} cliente(s) por "${req.userAdmin}"`
+    );
+
+    res.status(200).json({
+      message: "Carga Solicitada !",
+      carga: tipo,
+      lojas: lojasSolicitadas,
+      clientes: porCliente.size,
     });
   },
 };

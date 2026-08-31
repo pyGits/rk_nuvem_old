@@ -23,6 +23,7 @@ import error from "./modules/error";
 import download from "./modules/download";
 import ibpt from "./modules/ibpt";
 import erroPdv from "./modules/erroPdv";
+import cargaAdmin from "./modules/cargaAdmin";
 import notificacao from "./modules/notificacao";
 Vue.use(Vuex);
 
@@ -51,6 +52,7 @@ export default new Vuex.Store({
     download,
     ibpt,
     erroPdv,
+    cargaAdmin,
     notificacao,
   },
   state: {
