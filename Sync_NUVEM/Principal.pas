@@ -438,7 +438,9 @@ try
 
   MostrarProgresso(Format('PRODUTOS: gravando %d no retaguarda...', [listProd.Count]));
   dmProduto := TdmProduto.Create(nil);
-  dmProduto.InsertProdutoBulk(listProd);
+  // Carga completa e espelho da nuvem: a tabela e esvaziada e regravada. A de
+  // alterados so troca as linhas que o lote traz.
+  dmProduto.InsertProdutoBulk(listProd, not alterados);
 
 
       dmConexaoPDV := TuDmConexaoPDV.Create(nil);
@@ -450,7 +452,7 @@ try
           MostrarProgresso(Format('PRODUTOS: enviando para o caixa %s (%d de %d)...',
             [caixaList[X], X + 1, caixaList.Count]));
           dmConexaoPDV.configurarIP(caixaList[X]);
-          dmProdutoPDV.insertProdutoPDV(listProd);
+          dmProdutoPDV.insertProdutoPDV(listProd, not alterados);
         except
         on E:Exception do
         begin

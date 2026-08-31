@@ -13,11 +13,13 @@ type
   TdmProdutoPDV = class(TDataModule)
     qrProdutoPDV: TFDQuery;
   private
+    procedure limparParaRegravar(listProduto:TObjectList<TProduto>;
+      cargaCompleta:Boolean);
     { Private declarations }
     function tabelaAuxiliarExiste: Boolean;
     procedure gravarCodigosAuxiliares(listProduto:TObjectList<TProduto>);
   public
-    function insertProdutoPDV(listProduto:TObjectList<TProduto>):boolean;
+    function insertProdutoPDV(listProduto:TObjectList<TProduto>; cargaCompleta:Boolean):boolean;
   end;
 
 var
@@ -134,10 +136,60 @@ begin
   end;
 end;
 
-function TdmProdutoPDV.insertProdutoPDV(listProduto:TObjectList<TProduto>): boolean;
+// Mesmo problema que PRODUTO tem na retaguarda: ESTOQUE tem UNQ2_ESTOQUE,
+// unique de COD_BARRA, e o UPDATE OR INSERT casa por CODIGO. Um codigo de
+// barras que mudou de dono na nuvem chega no produto novo enquanto o antigo
+// ainda o segura aqui, e a gravacao do caixa morre no meio da carga.
+//
+// Na carga completa a tabela e esvaziada e regravada; na de alterados saem so
+// as linhas que o lote traz de volta, por codigo ou pelo barras que reivindica.
+procedure TdmProdutoPDV.limparParaRegravar(listProduto: TObjectList<TProduto>;
+  cargaCompleta: Boolean);
+var
+  qrDelete: TFDQuery;
+  i: Integer;
+begin
+  qrDelete := TFDQuery.Create(nil);
+  try
+    qrDelete.Connection := qrProdutoPDV.Connection;
+
+    if cargaCompleta then
+    begin
+      qrDelete.SQL.Text := 'DELETE FROM ESTOQUE';
+      qrDelete.ExecSQL;
+      Exit;
+    end;
+
+    qrDelete.SQL.Text :=
+      'DELETE FROM ESTOQUE WHERE CODIGO = :CODIGO OR COD_BARRA = :COD_BARRA';
+    qrDelete.Params.ArraySize := listProduto.Count;
+
+    for i := 0 to listProduto.Count - 1 do
+    begin
+      qrDelete.ParamByName('CODIGO').AsStrings[i]    := listProduto[i].Codigo;
+      qrDelete.ParamByName('COD_BARRA').AsStrings[i] := listProduto[i].CodigoBarras;
+    end;
+
+    qrDelete.Execute(qrDelete.Params.ArraySize, 0);
+  finally
+    qrDelete.Free;
+  end;
+end;
+
+function TdmProdutoPDV.insertProdutoPDV(listProduto:TObjectList<TProduto>;
+  cargaCompleta: Boolean): boolean;
 var
   oProduto:TProduto;
+  conexao:TFDCustomConnection;
 begin
+  // O delete e os inserts vao juntos: se a gravacao falhar no meio, o rollback
+  // devolve o cadastro anterior e o caixa segue com a carga velha, em vez de
+  // ficar sem produto nenhum.
+  conexao := qrProdutoPDV.Connection;
+  if not conexao.InTransaction then
+    conexao.StartTransaction;
+  try
+    limparParaRegravar(listProduto, cargaCompleta);
   for oProduto in listProduto do
   begin
   with qrProdutoPDV, oProduto do
@@ -168,6 +220,13 @@ begin
 
     end;
   end;
+  end;
+
+    conexao.Commit;
+  except
+    if conexao.InTransaction then
+      conexao.Rollback;
+    raise;
   end;
 
   // Os auxiliares so entram depois que todos os produtos ja foram gravados:

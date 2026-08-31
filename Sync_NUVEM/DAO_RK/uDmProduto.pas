@@ -18,10 +18,11 @@ type
     qrProduto: TFDQuery;
     FDPhysIBDriverLink1: TFDPhysIBDriverLink;
   private
-
+    procedure limparParaRegravar(conexao:TFDCustomConnection; validos:TList<TProduto>;
+      cargaCompleta:Boolean);
   public
     function InsertProduto(listProduto:TObjectList<TProduto>):Boolean;
-    function InsertProdutoBulk(produtos:TObjectList<TProduto>):Boolean;
+    function InsertProdutoBulk(produtos:TObjectList<TProduto>; cargaCompleta:Boolean):Boolean;
   end;
 
 var
@@ -88,12 +89,62 @@ begin
     end;
 end;
 
+// Libera as linhas que o lote vai regravar.
+//
+// PRODUTO tem UNQ1_PRODUTO, unique de CODIGO_BARRAS, alem da PK composta
+// (CODIGO, CODIGO_BARRAS). O UPDATE OR INSERT casa por CODIGO e nao enxerga
+// essa unique: quando um codigo de barras muda de dono na nuvem, ele chega no
+// produto novo enquanto o antigo ainda o segura aqui, e o Firebird recusa o
+// lote INTEIRO com "violation of PRIMARY or UNIQUE KEY constraint
+// UNQ1_PRODUTO". Era o que travava toda carga completa.
+//
+// Na carga completa o lote e o cadastro inteiro, entao a tabela e esvaziada e
+// o que sumiu da nuvem some daqui tambem. Na de alterados saem so as linhas que
+// o proprio lote traz de volta - por codigo ou pelo barras que ele reivindica.
+//
+// Quem chama ja abriu transacao: se o INSERT falhar, o rollback devolve o
+// cadastro anterior inteiro. Em nenhum momento o cliente fica sem produto.
+procedure TdmProduto.limparParaRegravar(conexao: TFDCustomConnection;
+  validos: TList<TProduto>; cargaCompleta: Boolean);
+var
+  qrDelete: TFDQuery;
+  i: Integer;
+begin
+  qrDelete := TFDQuery.Create(nil);
+  try
+    qrDelete.Connection := conexao;
+
+    if cargaCompleta then
+    begin
+      qrDelete.SQL.Text := 'DELETE FROM PRODUTO';
+      qrDelete.ExecSQL;
+      Exit;
+    end;
+
+    // Array DML tambem no delete: um round-trip, como no insert.
+    qrDelete.SQL.Text :=
+      'DELETE FROM PRODUTO WHERE CODIGO = :CODIGO OR CODIGO_BARRAS = :CODIGO_BARRAS';
+    qrDelete.Params.ArraySize := validos.Count;
+
+    for i := 0 to validos.Count - 1 do
+    begin
+      qrDelete.ParamByName('CODIGO').AsStrings[i]        := validos[i].Codigo;
+      qrDelete.ParamByName('CODIGO_BARRAS').AsStrings[i] := validos[i].CodigoBarras;
+    end;
+
+    qrDelete.Execute(qrDelete.Params.ArraySize, 0);
+  finally
+    qrDelete.Free;
+  end;
+end;
+
 function TdmProduto.InsertProdutoBulk(
-  produtos: TObjectList<TProduto>): Boolean;
+  produtos: TObjectList<TProduto>; cargaCompleta: Boolean): Boolean;
 var
   Query:TFDquery;
   I:integer;
   validos:TList<TProduto>;
+  conexao:TFDCustomConnection;
 begin
   Result := False;
 
@@ -181,7 +232,23 @@ begin
         Query.ParamByName('PRECO2_QTD').AsFloats[i]     := validos[i].Preco2_Qtd;
       end;
 
-      Query.Execute(Query.Params.ArraySize, 0);
+      // Uma transacao so para o delete e o insert. E ela que garante o que
+      // importa: se o lote falhar por qualquer motivo, o rollback devolve o
+      // cadastro que estava la e a carga velha continua valendo. Sem isso, o
+      // delete da carga completa deixaria o cliente sem produto nenhum.
+      conexao := Query.Connection;
+      if not conexao.InTransaction then
+        conexao.StartTransaction;
+      try
+        limparParaRegravar(conexao, validos, cargaCompleta);
+        Query.Execute(Query.Params.ArraySize, 0);
+        conexao.Commit;
+      except
+        if conexao.InTransaction then
+          conexao.Rollback;
+        raise;
+      end;
+
       Result := True;
     finally
       Query.Free;
