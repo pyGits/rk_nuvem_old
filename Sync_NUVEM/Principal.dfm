@@ -43,9 +43,7 @@ object frmPrincipal: TfrmPrincipal
       Top = 5
       Width = 95
       Height = 21
-      Date = 0.000000000000000000
       Format = 'dd/MM/yyyy'
-      Time = 0.000000000000000000
       TabOrder = 0
     end
     object dtpReenvioFim: TDateTimePicker
@@ -53,9 +51,7 @@ object frmPrincipal: TfrmPrincipal
       Top = 5
       Width = 95
       Height = 21
-      Date = 0.000000000000000000
       Format = 'dd/MM/yyyy'
-      Time = 0.000000000000000000
       TabOrder = 1
     end
     object btnReenviar: TButton
