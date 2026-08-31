@@ -6,7 +6,7 @@ uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,uAPIRequest, Vcl.ExtCtrls,SelecionarLoja,Utils,Login,Produto,uDmProduto,Preco,uDmPreco,uDmTributacao,
   tributacao,uDmCaixa,ConexaoPDV,uDmProdutoPDV,uDmPrecoPDV,uDmTributacaoPDV,uDmVenda,Finalizadora,uDmFinalizadora,uDmFinalizadoraPDV,Funcionario,uDmFuncionario,uDmFuncionarioPDV,system.Generics.collections,
-  Vcl.Menus,Cliente,uDmCliente,Global,uLogErro,System.DateUtils;
+  Vcl.Menus,Cliente,uDmCliente,Global,uLogErro,System.DateUtils,Vcl.ComCtrls;
 
 type
   TfrmPrincipal = class(TForm)
@@ -18,6 +18,13 @@ type
     TrayIcon1: TTrayIcon;
     PopupMenu1: TPopupMenu;
     S1: TMenuItem;
+    pnlReenvio: TPanel;
+    lblReenvioDe: TLabel;
+    lblReenvioAte: TLabel;
+    dtpReenvioInicio: TDateTimePicker;
+    dtpReenvioFim: TDateTimePicker;
+    btnReenviar: TButton;
+    procedure btnReenviarClick(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure tmInicializaTimer(Sender: TObject);
     procedure tmCargaTimer(Sender: TObject);
@@ -579,7 +586,72 @@ uLogErro.OnAtividade :=
     MostrarAtividade(mensagem);
   end;
 
+dtpReenvioInicio.Date := Date;
+dtpReenvioFim.Date := Date;
+
 tmInicializa.Enabled := true;
+end;
+
+// Reenvio manual de um periodo. Nao envia nada aqui: devolve as linhas daquele
+// intervalo para a fila (NUVEM = 0) e quem sobe continua sendo o ciclo do
+// timer, com o mesmo contrato de sempre.
+//
+// O guarda de subindoVenda existe pelo mesmo motivo dos outros: um UPDATE em
+// CUPOM no meio do ciclo disputaria lock com a marcacao que o proprio agente
+// esta fazendo, e a conexao com cada PDV e singleton.
+procedure TfrmPrincipal.btnReenviarClick(Sender: TObject);
+var
+  dtInicio, dtFim: TDate;
+  afetados: Integer;
+begin
+  dtInicio := dtpReenvioInicio.Date;
+  dtFim := dtpReenvioFim.Date;
+
+  if dtFim < dtInicio then
+  begin
+    ShowMessage('A data final e anterior a inicial.');
+    Exit;
+  end;
+
+  if subindoVenda or carregando or subindoContaReceber then
+  begin
+    ShowMessage('O agente esta no meio de um ciclo. Tente de novo em alguns segundos.');
+    Exit;
+  end;
+
+  if MessageDlg(
+       Format('Reenviar para a nuvem tudo entre %s e %s?' + sLineBreak + sLineBreak +
+              'As vendas desse periodo voltam para a fila e sobem nos proximos ciclos. ' +
+              'Nada e apagado e nada e duplicado na nuvem - o registro que ja esta la e atualizado.',
+              [DateToStr(dtInicio), DateToStr(dtFim)]),
+       mtConfirmation, [mbYes, mbNo], 0) <> mrYes then Exit;
+
+  btnReenviar.Enabled := false;
+  // Os timers ficam desligados durante a marcacao pelo mesmo motivo do guarda
+  // acima, e voltam no finally mesmo se algo estourar no meio.
+  tmSubidaVenda.Enabled := false;
+  tmCarga.Enabled := false;
+  try
+    try
+      afetados := Global.ReenvioPeriodoUseCase.Executar(dtInicio, dtFim);
+
+      if afetados = 0 then
+        ShowMessage('Nenhum registro desse periodo estava marcado como enviado.')
+      else
+        ShowMessage(Format('%d registro(s) voltaram para a fila e vao subir nos proximos ciclos.',
+          [afetados]));
+    except
+    on E:Exception do
+    begin
+      LogFalha('REENVIO_PERIODO', E);
+      ShowMessage('Falha no reenvio: ' + E.Message);
+    end;
+    end;
+  finally
+    tmCarga.Enabled := true;
+    tmSubidaVenda.Enabled := true;
+    btnReenviar.Enabled := true;
+  end;
 end;
 
 procedure TfrmPrincipal.S1Click(Sender: TObject);

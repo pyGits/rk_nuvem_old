@@ -54,8 +54,11 @@ type
     function encerrarSubidaNaoFiscal(oNaoFiscal:TNaoFiscal):Integer;
     function encerrarSubidaFechamento(oFechamento:TFechamento):Integer;
     function encerrarSubidaFechamentoForma(oFechamentoForma:TFechamentoFin):Integer;
+    function reenviarTabela(const tabela, colunaData: string;
+      dtInicio, dtFim: TDate): Integer;
   public
     function sincronizaVenda:Boolean;
+    function marcarPeriodoParaReenvio(dtInicio, dtFim: TDate): Integer;
     procedure liberarConexao;
   end;
 
@@ -884,6 +887,66 @@ begin
   on E: Exception do
     uLogErro.LogErro('LIBERA_CONEXAO', Format('%s: %s', [E.ClassName, E.Message]));
   end;
+end;
+
+// Devolve para a fila a venda de um periodo que ja subiu: zera o NUVEM das tres
+// tabelas do cupom e deixa o ciclo normal do timer fazer o resto. Nao existe
+// caminho paralelo de envio - o que muda e so o que esta pendente.
+//
+// So mexe em NUVEM = 1. O que ainda esta pendente ja vai subir sozinho, e
+// reescrever essas linhas so criaria disputa de lock com o PDV gravando venda.
+//
+// Reenviar nao duplica na nuvem: /venda, /vendaItem e /vendaForma fazem upsert
+// pela chave de negocio, tanto no envio unitario quanto no de lote.
+//
+// A leitura continua limitada a LOTE_LEITURA por ciclo, entao um periodo longo
+// escoa aos poucos, sem segurar o agente num unico ciclo interminavel.
+function TdmVenda.reenviarTabela(const tabela, colunaData: string;
+  dtInicio, dtFim: TDate): Integer;
+var
+  qr: TUniQuery;
+begin
+  // Query propria, criada na hora: as do datamodule tem SQL fixo e prepared, e
+  // trocar o texto delas por causa de uma acao manual invalidaria o prepared
+  // statement que o ciclo usa a cada cinco segundos.
+  qr := TUniQuery.Create(nil);
+  try
+    qr.Connection := dmConexao.ConexaoServer;
+    qr.SQL.Text := Format(
+      'UPDATE %s SET NUVEM = 0 WHERE COALESCE(NUVEM, 0) = 1 AND %s BETWEEN :INICIO AND :FIM',
+      [tabela, colunaData]);
+    qr.ParamByName('INICIO').AsDate := dtInicio;
+    qr.ParamByName('FIM').AsDate := dtFim;
+    qr.Execute;
+    Result := qr.RowsAffected;
+  finally
+    qr.Free;
+  end;
+end;
+
+function TdmVenda.marcarPeriodoParaReenvio(dtInicio, dtFim: TDate): Integer;
+var
+  afetados: Integer;
+begin
+  afetados := 0;
+
+  // total = 0 porque aqui nao existe "quantos deviam ter sido marcados": o
+  // numero e justamente o que se quer descobrir. O que vale de emTransacaoCurta
+  // e a transacao curta com retry de conflito de lock.
+  emTransacaoCurta('REENVIO_PERIODO', 0,
+    function: Integer
+    begin
+      Result := reenviarTabela('CUPOM', 'DATA', dtInicio, dtFim) +
+                reenviarTabela('CUPOM_ITEM', 'DATA', dtInicio, dtFim) +
+                reenviarTabela('CUPOM_FORMA', 'DATA', dtInicio, dtFim);
+      afetados := Result;
+    end);
+
+  uLogErro.LogErro('REENVIO_PERIODO',
+    Format('%s a %s | %d linha(s) devolvidas para a fila',
+      [DateToStr(dtInicio), DateToStr(dtFim), afetados]));
+
+  Result := afetados;
 end;
 
 function TdmVenda.sincronizaVenda: Boolean;

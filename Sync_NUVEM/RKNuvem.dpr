@@ -54,6 +54,7 @@ uses
   ErroPDVRepository in 'Infra\Repository\PDV\ErroPDVRepository.pas',
   SubidaContaReceberUseCase in 'Infra\UseCase\SubidaContaReceberUseCase.pas',
   SubidaErroPDVUseCase in 'Infra\UseCase\SubidaErroPDVUseCase.pas',
+  ReenvioPeriodoUseCase in 'Infra\UseCase\ReenvioPeriodoUseCase.pas',
   IndicesNuvemRepository in 'Infra\Repository\Retaguarda\IndicesNuvemRepository.pas';
 
 {$R *.res}

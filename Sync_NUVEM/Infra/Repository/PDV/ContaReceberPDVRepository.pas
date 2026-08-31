@@ -12,6 +12,7 @@ type IContaReceberPDVRepository = interface
   function getPendentes(caixa:TCaixaModel):TObjectList<TContaReceber>;
   procedure marcarEnviado(caixa:TCaixaModel; const codigo:string);
   procedure garantirColunaNuvem(caixa:TCaixaModel);
+  function marcarPeriodoParaReenvio(caixa:TCaixaModel; dtInicio,dtFim:TDate):Integer;
 end;
 
 type TContaReceberPDVRepository = class(TInterfacedObject,IContaReceberPDVRepository)
@@ -25,6 +26,7 @@ type TContaReceberPDVRepository = class(TInterfacedObject,IContaReceberPDVReposi
     function getPendentes(caixa:TCaixaModel):TObjectList<TContaReceber>;
     procedure marcarEnviado(caixa:TCaixaModel; const codigo:string);
     procedure garantirColunaNuvem(caixa:TCaixaModel);
+    function marcarPeriodoParaReenvio(caixa:TCaixaModel; dtInicio,dtFim:TDate):Integer;
 end;
 
 implementation
@@ -121,6 +123,35 @@ begin
     Query.SQL.Text := 'UPDATE CUPOM_CREDIARIO SET NUVEM = 1 WHERE CODIGO = :CODIGO';
     Query.ParamByName('CODIGO').AsString := codigo;
     Query.ExecSQL;
+  finally
+    Query.Free;
+  end;
+end;
+
+// Devolve para a fila o convenio de um periodo que ja subiu.
+//
+// So mexe em quem esta com NUVEM = 1: o que ainda esta pendente ja vai subir
+// sozinho, e reescrever essas linhas so criaria disputa de lock com o PDV que
+// esta gravando venda no mesmo banco.
+//
+// Reenviar nao duplica nada na nuvem - a rota /contaReceber faz upsert pela
+// chave (tenant, loja, codigo), com os recebimentos lancados no web intactos.
+function TContaReceberPDVRepository.marcarPeriodoParaReenvio(caixa: TCaixaModel;
+  dtInicio, dtFim: TDate): Integer;
+var
+  Query:TFDQuery;
+begin
+  garantirColunaNuvem(caixa);
+
+  Query := TConexaoPDV.GetInstance(caixa.ip).CreateQuery;
+  try
+    Query.SQL.Text :=
+      'UPDATE CUPOM_CREDIARIO SET NUVEM = 0 ' +
+      ' WHERE COALESCE(NUVEM, 0) = 1 AND DATA BETWEEN :INICIO AND :FIM';
+    Query.ParamByName('INICIO').AsDate := dtInicio;
+    Query.ParamByName('FIM').AsDate := dtFim;
+    Query.ExecSQL;
+    Result := Query.RowsAffected;
   finally
     Query.Free;
   end;
