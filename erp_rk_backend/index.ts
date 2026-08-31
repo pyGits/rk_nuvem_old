@@ -20,6 +20,19 @@ import v3CEST from "./src/routes/v3/v3.cest";
 import MigrateFromRKUseCase from "./src/infra/usecase/MigrateFromRKUseCase";
 import MigrateFromSyspdvUseCase from "./src/infra/usecase/MigrateFromSyspdvUseCase";
 import SefazScheduler from "./src/infra/service/sefaz/SefazScheduler";
+
+// Rede de seguranca: a partir do Node 15 uma promise rejeitada sem catch ENCERRA
+// o processo. As rotas /v2 e /v3 passam pelo httpServer, que captura excecao do
+// handler; as 25 rotas antigas vao direto no Express, e nelas um handler async
+// que rejeita nao vira resposta de erro - vira queda do backend inteiro. Uma
+// consulta de relatorio que falha nao pode deslogar todo mundo do sistema.
+//
+// Registrar isto nao dispensa o try/catch por rota: sem ele a requisicao fica
+// pendurada ate o timeout do cliente. O que muda e que o processo sobrevive.
+process.on("unhandledRejection", (motivo: any) => {
+  console.error("[unhandledRejection]", motivo?.stack || motivo);
+});
+
 ExpressAdapter.listen();
 V2FornecedorRoutes.register();
 V2CompraRoutes.register();

@@ -100,6 +100,24 @@ function estadoDaCarga(carga: Carga | undefined) {
   };
 }
 
+// A consulta de carga do sync bate de poucos em poucos segundos, por loja, de
+// todos os tenants. Registrar a mesma resposta a cada tique produzia dezenas de
+// linhas por minuto sem informacao nova, e um erro de verdade ficava enterrado
+// nelas - foi o que atrapalhou o diagnostico de um incidente em producao.
+//
+// Mesma solucao que o agente Delphi ja usa do outro lado (FUltimaRespostaCarga
+// em uAPIRequest.pas): guarda a ultima resposta de cada loja e so registra
+// quando ela muda. A informacao que motivou este log continua toda ali - o que
+// some e a repeticao.
+const ultimaRespostaCarga = new Map<string, string>();
+
+function logCargaSeMudou(tenant_id: number, loja: string, mensagem: string) {
+  const chave = `${tenant_id}:${loja}`;
+  if (ultimaRespostaCarga.get(chave) === mensagem) return;
+  ultimaRespostaCarga.set(chave, mensagem);
+  console.log(mensagem);
+}
+
 export default {
   async verificaCargaStatus(req: any, res: any) {
     const { tenant_id } = req;
@@ -188,7 +206,9 @@ export default {
       // Sem isto, "o sync nunca recebe a carga" e indistinguivel de "ninguem
       // pediu carga" e de "o codigo de loja que o sync pergunta nao e o mesmo
       // que o front gravou na lista".
-      console.log(
+      logCargaSeMudou(
+        tenant_id,
+        loja,
         `[CARGA] consulta tenant=${tenant_id} loja="${loja}" -> CARGA_NADA ` +
           (pendente
             ? `(existe ${pendente.carga}/${pendente.status})`
@@ -199,7 +219,7 @@ export default {
       return res.status(200).json({ message: "CARGA_NADA" });
     }
 
-    console.log(`[CARGA] consulta tenant=${tenant_id} loja="${loja}" -> ${pendente.carga}`);
+    logCargaSeMudou(tenant_id, loja, `[CARGA] consulta tenant=${tenant_id} loja="${loja}" -> ${pendente.carga}`);
 
     // A entrada so sai da lista quando o sync avisa que terminou
     // (finalizaCarga), para o front conseguir mostrar a carga em andamento.

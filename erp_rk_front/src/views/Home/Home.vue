@@ -23,7 +23,15 @@ export default {
         .then((res) => {
           this.$store.commit("setTenant", res.data);
         })
-        .catch(() => {
+        .catch((erro) => {
+          // Só o servidor pode dizer que a sessão acabou. Este catch era cego:
+          // qualquer falha apagava o token e mandava para o login — e durante um
+          // deploy, ou com o backend fora do ar, getTenant falha por rede, não
+          // por credencial. O token continuava válido, mas era destruído aqui, e
+          // todo mundo que abriu a tela naquele instante precisava logar de novo.
+          const status = erro?.response?.status;
+          if (status !== 401 && status !== 403) return;
+
           Vue.prototype.$http.defaults.headers.common["x-access-token"] = null;
           localStorage.removeItem("access_token");
           this.$router.push("/login");

@@ -15,6 +15,9 @@ dotenv.config({
   path: path.resolve(__dirname, "..", "..", "..", `.env.${process.env.NODE_ENV || "development"}`),
 });
 
+// Acima disto a requisição entra no log mesmo tendo dado certo.
+const LIMITE_REQUISICAO_LENTA_MS = 1000;
+
 export interface HttpServer {
   register(method: string, url: string, callback: Function): void;
   registerFile(method: string, url: string, callback: Function): void;
@@ -38,6 +41,21 @@ export class ExpressAdapter implements HttpServer {
     this.app.use(cors({ origin: "*" }));
     this.app.use(express.json({ limit: "50mb" }));
     this.app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
+    // Log de requisição enxuto: só o que pede atenção — erro ou lentidão.
+    // Registrar toda requisição bem-sucedida traria de volta o ruído que faz o
+    // log deixar de servir para diagnóstico, que é o problema que este trecho
+    // existe para resolver.
+    this.app.use((req: Request, res: Response, next: any) => {
+      const inicio = Date.now();
+      res.on("finish", () => {
+        const ms = Date.now() - inicio;
+        if (res.statusCode < 400 && ms < LIMITE_REQUISICAO_LENTA_MS) return;
+        console.log(`[http] ${res.statusCode} ${ms}ms ${req.method} ${req.originalUrl}`);
+      });
+      next();
+    });
+
     this.app.use("/api", router);
 
     this.app.get("/", (req, res) => {

@@ -170,16 +170,39 @@ function filtrosVendaFilho(query: any, tenant_id: number, alias: string, opcoes:
  * O par (loja, caixa, codigo_cupom) não basta sozinho: o fechamento limpa as
  * vendas do banco do PDV e o CODIGO reinicia, então a data entra na chave.
  *
- * LATERAL com limit 1 para um cadastro duplicado não multiplicar a linha do
- * cupom, e o order by fixa a prioridade quando mais de um caminho casa (uma
- * venda de convênio em que o CPF também foi informado, por exemplo).
+ * Um LATERAL por critério, e não um só com os critérios em OR. O OR parece mais
+ * enxuto e é o que estava aqui, mas dentro dele o Postgres não usa índice
+ * nenhum: cada cupom do relatório virava um seq scan de `clientes` aplicando
+ * regexp_replace linha a linha. Separado, cada busca cai no seu índice — a PK
+ * para os caminhos por código, o índice de expressão para os por CNPJ/CPF.
+ *
+ * Cada um devolve nome e CNPJ/CPF com coalesce para '' — assim "achou" é sempre
+ * "colunas não nulas", e o coalesce lá fora escolhe o mesmo cadastro nas três
+ * colunas em vez de misturar o código de um com o nome de outro.
+ *
+ * limit 1 em todos: cadastro duplicado não pode multiplicar a linha do cupom.
  */
-function joinClienteDoCupom(tenant_id: number, alias: string): string {
-  const porCodigoDaVenda = `${temCodigoCliente(alias)} and c.codigo = ${alias}.codigo_cliente`;
-  const porCpfDoConsumidor = `coalesce(${alias}.cpf_consumidor, '') <> ''
-              and ${soDigitos("c.cnpjcpf")} = ${soDigitos(`${alias}.cpf_consumidor`)}`;
-
+function cadastroCliente(nome: string, tenant_id: number, condicao: string): string {
   return `left join lateral (
+      select c.codigo, coalesce(c.nome, '') as nome, coalesce(c.cnpjcpf, '') as cnpjcpf
+      from clientes c
+      where c.tenant_id = ${tenant_id}
+        and ${condicao}
+      limit 1
+    ) ${nome} on true`;
+}
+
+const CADASTROS_CLIENTE = ["cli_cod", "cli_cpf", "cli_conv_cod", "cli_conv_cpf"];
+
+function joinClienteDoCupom(tenant_id: number, alias: string): string {
+  return `${cadastroCliente("cli_cod", tenant_id, `${temCodigoCliente(alias)} and c.codigo = ${alias}.codigo_cliente`)}
+    ${cadastroCliente(
+      "cli_cpf",
+      tenant_id,
+      `coalesce(${alias}.cpf_consumidor, '') <> ''
+         and ${soDigitos("c.cnpjcpf")} = ${soDigitos(`${alias}.cpf_consumidor`)}`
+    )}
+    left join lateral (
       select cr.cliente_codigo, cr.cliente_cpf
       from conta_receber cr
       where cr.tenant_id = ${tenant_id}
@@ -189,26 +212,23 @@ function joinClienteDoCupom(tenant_id: number, alias: string): string {
         and cr.data_emissao = ${alias}.data
       limit 1
     ) conv on true
-    left join lateral (
-      select c.codigo, c.nome, c.cnpjcpf
-      from clientes c
-      where c.tenant_id = ${tenant_id}
-        and (
-          (${porCodigoDaVenda})
-          or (${semCodigoCliente(alias)} and ${porCpfDoConsumidor})
-          or (coalesce(conv.cliente_codigo, '') not in ${SEM_CODIGO_CLIENTE}
-              and c.codigo = conv.cliente_codigo)
-          or (coalesce(conv.cliente_codigo, '') in ${SEM_CODIGO_CLIENTE}
-              and coalesce(conv.cliente_cpf, '') <> ''
-              and ${soDigitos("c.cnpjcpf")} = ${soDigitos("conv.cliente_cpf")})
-        )
-      order by case
-        when ${porCodigoDaVenda} then 1
-        when ${porCpfDoConsumidor} then 2
-        else 3
-      end
-      limit 1
-    ) cli on true`;
+    ${cadastroCliente(
+      "cli_conv_cod",
+      tenant_id,
+      `coalesce(conv.cliente_codigo, '') not in ${SEM_CODIGO_CLIENTE} and c.codigo = conv.cliente_codigo`
+    )}
+    ${cadastroCliente(
+      "cli_conv_cpf",
+      tenant_id,
+      `coalesce(conv.cliente_cpf, '') <> ''
+         and ${soDigitos("c.cnpjcpf")} = ${soDigitos("conv.cliente_cpf")}`
+    )}`;
+}
+
+// A ordem do coalesce é a ordem de confiança descrita acima.
+function colunasClienteDoCupom(): string {
+  const campo = (coluna: string, apelido: string) => `coalesce(${CADASTROS_CLIENTE.map((c) => `${c}.${coluna}`).join(", ")}) as ${apelido}`;
+  return [campo("codigo", "cliente_codigo"), campo("nome", "cliente_nome"), campo("cnpjcpf", "cliente_cnpjcpf")].join(",\n    ");
 }
 
 export default {
@@ -429,9 +449,7 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
     const filtros = filtrosVenda(req.query, tenant_id, "v");
 
     const result = await sequelize.query(`select v.*,
-    cli.codigo as cliente_codigo,
-    cli.nome as cliente_nome,
-    cli.cnpjcpf as cliente_cnpjcpf
+    ${colunasClienteDoCupom()}
     from vendas v
     ${joinClienteDoCupom(tenant_id, "v")}
     where v.tenant_id = ${tenant_id}
