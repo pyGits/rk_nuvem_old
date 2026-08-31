@@ -43,6 +43,17 @@ function soDigitos(expr: string): string {
   return `regexp_replace(coalesce(${expr}, ''), '[^0-9]', '', 'g')`;
 }
 
+// O PDV grava COD_CLIENTE do cupom a partir de um integer que nasce zerado:
+// venda sem cliente sobe como "0", não como vazio. Tratar "0" como um código de
+// cadastro faria a busca falhar e, pior, bloquearia o caminho do CPF.
+const SEM_CODIGO_CLIENTE = "('', '0')";
+function temCodigoCliente(alias: string): string {
+  return `coalesce(${alias}.codigo_cliente, '') not in ${SEM_CODIGO_CLIENTE}`;
+}
+function semCodigoCliente(alias: string): string {
+  return `coalesce(${alias}.codigo_cliente, '') in ${SEM_CODIGO_CLIENTE}`;
+}
+
 /** Condições de texto sobre a tabela vendas, no alias informado. */
 function condicoesVenda(query: any, alias: string): string {
   return CAMPOS_VENDA.map(([param, coluna]) => {
@@ -53,17 +64,28 @@ function condicoesVenda(query: any, alias: string): string {
 }
 
 /**
- * Filtro de cliente. O cupom pode apontar para o cadastro pelo código ou só
- * trazer o CPF do consumidor, então os dois caminhos valem.
+ * Filtro de cliente. Vale pelos mesmos três caminhos que identificam o cliente
+ * na tela (ver joinClienteDoCupom): o código na venda, o CPF do consumidor e o
+ * título de convênio — sem o terceiro, filtrar pela finalizadora de convênio e
+ * por um cliente devolveria vazio, que é justamente o caso que mais interessa.
  */
 function condicaoCliente(query: any, tenant_id: number, alias: string): string {
   const cliente = texto(query, "cliente");
   if (!cliente) return "";
   return ` and exists (select 1 from clientes cfil
     where cfil.tenant_id = ${tenant_id} and cfil.codigo = ${escapar(cliente)}
-      and (${alias}.codigo_cliente = cfil.codigo
+      and ((${temCodigoCliente(alias)} and ${alias}.codigo_cliente = cfil.codigo)
         or (coalesce(${alias}.cpf_consumidor, '') <> ''
-            and ${soDigitos(`${alias}.cpf_consumidor`)} = ${soDigitos("cfil.cnpjcpf")})))`;
+            and ${soDigitos(`${alias}.cpf_consumidor`)} = ${soDigitos("cfil.cnpjcpf")})
+        or exists (select 1 from conta_receber crfil
+             where crfil.tenant_id = ${tenant_id}
+               and crfil.loja = ${alias}.loja
+               and crfil.caixa = ${alias}.caixa
+               and crfil.codigo_cupom = ${alias}.codigo
+               and crfil.data_emissao = ${alias}.data
+               and (crfil.cliente_codigo = cfil.codigo
+                 or (coalesce(crfil.cliente_cpf, '') <> ''
+                     and ${soDigitos("crfil.cliente_cpf")} = ${soDigitos("cfil.cnpjcpf")})))))`;
 }
 
 /**
@@ -131,21 +153,60 @@ function filtrosVendaFilho(query: any, tenant_id: number, alias: string, opcoes:
 }
 
 /**
- * Cliente do cupom: pelo código gravado na venda ou, quando o PDV só registrou
- * o CPF do consumidor, pelo CNPJ/CPF do cadastro. LATERAL com limit 1 para um
- * cadastro duplicado não multiplicar a linha do cupom.
+ * Cliente do cupom, por três caminhos, nesta ordem de confiança:
+ *
+ *   1. codigo_cliente da própria venda — só existe quando o cupom nasceu de uma
+ *      pré-venda; é o único ponto do PDV que preenche CUPOM.COD_CLIENTE.
+ *   2. CPF do consumidor casado com o CNPJ/CPF do cadastro, quando o operador
+ *      identificou o CPF na nota.
+ *   3. Título de convênio do cupom.
+ *
+ * O terceiro existe porque a tela de convênio do PDV (uFrmConvenio) vincula o
+ * conveniado apenas ao crediário — `oCrediario.Cliente` — e nunca ao cupom.
+ * Uma venda de convênio sobe com codigo_cliente "0" e sem CPF, então em `vendas`
+ * não há nada que identifique o comprador; quem carrega essa informação para a
+ * nuvem é a subida de conta a receber, que traz o cupom, o caixa e o cliente.
+ *
+ * O par (loja, caixa, codigo_cupom) não basta sozinho: o fechamento limpa as
+ * vendas do banco do PDV e o CODIGO reinicia, então a data entra na chave.
+ *
+ * LATERAL com limit 1 para um cadastro duplicado não multiplicar a linha do
+ * cupom, e o order by fixa a prioridade quando mais de um caminho casa (uma
+ * venda de convênio em que o CPF também foi informado, por exemplo).
  */
 function joinClienteDoCupom(tenant_id: number, alias: string): string {
+  const porCodigoDaVenda = `${temCodigoCliente(alias)} and c.codigo = ${alias}.codigo_cliente`;
+  const porCpfDoConsumidor = `coalesce(${alias}.cpf_consumidor, '') <> ''
+              and ${soDigitos("c.cnpjcpf")} = ${soDigitos(`${alias}.cpf_consumidor`)}`;
+
   return `left join lateral (
+      select cr.cliente_codigo, cr.cliente_cpf
+      from conta_receber cr
+      where cr.tenant_id = ${tenant_id}
+        and cr.loja = ${alias}.loja
+        and cr.caixa = ${alias}.caixa
+        and cr.codigo_cupom = ${alias}.codigo
+        and cr.data_emissao = ${alias}.data
+      limit 1
+    ) conv on true
+    left join lateral (
       select c.codigo, c.nome, c.cnpjcpf
       from clientes c
       where c.tenant_id = ${tenant_id}
         and (
-          (coalesce(${alias}.codigo_cliente, '') <> '' and c.codigo = ${alias}.codigo_cliente)
-          or (coalesce(${alias}.codigo_cliente, '') = ''
-              and coalesce(${alias}.cpf_consumidor, '') <> ''
-              and ${soDigitos("c.cnpjcpf")} = ${soDigitos(`${alias}.cpf_consumidor`)})
+          (${porCodigoDaVenda})
+          or (${semCodigoCliente(alias)} and ${porCpfDoConsumidor})
+          or (coalesce(conv.cliente_codigo, '') not in ${SEM_CODIGO_CLIENTE}
+              and c.codigo = conv.cliente_codigo)
+          or (coalesce(conv.cliente_codigo, '') in ${SEM_CODIGO_CLIENTE}
+              and coalesce(conv.cliente_cpf, '') <> ''
+              and ${soDigitos("c.cnpjcpf")} = ${soDigitos("conv.cliente_cpf")})
         )
+      order by case
+        when ${porCodigoDaVenda} then 1
+        when ${porCpfDoConsumidor} then 2
+        else 3
+      end
       limit 1
     ) cli on true`;
 }
