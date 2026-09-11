@@ -400,7 +400,12 @@ export default {
       if (this.estado === "MANUAL") {
         this.nota_fiscal.fornecedor = new Fornecedor();
       }
-      await this.$refs.dialogFornecedor.abrir(this.nota_fiscal.fornecedor);
+      const gravado = await this.$refs.dialogFornecedor.abrir(this.nota_fiscal.fornecedor);
+
+      // Cancelou o modal: não há fornecedor para procurar. Antes a busca
+      // acontecia de qualquer jeito e o cancelamento terminava em erro.
+      if (!gravado) return;
+
       const fornecedor = await FornecedorService.getByCNPJCPF(this.nota_fiscal.fornecedor.cnpjcpf);
       this.nota_fiscal.fornecedor.codigo = fornecedor.codigo;
     },

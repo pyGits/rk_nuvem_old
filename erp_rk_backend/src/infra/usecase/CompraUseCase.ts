@@ -1,7 +1,7 @@
 import FornecedorFactory from "../entity/Factory.ts/FornecedorFactory";
 import NotaFiscalFactory from "../entity/Factory.ts/NotaFiscalFactory";
 import Fornecedor from "../entity/Fornecedor";
-import { NotaFiscal } from "../entity/NotaFiscal";
+import { documentoPessoaNota, NotaFiscal } from "../entity/NotaFiscal";
 import { Associacao, ItemDistribuicao } from "../entity/NotaFiscalItem";
 import AssociacaoRepository from "../repository/AssociacaoRepository";
 import EstoqueRepository from "../repository/EstoqueRepository";
@@ -157,7 +157,7 @@ export default class CompraUseCasePG implements CompraUseCase {
       const isNotaExists = await this.notaFiscalRepository.getByChave(nota.protocolo.chave, tenant_id);
       if (isNotaExists) continue;
 
-      const isLojaExists = await this.lojaRepository.getByCNPJCPF(nota.destinatario.cnpj, tenant_id);
+      const isLojaExists = await this.lojaRepository.getByCNPJCPF(documentoPessoaNota(nota.destinatario), tenant_id);
       if (!isLojaExists) continue;
 
       nota.loja = isLojaExists;
@@ -194,9 +194,9 @@ export default class CompraUseCasePG implements CompraUseCase {
     }
     if (!nota) throw new Error("Nota não encontrada !");
 
-    const isLojaExists = await this.lojaRepository.getByCNPJCPF(nota.destinatario.cnpj, tenant_id);
+    const isLojaExists = await this.lojaRepository.getByCNPJCPF(documentoPessoaNota(nota.destinatario), tenant_id);
 
-    if (!isLojaExists) throw new Error(`CNPJ Destinatário do XML não encontrado cadastrado !, CNPJ Destinatário: ${nota.destinatario.cnpj}`);
+    if (!isLojaExists) throw new Error(`CNPJ/CPF Destinatário do XML não encontrado cadastrado !, CNPJ/CPF Destinatário: ${documentoPessoaNota(nota.destinatario)}`);
 
     nota.loja = isLojaExists;
 
@@ -216,12 +216,12 @@ export default class CompraUseCasePG implements CompraUseCase {
     const isNotaExists = await this.notaFiscalRepository.getByChave(nota.protocolo.chave, tenant_id);
     if (isNotaExists) nota = isNotaExists;
 
-    const isLojaExists = await this.lojaRepository.getByCNPJCPF(nota.destinatario.cnpj, tenant_id);
-    if (!isLojaExists) throw new Error("CNPJ da loja na nota não cadastrado !");
+    const isLojaExists = await this.lojaRepository.getByCNPJCPF(documentoPessoaNota(nota.destinatario), tenant_id);
+    if (!isLojaExists) throw new Error("CNPJ/CPF da loja na nota não cadastrado !");
     nota.loja = isLojaExists;
     nota.notaManual = false;
 
-    const isFornecedorExists = await this.fornecedorRepository.getByCNPJCPF(nota.emitente.cnpj, tenant_id);
+    const isFornecedorExists = await this.fornecedorRepository.getByCNPJCPF(documentoPessoaNota(nota.emitente), tenant_id);
     if (isFornecedorExists) nota.fornecedor = isFornecedorExists;
 
     try {

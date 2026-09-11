@@ -1,11 +1,11 @@
 import Fornecedor from "../Fornecedor";
-import { NotaFiscal } from "../NotaFiscal";
+import { documentoPessoaNota, NotaFiscal } from "../NotaFiscal";
 
 export default class FornecedorFactory {
   static createFromNotaFiscal(nota: NotaFiscal) {
     return new Fornecedor(
       "",
-      nota.emitente.cnpj,
+      documentoPessoaNota(nota.emitente),
       nota.emitente.nome,
       nota.emitente.fantasia,
       nota.emitente.inscricaoEstadual,

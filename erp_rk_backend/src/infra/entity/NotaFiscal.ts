@@ -77,6 +77,14 @@ export class Protocolo {
   constructor(public dataHoraRecebimento: string = "", public protocolo: string = "", public chave: string = "", public tipoAmbiente: string = "", public codigoStatusResposta: string = "") {}
 }
 
+// O emitente/destinatário da NFe vem com CNPJ ou com CPF - pessoa física
+// (produtor rural, por exemplo) emite só com CPF. Onde o sistema precisa do
+// documento, vale o que estiver preenchido; ler só o CNPJ deixa o fornecedor
+// pessoa física sem documento nenhum.
+export function documentoPessoaNota(pessoa: { cnpj?: string; cpf?: string }): string {
+  return String(pessoa?.cnpj || pessoa?.cpf || "").trim();
+}
+
 export class Emitente {
   constructor(
     public nome: string = "",
