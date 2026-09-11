@@ -3,6 +3,11 @@ unit ProdutoModel;
 interface
 uses Vcl.Dialogs,CodigoAuxiliarModel;
 type
+  // Qual preco do produto a etiqueta estampa. O operador escolhe na tela de
+  // etiquetas; cada origem de dados (RK, Syspdv Firebird, Syspdv SQL) le a
+  // coluna correspondente.
+  TTipoPrecoEtiqueta = (tpeNormal, tpePreco2, tpeOferta);
+
   TProdutoModel = class
     private
     FDescricao : string;
@@ -35,6 +40,7 @@ type
     FCodigoAuxiliar: TCodigoAuxiliarModel;
     Fpreco2: real;
     Fpreco2_qtd: real;
+    FprecoOferta: real;
 
 
     procedure SetDataAlterado(const Value: TDate);
@@ -42,6 +48,7 @@ type
     procedure SetCodigoAuxiliar(const Value: TCodigoAuxiliarModel);
     procedure Setpreco2(const Value: real);
     procedure Setpreco2_qtd(const Value: real);
+    procedure SetprecoOferta(const Value: real);
 
 
 
@@ -118,6 +125,11 @@ type
     property estoqueAnterior:Real read FestoqueAnterior write SetestoqueAnterior;
     property preco2:real read Fpreco2 write Setpreco2;
     property preco2_qtd:real read Fpreco2_qtd write Setpreco2_qtd;
+    // Preco de oferta. Existe no Syspdv (PROPRCOFEVAR); o banco do RK nao tem
+    // esse campo, e nesse modo a tela desabilita a opcao.
+    property precoOferta:real read FprecoOferta write SetprecoOferta;
+
+    function getPrecoPara(tipo:TTipoPrecoEtiqueta):Real;
 
     property CodigoAuxiliar:TCodigoAuxiliarModel read FCodigoAuxiliar write SetCodigoAuxiliar;
 
@@ -526,6 +538,29 @@ end;
 procedure TProdutoModel.Setpreco2(const Value: real);
 begin
   Fpreco2 := Value;
+end;
+
+procedure TProdutoModel.SetprecoOferta(const Value: real);
+begin
+  FprecoOferta := Value;
+end;
+
+// Preco que a etiqueta deve estampar.
+//
+// Preco 2 e oferta em branco sao o caso comum - a maioria dos produtos so tem o
+// preco normal cadastrado -, entao quando o escolhido esta zerado vale o preco
+// normal. Sem isso o lote sairia com 0,00 impresso na etiqueta da gondola.
+function TProdutoModel.getPrecoPara(tipo: TTipoPrecoEtiqueta): Real;
+begin
+  case tipo of
+    tpePreco2: Result := Fpreco2;
+    tpeOferta: Result := FprecoOferta;
+  else
+    Result := FPreco;
+  end;
+
+  if Result <= 0 then
+    Result := FPreco;
 end;
 
 procedure TProdutoModel.Setpreco2_qtd(const Value: real);

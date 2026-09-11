@@ -14,6 +14,7 @@ type TFinalizadoraController = class
   function InserirFinalizadora(oFinalizadora:TFinalizadora):Boolean;
   function ExcluirFinalizadora(oFinalizadora:TFinalizadora):Boolean;
   function PreencherGrid(sFinalizadora:string;Grid:TNextGrid;tipo:TPesquisar):Boolean;
+  function TeclaEmUso(const tecla,codigoIgnorar:string):string;
 
 
 end;
@@ -31,6 +32,11 @@ end;
 function TFinalizadoraController.CarregarFinalizadora(oFinalizadora: TFinalizadora): Boolean;
 begin
 result := dmFinalizadora.CarregarFinalizadora(oFinalizadora);
+end;
+
+function TFinalizadoraController.TeclaEmUso(const tecla,codigoIgnorar:string):string;
+begin
+result := dmFinalizadora.TeclaEmUso(tecla,codigoIgnorar);
 end;
 
 constructor TFinalizadoraController.create;

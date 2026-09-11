@@ -3,7 +3,7 @@ unit IndicesNuvemRepository;
 interface
 uses System.SysUtils, System.Classes, uConexaoRetaguarda;
 
-// A subida de venda le "WHERE NUVEM = 0" em sete tabelas a cada ciclo do
+// A subida le "WHERE NUVEM = 0" em oito tabelas do servidor a cada ciclo do
 // timer. Sem indice isso e uma varredura completa de CUPOM, CUPOM_ITEM e
 // companhia a cada poucos segundos - e em base de cliente com anos de
 // movimento essa varredura sozinha ja custa mais que o envio.
@@ -13,9 +13,9 @@ uses System.SysUtils, System.Classes, uConexaoRetaguarda;
 // para de ler assim que completa o lote, em vez de ordenar o backlog inteiro
 // para descartar quase tudo.
 //
-// O PDV ja faz o mesmo em CUPOM_CREDIARIO (Migrations.inc); aqui a criacao
-// fica com o proprio agente porque e ele quem depende dela, e assim nao e
-// preciso esperar o cliente atualizar a retaguarda.
+// A criacao fica com o proprio agente porque e ele quem depende dela: assim
+// nao e preciso esperar o cliente atualizar a retaguarda para o ciclo deixar
+// de varrer a base inteira.
 type IIndicesNuvemRepository = interface
   ['{2F5B8C41-9A73-4D26-B0E8-7C3D14A9F582}']
   procedure garantirIndices;
@@ -72,6 +72,8 @@ begin
   FPendentes.Add('NAO_FISCAL;IDX_NAO_FISCAL_NUVEM;NUVEM, COD_CAIXA, CODIGO');
   FPendentes.Add('FECHAMENTO;IDX_FECHAMENTO_NUVEM;NUVEM, COD_CAIXA, CODIGO');
   FPendentes.Add('FECHAMENTO_FINALIZADORA;IDX_FECH_FIN_NUVEM;NUVEM, COD_CAIXA, ID_FECHAMENTO');
+  // Convenio: a ordem da leitura e por emissao, nao por caixa.
+  FPendentes.Add('CONTAS_RECEBER;IDX_CONTAS_RECEBER_NUVEM;NUVEM, DATA_EMISSAO, COD_CUPOM, CODIGO');
 end;
 
 function TIndicesNuvemRepository.faltamIndices: Boolean;

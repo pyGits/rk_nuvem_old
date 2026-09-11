@@ -9,7 +9,10 @@ type TEtiquetaUseCase = class
   FCodigoAuxiliarRepository:ICodigoAuxiliarRepository;
   FUIEtiqueta:IUIEtiqueta;
   FEtiquetaPrinter:IEtiquetaPrinter;
+  FTipoPreco:TTipoPrecoEtiqueta;
   procedure IniciarConfiguracao;
+  procedure AplicarTipoPreco(Produto:TProdutoModel);
+  procedure CarregarTipoPrecoPreferido;
   public
   constructor create(EtiquetaRepository:IEtiquetaRepository;UIEtiqueta:IUIEtiqueta;EtiquetaPrinter:IEtiquetaPrinter);
   procedure AdicionarProduto(codigo:string;quantidade:integer);
@@ -18,11 +21,18 @@ type TEtiquetaUseCase = class
   procedure DeletarTodosItens;
   procedure AdicionarItensAlterados(dtInicio:TDate;dtFim:TDate;unidade:string);
   procedure SelecionarLayout(etiqueta:TEtiquetaLayoutModel);
+  procedure SelecionarTipoPreco(tipo:TTipoPrecoEtiqueta);
   procedure Abrir;
   procedure ImprimirEtiqueta(codigoProduto:string;codigoLayout:string);
   procedure ImprimirFilaEtiqueta(codigoLayout:string);
   procedure EditarLayout(layout:TEtiquetaLayoutModel);
   procedure Preview(codigo:string; layout: TEtiquetaLayoutModel; ParentPanel: TPanel);
+  // Preco 2 / oferta so valem para a etiqueta: o cadastro do produto nao muda.
+  // Para trocar use SelecionarTipoPreco, que tambem grava a preferencia.
+  property TipoPreco:TTipoPrecoEtiqueta read FTipoPreco;
+  // O banco do RK nao tem preco de oferta, entao a opcao nao vale para todas as
+  // origens - a tela usa isto para desabilitar o radio.
+  function OfertaDisponivel:Boolean;
 end;
 
 implementation
@@ -34,6 +44,7 @@ var
   CodigoEtiquetaPadrao:string;
 begin
 CodigoEtiquetaPadrao := TIniManager.GetInstance('./preferencias.ini').ReadString('Etiqueta','Layout','');
+CarregarTipoPrecoPreferido;
 FUIEtiqueta.AtualizarInterface(FEtiquetaRepository.ObterFilaImpressao);
 FUIEtiqueta.Abrir(FEtiquetaRepository.carregarLayouts,CodigoEtiquetaPadrao);
 end;
@@ -53,6 +64,7 @@ begin
 
   for Produto in ProdutosAlterados do
   begin
+    AplicarTipoPreco(Produto);
     FEtiquetaRepository.inserirItem(Produto);
   end;
 
@@ -80,6 +92,8 @@ if Produto = nil then raise Exception.Create('Produto Não Encontrado !');
 
 if CodigoAuxiliar<> nil then Produto.SetCodigoBarras(codigoauxiliar.codigo_auxiliar);
 
+AplicarTipoPreco(Produto);
+
 for I := 1 to quantidade do
 begin
 FEtiquetaRepository.inserirItem(Produto);
@@ -104,6 +118,8 @@ if CodigoAuxiliar <> nil then codigo := CodigoAuxiliar.codigo_barras;
 Produto := FProdutoRepository.getByCodigoBarras(codigo);
 
 if Produto = nil then raise Exception.Create('Produto Não Encontrado !');
+
+AplicarTipoPreco(Produto);
 
 FUIEtiqueta.CarregarProduto(Produto);
 end;
@@ -158,6 +174,8 @@ Produto := FProdutoRepository.getByCodigoBarras(codigoProduto);
 
 if Produto = nil then raise Exception.Create('Produto Não Encontrado !');
 
+AplicarTipoPreco(Produto);
+
 FEtiquetaPrinter.Imprimir(Produto,layout);
 
 end;
@@ -171,6 +189,21 @@ Layout :=FEtiquetaRepository.ObterLayout(codigoLayout);
 if Layout = nil then raise Exception.Create('Layout Não Encontrado ! '+ codigoLayout);
 
 FEtiquetaPrinter.ImprimirFila(FEtiquetaRepository.ObterFilaImpressao,layout);
+end;
+
+// Troca o preco do produto pelo que o operador escolheu na tela. Mexe so no
+// objeto em memoria, que e o que sera gravado na fila e impresso - o cadastro
+// do produto fica intacto.
+procedure TEtiquetaUseCase.AplicarTipoPreco(Produto: TProdutoModel);
+begin
+  if Produto = nil then Exit;
+  Produto.SetPreco(Produto.getPrecoPara(FTipoPreco));
+end;
+
+// Oferta existe no Syspdv (modos 1 e 2); o banco do RK nao tem esse campo.
+function TEtiquetaUseCase.OfertaDisponivel: Boolean;
+begin
+  Result := FConfiguracaoRepositoryFirebird.Obter.etiqueta_modo_importacao <> 0;
 end;
 
 procedure TEtiquetaUseCase.IniciarConfiguracao;
@@ -213,12 +246,51 @@ if Produto = nil then raise Exception.Create('Produto Não Encontrado !');
 
 if CodigoAuxiliar<> nil then Produto.SetCodigoBarras(codigoauxiliar.codigo_auxiliar);
 
+AplicarTipoPreco(Produto);
+
 FEtiquetaPrinter.Preview(produto,layout,ParentPanel);
 end;
 
 procedure TEtiquetaUseCase.SelecionarLayout(etiqueta:TEtiquetaLayoutModel);
 begin
 TIniManager.GetInstance('./preferencias.ini').WriteString('Etiqueta','Layout',etiqueta.codigo);
+end;
+
+procedure TEtiquetaUseCase.SelecionarTipoPreco(tipo:TTipoPrecoEtiqueta);
+var
+  nome:string;
+begin
+  FTipoPreco := tipo;
+
+  case tipo of
+    tpePreco2: nome := 'PRECO2';
+    tpeOferta: nome := 'OFERTA';
+  else
+    nome := 'NORMAL';
+  end;
+
+  TIniManager.GetInstance('./preferencias.ini').WriteString('Etiqueta','TipoPreco',nome);
+end;
+
+// Le a preferencia gravada. Qualquer coisa fora dos tres nomes conhecidos - ini
+// editado na mao, versao antiga sem a chave - vale como preco normal.
+procedure TEtiquetaUseCase.CarregarTipoPrecoPreferido;
+var
+  nome:string;
+begin
+  nome := UpperCase(Trim(TIniManager.GetInstance('./preferencias.ini').ReadString('Etiqueta','TipoPreco','')));
+
+  if nome = 'PRECO2' then
+    FTipoPreco := tpePreco2
+  else if nome = 'OFERTA' then
+    FTipoPreco := tpeOferta
+  else
+    FTipoPreco := tpeNormal;
+
+  // A origem pode ter mudado nas configuracoes desde a ultima vez: o banco do RK
+  // nao tem oferta, e a preferencia gravada nao pode ressuscitar a opcao.
+  if (FTipoPreco = tpeOferta) and (not OfertaDisponivel) then
+    FTipoPreco := tpeNormal;
 end;
 
 end.

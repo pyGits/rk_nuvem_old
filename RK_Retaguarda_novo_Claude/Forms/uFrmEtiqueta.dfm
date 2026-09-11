@@ -382,6 +382,27 @@ object frmEtiqueta: TfrmEtiqueta
       Visible = False
       OnClick = chkImprimirLoteClick
     end
+    object rgTipoPreco: TRadioGroup
+      Left = 469
+      Top = 6
+      Width = 366
+      Height = 55
+      Caption = 'Pre'#231'o da etiqueta'
+      Columns = 3
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWindowText
+      Font.Height = -13
+      Font.Name = 'Tahoma'
+      Font.Style = []
+      ItemIndex = 0
+      Items.Strings = (
+        'Normal'
+        'Pre'#231'o 2'
+        'Oferta')
+      ParentFont = False
+      TabOrder = 9
+      OnClick = rgTipoPrecoClick
+    end
     object Button2: TButton
       Left = 743
       Top = 100

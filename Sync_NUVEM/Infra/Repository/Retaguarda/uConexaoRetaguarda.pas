@@ -20,6 +20,9 @@ type
 
     function ExecQuery(const ASQL: string): TFDQuery;
     function ExecSQL(const ASQL: string): Integer; // insert/update/delete
+    // Query vazia, para quem precisa passar parametro: ExecQuery e ExecSQL so
+    // aceitam SQL ja pronto.
+    function CreateQuery: TFDQuery;
   end;
 
 implementation
@@ -59,6 +62,12 @@ begin
     FInstance := TConexao.CreatePrivate;
 
   Result := FInstance;
+end;
+
+function TConexao.CreateQuery: TFDQuery;
+begin
+  Result := TFDQuery.Create(nil);
+  Result.Connection := FConexao;
 end;
 
 function TConexao.ExecQuery(const ASQL: string): TFDQuery;

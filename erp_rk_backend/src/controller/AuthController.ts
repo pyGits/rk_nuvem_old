@@ -15,6 +15,65 @@ export default {
 
     res.status(200).json(tenant);
   },
+  // O login principal (o inquilino criado pelo painel administrativo) nao tinha
+  // como trocar a propria senha - dependia de alguem mexer no banco.
+  //
+  // O token nao separa o login principal dos usuarios web filhos: os dois
+  // carregam so o tenant_id. Por isso a troca exige a senha atual; quem nao a
+  // conhece nao troca, mesmo estando logado no mesmo tenant.
+  async updateTenantPassword(req: any, res: any) {
+    const { tenant_id } = req;
+    const { senhaAtual, novaSenha, confirmacaoSenha } = req.body;
+
+    if (!senhaAtual || !novaSenha || !confirmacaoSenha) {
+      return res.status(400).json({
+        message: "Informe a senha atual, a nova senha e a confirmacao !",
+      });
+    }
+
+    if (novaSenha !== confirmacaoSenha) {
+      return res
+        .status(400)
+        .json({ message: "Senha nao confere com confirmacao" });
+    }
+
+    if (novaSenha.length < 4) {
+      return res
+        .status(400)
+        .json({ message: "A nova senha precisa ter ao menos 4 caracteres !" });
+    }
+
+    const tenant: any = await Tenant.findOne({ where: { id: tenant_id } });
+
+    if (!tenant) {
+      return res.status(404).json({ message: "Cliente nao encontrado !" });
+    }
+
+    if (md5WithSalt(senhaAtual) !== tenant.password) {
+      return res.status(400).json({ message: "Senha atual incorreta !" });
+    }
+
+    if (md5WithSalt(novaSenha) === tenant.password) {
+      return res
+        .status(400)
+        .json({ message: "A nova senha precisa ser diferente da atual !" });
+    }
+
+    try {
+      await Tenant.update(
+        { password: md5WithSalt(novaSenha) },
+        { where: { id: tenant_id } }
+      );
+      return res
+        .status(200)
+        .json({ message: "Senha do login principal alterada com sucesso !" });
+    } catch (error) {
+      console.log(error);
+      return res
+        .status(400)
+        .json({ message: "Erro ao alterar a senha do login principal" });
+    }
+  },
   async login(req: any, res: any) {
     try {
       const { user, password } = req.body;

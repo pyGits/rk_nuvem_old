@@ -1,8 +1,7 @@
 unit ReenvioPeriodoUseCase;
 
 interface
-uses CaixaRepository, CaixaModel, System.Generics.Collections,
-     ContaReceberPDVRepository;
+uses ContaReceberRetaguardaRepository;
 
 // Reenvio manual de um periodo que ja subiu.
 //
@@ -17,12 +16,12 @@ uses CaixaRepository, CaixaModel, System.Generics.Collections,
 // reenvio nao tem como duplicar registro nem furar a ordem das etapas, e um
 // periodo grande escoa aos poucos em vez de segurar o agente.
 //
-// Duas origens, porque sao dois bancos: CUPOM/CUPOM_ITEM/CUPOM_FORMA ficam na
-// retaguarda, e CUPOM_CREDIARIO (o convenio) so existe no banco de cada PDV.
+// Tudo no mesmo banco, o do servidor: CUPOM/CUPOM_ITEM/CUPOM_FORMA e tambem o
+// convenio, que passou a ser lido de CONTAS_RECEBER e nao mais do
+// CUPOM_CREDIARIO de cada PDV.
 type TReenvioPeriodoUseCase = class
   private
-  FCaixaRepository:ICaixaRepository;
-  FContaReceberPDVRepository:IContaReceberPDVRepository;
+  FContaReceberRepository:IContaReceberRetaguardaRepository;
   function reenviarConvenio(dtInicio, dtFim: TDate): Integer;
   public
   // Devolve o total de linhas devolvidas para a fila.
@@ -38,42 +37,25 @@ uses System.SysUtils, uDmVenda, uLogErro;
 
 constructor TReenvioPeriodoUseCase.create;
 begin
-  FCaixaRepository := TCaixaRepository.create;
-  FContaReceberPDVRepository := TContaReceberPDVRepository.create;
+  FContaReceberRepository := TContaReceberRetaguardaRepository.create;
 end;
 
-// Uma caixa fora do ar nao pode impedir o reenvio das demais - mesmo criterio
-// da subida de convenio.
+// Falha no convenio nao pode derrubar o reenvio da venda, que ja foi marcada
+// quando se chega aqui: o que der errado fica no log e o operador repete.
 function TReenvioPeriodoUseCase.reenviarConvenio(dtInicio, dtFim: TDate): Integer;
-var
-  caixas:TObjectList<TCaixaModel>;
-  caixa:TCaixaModel;
-  afetados:Integer;
 begin
   Result := 0;
 
-  caixas := FCaixaRepository.getAll;
   try
-    for caixa in caixas do
-    begin
-      try
-        uLogErro.Atividade(Format('Reenvio: marcando convenio do caixa %s (%s)...',
-          [caixa.codigo, caixa.ip]));
+    uLogErro.Atividade('Reenvio: marcando convenio no servidor...');
 
-        afetados := FContaReceberPDVRepository.marcarPeriodoParaReenvio(caixa, dtInicio, dtFim);
-        Inc(Result, afetados);
+    Result := FContaReceberRepository.marcarPeriodoParaReenvio(dtInicio, dtFim);
 
-        if afetados > 0 then
-          uLogErro.Progresso(Format('REENVIO: %d titulo(s) de convenio no caixa %s',
-            [afetados, caixa.codigo]));
-      except
-      on E:Exception do
-        uLogErro.LogErro('REENVIO_CONVENIO',
-          Format('Caixa %s (%s) | %s: %s', [caixa.codigo, caixa.ip, E.ClassName, E.Message]));
-      end;
-    end;
-  finally
-    caixas.Free;
+    if Result > 0 then
+      uLogErro.Progresso(Format('REENVIO: %d titulo(s) de convenio', [Result]));
+  except
+  on E:Exception do
+    uLogErro.LogErro('REENVIO_CONVENIO', Format('%s: %s', [E.ClassName, E.Message]));
   end;
 end;
 

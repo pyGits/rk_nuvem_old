@@ -61,6 +61,7 @@ type
     I1: TMenuItem;
     Panel1: TPanel;
     p1: TMenuItem;
+    rgTipoPreco: TRadioGroup;
 
     procedure edtCodigoKeyPress(Sender: TObject; var Key: Char);
     procedure btnAddClick(Sender: TObject);
@@ -85,7 +86,9 @@ type
     procedure gridEtiquetaCellClick(Sender: TObject; ACol, ARow: Integer);
     procedure edtCodigoClick(Sender: TObject);
     procedure p1Click(Sender: TObject);
+    procedure rgTipoPrecoClick(Sender: TObject);
     private
+    procedure AplicarTipoPrecoSelecionado;
     procedure AbrirPainelAlterados;
     procedure CarregarLayoutEtiquetas(ListaEtiquetasModelo:TObjectList<TEtiquetaLayoutModel>;codigoEtiqueta:string);
     function ObterLayoutSelecionado:TEtiquetaLayoutModel;
@@ -119,6 +122,13 @@ begin
 
 
   self.CarregarLayoutEtiquetas(ListaEtiquetasModelo,codigoEtiquetaPadrao);
+case EtiquetaUseCase.TipoPreco of
+  tpePreco2: rgTipoPreco.ItemIndex := 1;
+  tpeOferta: rgTipoPreco.ItemIndex := 2;
+else
+  rgTipoPreco.ItemIndex := 0;
+end;
+AplicarTipoPrecoSelecionado;
 Self.Show;
 
 end;
@@ -263,6 +273,44 @@ begin
     edtValor.Value := Preco;
     edtUn.Text := Unidade;
     edtQtd.Value := 1;
+  end;
+end;
+
+// A origem dos dados manda no que da para escolher: o banco do RK nao tem
+// preco de oferta, entao a opcao fica desabilitada nesse modo (e volta para
+// Normal se estava marcada quando a origem mudou nas configuracoes).
+procedure TfrmEtiqueta.AplicarTipoPrecoSelecionado;
+var
+  ofertaOk:Boolean;
+begin
+  ofertaOk := EtiquetaUseCase.OfertaDisponivel;
+
+  if (not ofertaOk) and (rgTipoPreco.ItemIndex = 2) then
+    rgTipoPreco.ItemIndex := 0;
+
+  // TRadioGroup nao desabilita botao isolado pela propriedade Items; o acesso
+  // e pelos controles filhos, na mesma ordem dos itens.
+  if rgTipoPreco.ControlCount > 2 then
+    rgTipoPreco.Controls[2].Enabled := ofertaOk;
+
+  case rgTipoPreco.ItemIndex of
+    1: EtiquetaUseCase.SelecionarTipoPreco(tpePreco2);
+    2: EtiquetaUseCase.SelecionarTipoPreco(tpeOferta);
+  else
+    EtiquetaUseCase.SelecionarTipoPreco(tpeNormal);
+  end;
+end;
+
+procedure TfrmEtiqueta.rgTipoPrecoClick(Sender: TObject);
+begin
+  AplicarTipoPrecoSelecionado;
+
+  // Reflete a troca na hora: recarrega o valor do produto que esta na tela e
+  // refaz o preview, senao o operador continua vendo o preco anterior.
+  if Trim(edtCodigo.Text) <> '' then
+  begin
+    EtiquetaUseCase.CarregarProduto(edtCodigo.Text);
+    EtiquetaUseCase.Preview(edtCodigo.Text,ObterLayoutSelecionado,Panel1);
   end;
 end;
 

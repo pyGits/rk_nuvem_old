@@ -19,6 +19,7 @@ type
     function InserirFinalizadora(oFinalizadora:TFinalizadora):Boolean;
     function ExcluirFinalizadora(oFinalizadora:TFinalizadora):Boolean;
     function PreencherGrid(sFinalizadora:string;Grid:TNextGrid;tipo:TPesquisar):Boolean;
+    function TeclaEmUso(const tecla,codigoIgnorar:string):string;
   end;
 
 var
@@ -41,6 +42,7 @@ begin
   ParamByName('ESPECIE').AsInteger := oFinalizadora.especie;
   ParamByName('TIPO').AsString := oFinalizadora.Tipo;
   ParamByName('CODIGO99').AsInteger := oFinalizadora.cod99;
+  ParamByName('TECLA').AsString := oFinalizadora.tecla;
   ExecSQL;
 end;
 end;
@@ -62,6 +64,7 @@ begin
       Especie := qrFinalizadoraPesquisar.FieldByName('ESPECIE').AsInteger;
       Tipo := qrFinalizadoraPesquisar.FieldByName('TIPO').AsString;
       cod99 := qrFinalizadoraPesquisar.FieldByName('CODIGO99').AsInteger;
+      tecla := qrFinalizadoraPesquisar.FieldByName('TECLA').AsString;
       result := True;
       end
       else
@@ -102,8 +105,32 @@ begin
   ParamByName('ESPECIE').AsInteger := oFinalizadora.especie;
   ParamByName('TIPO').AsString := oFinalizadora.Tipo;
   ParamByName('CODIGO99').AsInteger := oFinalizadora.cod99;
+  ParamByName('TECLA').AsString := oFinalizadora.tecla;
   ExecSQL;
 end;
+end;
+
+// Descricao da finalizadora que ja usa esta tecla, ou vazio se estiver livre.
+// codigoIgnorar e a propria finalizadora sendo gravada - senao alterar um
+// registro sem mexer na tecla acusaria conflito com ele mesmo.
+function TdmFinalizadora.TeclaEmUso(const tecla,codigoIgnorar:string):string;
+begin
+  Result := '';
+  if Trim(tecla) = '' then Exit;
+
+  with qrFinalizadoraPesquisar do
+  begin
+    Close;
+    SQL.Clear;
+    SQL.Add('SELECT CODIGO, DESCRICAO FROM FINALIZADORA');
+    SQL.Add('WHERE UPPER(TECLA) = :TECLA AND CODIGO <> :CODIGO');
+    ParamByName('TECLA').AsString := UpperCase(Trim(tecla));
+    ParamByName('CODIGO').AsString := codigoIgnorar;
+    Open;
+    if RecordCount > 0 then
+      Result := Trim(FieldByName('DESCRICAO').AsString);
+    Close;
+  end;
 end;
 
 function TdmFinalizadora.PreencherGrid(sFinalizadora: string; Grid: TNextGrid;

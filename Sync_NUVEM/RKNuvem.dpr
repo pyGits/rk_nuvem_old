@@ -50,7 +50,7 @@ uses
   uConexaoPDV in 'Infra\Repository\PDV\uConexaoPDV.pas',
   ContaReceber in 'Classes_RK\ContaReceber.pas',
   ErroPDV in 'Classes_RK\ErroPDV.pas',
-  ContaReceberPDVRepository in 'Infra\Repository\PDV\ContaReceberPDVRepository.pas',
+  ContaReceberRetaguardaRepository in 'Infra\Repository\Retaguarda\ContaReceberRetaguardaRepository.pas',
   ErroPDVRepository in 'Infra\Repository\PDV\ErroPDVRepository.pas',
   SubidaContaReceberUseCase in 'Infra\UseCase\SubidaContaReceberUseCase.pas',
   SubidaErroPDVUseCase in 'Infra\UseCase\SubidaErroPDVUseCase.pas',

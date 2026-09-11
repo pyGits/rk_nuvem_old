@@ -154,6 +154,7 @@ begin
      Params.ParamByName('FZESPECIE').AsInteger := especie;
      Params.ParamByName('FZTIPO').AsString := Tipo;
      Params.ParamByName('FZCOD99').AsInteger := cod99;
+     Params.ParamByName('FZTECLA').AsString := tecla;
      ExecSQL;
 end;
 end;
@@ -262,7 +263,7 @@ begin
   Ping := TIdIcmpClient.Create(nil);
   try
     Ping.Host := AIP;
-    Ping.ReceiveTimeout := TimeoutMs; // tempo mï¿½ximo para aguardar resposta
+    Ping.ReceiveTimeout := TimeoutMs; // tempo máximo para aguardar resposta
     Ping.Ping;
     Result := Ping.ReplyStatus.ReplyStatusType = rsEcho;
   except

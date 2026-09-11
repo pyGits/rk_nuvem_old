@@ -599,8 +599,8 @@ end;
 // timer, com o mesmo contrato de sempre.
 //
 // O guarda de subindoVenda existe pelo mesmo motivo dos outros: um UPDATE em
-// CUPOM no meio do ciclo disputaria lock com a marcacao que o proprio agente
-// esta fazendo, e a conexao com cada PDV e singleton.
+// CUPOM ou CONTAS_RECEBER no meio do ciclo disputaria lock com a marcacao que
+// o proprio agente esta fazendo no mesmo banco.
 procedure TfrmPrincipal.btnReenviarClick(Sender: TObject);
 var
   dtInicio, dtFim: TDate;

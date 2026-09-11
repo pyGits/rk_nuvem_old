@@ -81,7 +81,10 @@ export default {
   },
   async updateUsuario(req: any, res: any) {
     const { tenant_id } = req;
-    const { codigo, user, password } = req.body;
+    // O código vem da rota - é ele que identifica o registro em edição. Na
+    // tela o campo fica desabilitado nesse modo, então não muda.
+    const codigo = req.params.codigo;
+    const { user, password } = req.body;
     const { celular, email, fantasia, ierg, nome } = req.body.pessoa;
     const { logradouro, cep, uf, cidade, bairro, complemento } =
       req.body.endereco;
@@ -89,14 +92,25 @@ export default {
     const pessoa = { celular, email, fantasia, ierg, nome };
 
     const isTenantExists = await Tenant.findOne({ where: { user } });
-    const isUserExists = await Usuario.findOne({ where: { user } });
     if (isTenantExists) {
       return res
         .status(400)
         .json({ message: "Usuário ja cadastrado no sistema, escolha outro" });
     }
 
-    if (isUserExists) {
+    // Esta busca era feita só pelo login e acabava encontrando o próprio
+    // usuário que estava sendo editado: qualquer gravação voltava "já
+    // cadastrado", mesmo sem ter mexido no login. Só há conflito quando o
+    // login pertence a OUTRO registro.
+    const usuarioComMesmoLogin: any = await Usuario.findOne({
+      where: { user },
+    });
+    const loginEhDeOutroUsuario =
+      !!usuarioComMesmoLogin &&
+      (String(usuarioComMesmoLogin.codigo) !== String(codigo) ||
+        String(usuarioComMesmoLogin.tenant_id) !== String(tenant_id));
+
+    if (loginEhDeOutroUsuario) {
       return res
         .status(400)
         .json({ message: "Usuário ja cadastrado no sistema, escolha outro" });

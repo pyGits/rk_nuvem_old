@@ -239,6 +239,9 @@ result.estoqueMinimo:= Query.FieldByName('ESTOQUE_MINIMO').AsFloat;
 result.observacao   := Query.FieldByName('OBSERVACAO').AsString;
 result.preco2 := query.FieldByName('PRECO2').AsFloat;
 result.preco2_qtd := query.FieldByName('PRECO2_QTD').AsFloat;
+// O banco do RK nao tem preco de oferta (so PRECO, PRECO2 e PRECO3): a tela de
+// etiquetas desabilita a opcao quando a origem e esta.
+result.precoOferta := 0;
 end;
 
 { TProdutoRepositoryFake }
@@ -379,6 +382,11 @@ begin
   result.SetCodigoBarras(query.FieldByName('PROCOD').AsString);
   result.setDescricao(query.FieldByName('PRODES').AsString);
   result.SetPreco(query.FieldByName('PROPRCVDAVAR').AsFloat);
+  // PROPRCVDA2 e PROPRC2 guardam o mesmo valor neste schema; fica o par
+  // PROPRCVDAVAR/PROPRCVDA2/PROPRCOFEVAR, que e o de nomenclatura consistente.
+  result.preco2 := query.FieldByName('PROPRCVDA2').AsFloat;
+  result.preco2_qtd := query.FieldByName('PROQTDMINPRC2').AsFloat;
+  result.precoOferta := query.FieldByName('PROPRCOFEVAR').AsFloat;
   result.SetValidade(query.FieldByName('PROVLD').AsString);
   RESULT.SetUnidade(query.FieldByName('PROUNID').AsString);
 end;
@@ -470,6 +478,11 @@ result := TProdutoModel.create;
   result.SetCodigoBarras(query.FieldByName('PROCOD').AsString);
   result.setDescricao(query.FieldByName('PRODES').AsString);
   result.SetPreco(query.FieldByName('PROPRCVDAVAR').AsFloat);
+  // PROPRCVDA2 e PROPRC2 guardam o mesmo valor neste schema; fica o par
+  // PROPRCVDAVAR/PROPRCVDA2/PROPRCOFEVAR, que e o de nomenclatura consistente.
+  result.preco2 := query.FieldByName('PROPRCVDA2').AsFloat;
+  result.preco2_qtd := query.FieldByName('PROQTDMINPRC2').AsFloat;
+  result.precoOferta := query.FieldByName('PROPRCOFEVAR').AsFloat;
   result.SetValidade(query.FieldByName('PROVLD').AsString);
   RESULT.SetUnidade(query.FieldByName('PROUNID').AsString);
 end;

@@ -713,6 +713,13 @@ result.Add(CreateIndex('CONTAS_RECEBER', 'IDX_CONTAS_RECEBER_CANCELADO', 'CANCEL
 
 // GARANTIR COLUNA OPERADOR DA TABELA FECHAMENTO VARCHAR60 -> VARCHAR70 (cliente ultrapassou 60 caracteres)
 result.Add(AlterColumnLength('FECHAMENTO','OPERADOR',70),453);
+
+// Tecla de atalho da finalizadora, que a carga leva para o FZTECLA do PDV.
+// Precisa ficar no FIM da lista, com N maior que todos: TMigrationList.Total e o
+// versao do ULTIMO item, e UpdateDatabase so aplica migration com
+// versao >= a versao gravada. Junto das outras migrations da FINALIZADORA
+// (N=195..199) esta linha nunca rodaria num banco que ja passou de 199.
+result.Add(CreateColumn('FINALIZADORA','TECLA','VARCHAR(10)',''),454);
 end;
 
 

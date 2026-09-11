@@ -41,6 +41,8 @@ type
     rdEspecie: TRadioGroup;
     rdTipo: TRadioGroup;
     chk99: TCheckBox;
+    lblTecla: TLabel;
+    cbTecla: TComboBox;
     procedure S1Click(Sender: TObject);
     procedure I1Click(Sender: TObject);
     procedure g1Click(Sender: TObject);
@@ -64,6 +66,9 @@ type
     // RADIO GROUP PARA ESPECIE
     function ConverteRDEspecie(vlrEsp:integer):Integer;
     function ConverteRDTipo(vlrEsp:integer):String;
+    function TeclaSelecionada:string;
+    procedure SelecionarTecla(const tecla:string);
+    function TeclaValida:Boolean;
     procedure HabilitarControles(aOperacao :TOperacao);
     procedure PreencherCampos(oFinalizadora:TFinalizadora);
   public
@@ -100,6 +105,7 @@ begin
     Especie := ConverteRDEspecie(rdEspecie.ItemIndex);
     tipo := ConverteRDTipo(rdTipo.ItemIndex);
     cod99 := BoolToInt(chk99.Checked);
+    tecla := TeclaSelecionada;
     VariaveisSrv.oFinalizadoraController.alterarFinalizadora(oFinalizadora);
   end;
 
@@ -241,6 +247,51 @@ begin
   end;
 end;
 
+// O primeiro item do combo e "(nenhuma)"; os demais sao a propria tecla.
+function TfrmFinalizadora.TeclaSelecionada: string;
+begin
+  if cbTecla.ItemIndex <= 0 then
+    Result := ''
+  else
+    Result := cbTecla.Items[cbTecla.ItemIndex];
+end;
+
+procedure TfrmFinalizadora.SelecionarTecla(const tecla: string);
+var
+  i: Integer;
+begin
+  cbTecla.ItemIndex := 0;
+  if Trim(tecla) = '' then Exit;
+
+  for i := 1 to cbTecla.Items.Count - 1 do
+  begin
+    if SameText(cbTecla.Items[i], Trim(tecla)) then
+    begin
+      cbTecla.ItemIndex := i;
+      Break;
+    end;
+  end;
+end;
+
+// Duas finalizadoras com a mesma tecla deixariam o atalho ambiguo no PDV, que
+// atenderia sempre a primeira do menu. Barra aqui, na origem, antes de virar carga.
+function TfrmFinalizadora.TeclaValida: Boolean;
+var
+  emUso: string;
+begin
+  Result := True;
+  if TeclaSelecionada = '' then Exit;
+
+  emUso := VariaveisSrv.oFinalizadoraController.TeclaEmUso(TeclaSelecionada, edtCodigo.Text);
+  if emUso <> '' then
+  begin
+    MessageDlg('A tecla ' + TeclaSelecionada + ' já está em uso pela finalizadora ' +
+      emUso + '.' + sLineBreak + 'Escolha outra tecla.', mtWarning, [mbOK], 0);
+    cbTecla.SetFocus;
+    Result := False;
+  end;
+end;
+
 function TfrmFinalizadora.ConverteRDTipo(vlrEsp: integer): String;
 begin
 
@@ -315,6 +366,8 @@ end;
 
 procedure TfrmFinalizadora.Gravar;
 begin
+    if not TeclaValida then Exit;
+
      case FOperacao of
       opNovo: Incluir;
       opAlterar: Alterar;
@@ -447,6 +500,7 @@ begin
     Especie := ConverteRDEspecie(rdEspecie.ItemIndex);
     tipo := ConverteRDTipo(rdTipo.ItemIndex);
     cod99 := BoolToInt(chk99.Checked);
+    tecla := TeclaSelecionada;
     VariaveisSrv.oFinalizadoraController.InserirFinalizadora(oFinalizadora);
   end;
 
@@ -479,6 +533,7 @@ begin
   rdEspecie.ItemIndex :=ConverteEspecieRD(especie);
   rdTipo.ItemIndex := ConverteTipoRD(tipo);
   chk99.checked := IntToBool(cod99);
+  SelecionarTecla(tecla);
 end;
 end;
 

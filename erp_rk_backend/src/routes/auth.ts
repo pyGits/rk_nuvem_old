@@ -9,6 +9,11 @@ router.post("/login", AuthController.login);
 router.post("/loginCarga", AuthController.loginCarga);
 
 router.get("/tenant", verifyJWT, AuthController.getTenant);
+router.put(
+  "/tenant/senha",
+  verifyJWT,
+  AuthController.updateTenantPassword
+);
 router.post("/register", verifyJWTADMIN, AuthController.register);
 
 export default router;

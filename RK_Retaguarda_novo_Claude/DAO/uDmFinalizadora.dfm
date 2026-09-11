@@ -14,7 +14,8 @@ object dmFinalizadora: TdmFinalizadora
       'set DESCRICAO = :DESCRICAO,'
       '    ESPECIE = :ESPECIE,'
       '    TIPO = :TIPO,'
-      '    CODIGO99 = :CODIGO99'
+      '    CODIGO99 = :CODIGO99,'
+      '    TECLA = :TECLA'
       'where (CODIGO = :CODIGO)   ')
     Left = 216
     Top = 64
@@ -41,6 +42,11 @@ object dmFinalizadora: TdmFinalizadora
       end
       item
         DataType = ftUnknown
+        Name = 'TECLA'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
         Name = 'CODIGO'
         Value = nil
       end>
@@ -50,8 +56,10 @@ object dmFinalizadora: TdmFinalizadora
     SQL.Strings = (
       
         'insert into FINALIZADORA (CODIGO, DESCRICAO, ESPECIE, TIPO, CODI' +
-        'GO99)'
-      'values (:CODIGO, :DESCRICAO, :ESPECIE, :TIPO, :CODIGO99)  ')
+        'GO99, TECLA)'
+
+        'values (:CODIGO, :DESCRICAO, :ESPECIE, :TIPO, :CODIGO99, :TECLA)' +
+        '  ')
     Left = 280
     Top = 112
     ParamData = <
@@ -78,6 +86,11 @@ object dmFinalizadora: TdmFinalizadora
       item
         DataType = ftUnknown
         Name = 'CODIGO99'
+        Value = nil
+      end
+      item
+        DataType = ftUnknown
+        Name = 'TECLA'
         Value = nil
       end>
   end

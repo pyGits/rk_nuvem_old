@@ -907,6 +907,37 @@ object frmFinalizadora: TfrmFinalizadora
           '02 - Conv'#234'nio')
         TabOrder = 3
       end
+      object lblTecla: TLabel
+        Left = 243
+        Top = 262
+        Width = 128
+        Height = 19
+        Caption = 'Tecla de atalho no PDV:'
+      end
+      object cbTecla: TComboBox
+        Left = 243
+        Top = 284
+        Width = 130
+        Height = 27
+        Style = csDropDownList
+        ItemHeight = 19
+        ItemIndex = 0
+        TabOrder = 5
+        Text = '(nenhuma)'
+        Items.Strings = (
+          '(nenhuma)'
+          'F2'
+          'F3'
+          'F4'
+          'F5'
+          'F6'
+          'F7'
+          'F8'
+          'F9'
+          'F10'
+          'F11'
+          'F12')
+      end
       object chk99: TCheckBox
         Left = 244
         Top = 224

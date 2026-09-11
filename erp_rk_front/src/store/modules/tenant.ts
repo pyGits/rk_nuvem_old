@@ -31,5 +31,8 @@ export default {
     async getTenant({ commit }: any) {
       return await Vue.prototype.$http.get("/tenant");
     },
+    async alterarSenhaPrincipal({ commit }: any, payload: any) {
+      return await Vue.prototype.$http.put("/tenant/senha", payload);
+    },
   },
 };

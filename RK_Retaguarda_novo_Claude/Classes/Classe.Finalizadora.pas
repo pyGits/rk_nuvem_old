@@ -1,7 +1,7 @@
 unit Classe.Finalizadora;
 
 interface
-uses Classe.Funcoes,pcnConversao;
+uses System.SysUtils,Classe.Funcoes,pcnConversao;
 type TFinalizadora = class
   private
     Fespecie: integer;
@@ -9,6 +9,7 @@ type TFinalizadora = class
     Fcodigo: string;
     Ftipo: string;
     Fcod99: integer;
+    Ftecla: string;
     FListaFinalizadora:array[1..99] of TFinalizadora;
     FEspecieACBR: TpcnCodigoMP;
 
@@ -17,6 +18,7 @@ type TFinalizadora = class
     procedure Setdescricao(const Value: string);
     procedure Setespecie(const Value: integer);
     procedure Settipo(const Value: string);
+    procedure Settecla(const Value: string);
     function GetListaFinalizadora(AIndex: Integer): TFinalizadora;
     procedure SetListaFinalizadora(AIndex: Integer; const Value: TFinalizadora);
     procedure SetEspecieACBR(const Value: TpcnCodigoMP);
@@ -27,6 +29,9 @@ type TFinalizadora = class
   property especie:integer read Fespecie write Setespecie;
   property tipo:string read Ftipo write Settipo;
   property cod99:integer read Fcod99 write Setcod99;
+  // Tecla de atalho (F2..F12) que seleciona esta finalizadora na tela de
+  // finalizacao do PDV. Vazio = sem atalho.
+  property tecla:string read Ftecla write Settecla;
 
   property EspecieACBR:TpcnCodigoMP read FEspecieACBR write SetEspecieACBR;
 
@@ -130,6 +135,11 @@ end;
 procedure TFinalizadora.Settipo(const Value: string);
 begin
   Ftipo := Value;
+end;
+
+procedure TFinalizadora.Settecla(const Value: string);
+begin
+  Ftecla := UpperCase(Trim(Value));
 end;
 
 end.
