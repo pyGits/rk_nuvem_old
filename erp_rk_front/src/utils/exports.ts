@@ -2,12 +2,38 @@ import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
+interface AbaExcel {
+  nome: string;
+  // `linhas` são objetos e viram uma tabela com cabeçalho único. `matriz` é
+  // linha a linha (array de arrays), para relatórios em bloco, onde cada
+  // trecho tem um cabeçalho próprio.
+  linhas?: any[];
+  matriz?: any[][];
+  // Largura das colunas, em caracteres.
+  larguras?: number[];
+}
+
+// Aceita a lista de linhas de sempre (uma única planilha) ou, para os
+// relatórios que precisam de mais controle, um objeto { abas: [...] }.
 export function gerarExcel(valor: any, nomeArquivo = "data.xlsx") {
   const workbook = XLSX.utils.book_new();
 
-  const worksheet = XLSX.utils.json_to_sheet(valor);
+  const abas: AbaExcel[] = Array.isArray(valor)
+    ? [{ nome: "Sheet 1", linhas: valor }]
+    : valor && Array.isArray(valor.abas) && valor.abas.length
+    ? valor.abas
+    : [{ nome: "Sheet 1", linhas: [] }];
 
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet 1");
+  abas.forEach((aba) => {
+    const worksheet = aba.matriz ? XLSX.utils.aoa_to_sheet(aba.matriz) : XLSX.utils.json_to_sheet(aba.linhas || []);
+
+    if (aba.larguras) {
+      (worksheet as any)["!cols"] = aba.larguras.map((largura) => ({ wch: largura }));
+    }
+
+    // O Excel nao aceita nome de planilha com mais de 31 caracteres.
+    XLSX.utils.book_append_sheet(workbook, worksheet, (aba.nome || "Sheet 1").substring(0, 31));
+  });
 
   const excelData = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
 

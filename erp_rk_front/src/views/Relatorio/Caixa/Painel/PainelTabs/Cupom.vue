@@ -365,36 +365,24 @@ export default {
       return this.$store.state.relatorio.relatorioPainelVendasCupomAnalitico || { itens: [], formasPagamento: [] };
     },
     itensPorCupomMap() {
-      const map = {};
-      (this.relatorioAnalitico.itens || []).forEach((item) => {
-        const key = this.chaveCupom(item);
-        if (!map[key]) map[key] = [];
-        map[key].push({
-          ...item,
-          valor_total: maskMoney(item.valor_total),
-          valor_acrescimo: maskMoney(item.valor_acrescimo),
-          valor_desconto: maskMoney(item.valor_desconto),
-          valor_unitario: maskMoney(item.valor_unitario),
-          qtde: maskQtd(item.qtde),
-          cancelado: item.cancelado === 1,
-        });
-      });
-      return map;
+      return this.mapearPorCupom(this.relatorioAnalitico.itens, (item) => ({
+        ...item,
+        valor_total: maskMoney(item.valor_total),
+        valor_acrescimo: maskMoney(item.valor_acrescimo),
+        valor_desconto: maskMoney(item.valor_desconto),
+        valor_unitario: maskMoney(item.valor_unitario),
+        qtde: maskQtd(item.qtde),
+        cancelado: item.cancelado === 1,
+      }));
     },
     formasPorCupomMap() {
-      const map = {};
-      (this.relatorioAnalitico.formasPagamento || []).forEach((item) => {
-        const key = this.chaveCupom(item);
-        if (!map[key]) map[key] = [];
-        map[key].push({
-          ...item,
-          descricao: item.descricao || item.codigo_finalizadora,
-          valor: maskMoney(item.valor),
-          valor_troco: maskMoney(item.valor_troco || 0),
-          cancelado: item.cancelado === 1,
-        });
-      });
-      return map;
+      return this.mapearPorCupom(this.relatorioAnalitico.formasPagamento, (item) => ({
+        ...item,
+        descricao: item.descricao || item.codigo_finalizadora,
+        valor: maskMoney(item.valor),
+        valor_troco: maskMoney(item.valor_troco || 0),
+        cancelado: item.cancelado === 1,
+      }));
     },
     totalPaginasAnalitico() {
       return Math.ceil(this.cupons.length / this.itensPorPaginaAnalitico) || 1;
@@ -453,13 +441,120 @@ export default {
     },
     // Chamado pelo Painel na exportação. Os campos *_original/*_format existem
     // só para a tela; no Excel o cupom vai como veio da consulta.
-    linhasParaExportar() {
+    //
+    // No sintético sai a tabela de cupons de sempre. No analítico o Excel sai
+    // na mesma ordem da tela: a linha do cupom, os itens dele logo abaixo e
+    // depois as formas de pagamento, um bloco por cupom.
+    async linhasParaExportar() {
+      if (this.tipoRelatorio !== "analitico") {
+        return this.cuponsParaExportar();
+      }
+
+      // O Painel reconsulta o sintético antes de exportar; o analítico é uma
+      // segunda consulta, por isso é esperada aqui antes de montar a planilha.
+      await this.carregarAnalitico();
+
+      return {
+        abas: [
+          {
+            nome: "Cupons",
+            matriz: this.matrizAnalitica(),
+            larguras: [13, 12, 11, 8, 8, 8, 16, 32, 12, 14, 12],
+          },
+        ],
+      };
+    },
+    cuponsParaExportar() {
       const camposTela = ["valor_total_original", "qtde_item_original", "valor_total_format", "qtde_item_format"];
       return this.cupons.map((item) => {
         const cupom = { ...item };
         camposTela.forEach((campo) => delete cupom[campo]);
         return cupom;
       });
+    },
+    // Um bloco por cupom, cada trecho com o seu próprio cabeçalho. Os valores
+    // vão como número para dar para somar/filtrar no Excel.
+    matrizAnalitica() {
+      const itensPorCupom = this.agruparPorCupom(this.relatorioAnalitico.itens);
+      const formasPorCupom = this.agruparPorCupom(this.relatorioAnalitico.formasPagamento);
+      const linhas = [];
+
+      this.cupons.forEach((cupom) => {
+        const chave = this.chaveCupom(cupom);
+        const itens = itensPorCupom[chave] || [];
+        const formas = formasPorCupom[chave] || [];
+
+        linhas.push(["CUPOM", "Número", "Data", "Hora", "Caixa", "Loja", "CPF Consumidor", "Cliente", "Qtd. Itens", "Valor Total", "Situação"]);
+        linhas.push([
+          "",
+          cupom.numero,
+          this.formatDateBR(cupom.data),
+          cupom.hora,
+          cupom.caixa,
+          cupom.loja,
+          cupom.cpf_consumidor || "",
+          cupom.cliente_nome ? this.descricaoCliente(cupom) : "",
+          Number(cupom.qtde_item || 0),
+          Number(cupom.valor_total || 0),
+          cupom.cancelado == 1 ? "CANCELADO" : "NORMAL",
+        ]);
+
+        linhas.push(["ITENS", "Seq", "Cód. Prod.", "Nome Prod.", "UN", "Qtde.", "Vlr. Unitário", "Vlr. Desconto", "Vlr. Acréscimo", "Vlr. Total", "Situação"]);
+        if (!itens.length) {
+          linhas.push(["", "Nenhum item encontrado"]);
+        }
+        itens.forEach((item) => {
+          linhas.push([
+            "",
+            item.item,
+            item.codigo_barras,
+            item.descricao,
+            item.unidade,
+            Number(item.qtde || 0),
+            Number(item.valor_unitario || 0),
+            Number(item.valor_desconto || 0),
+            Number(item.valor_acrescimo || 0),
+            Number(item.valor_total || 0),
+            item.cancelado == 1 ? "CANCELADO" : "",
+          ]);
+        });
+
+        linhas.push(["PAGAMENTOS", "Forma de Pagamento", "Parcela", "Vlr. Pago", "Troco", "Situação"]);
+        if (!formas.length) {
+          linhas.push(["", "Nenhuma forma de pagamento encontrada"]);
+        }
+        formas.forEach((forma) => {
+          linhas.push([
+            "",
+            forma.descricao || forma.codigo_finalizadora,
+            forma.prestacao,
+            Number(forma.valor || 0),
+            Number(forma.valor_troco || 0),
+            forma.cancelado == 1 ? "CANCELADO" : "",
+          ]);
+        });
+
+        // Linha em branco separando um cupom do próximo.
+        linhas.push([]);
+      });
+
+      return linhas;
+    },
+    mapearPorCupom(lista, formatar) {
+      const mapa = this.agruparPorCupom(lista);
+      Object.keys(mapa).forEach((chave) => {
+        mapa[chave] = mapa[chave].map(formatar);
+      });
+      return mapa;
+    },
+    agruparPorCupom(lista) {
+      const mapa = {};
+      (lista || []).forEach((registro) => {
+        const chave = this.chaveCupom(registro);
+        if (!mapa[chave]) mapa[chave] = [];
+        mapa[chave].push(registro);
+      });
+      return mapa;
     },
   },
 };
