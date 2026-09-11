@@ -110,6 +110,16 @@ export default class CompraUseCasePG implements CompraUseCase {
     nota.items = await this.notaFiscalItemRepository.getByChave(input.chave_nota, input.tenant_id);
 
     nota.fornecedor = await this.fornecedorRepository.getByCodigo(nota.fornecedor.codigo, input.tenant_id);
+
+    // A nota pode não ter fornecedor vinculado - é o caso das que entraram
+    // antes de o fornecedor existir no cadastro. Antes de montar um fornecedor
+    // novo a partir do XML, procura pelo documento do emitente: se já está
+    // cadastrado, a nota abre apontando para ele, com código e tudo.
+    const documentoEmitente = documentoPessoaNota(nota.emitente);
+    if (!nota.fornecedor && documentoEmitente) {
+      nota.fornecedor = await this.fornecedorRepository.getByCNPJCPF(documentoEmitente, input.tenant_id);
+    }
+
     if (!nota.fornecedor) nota.fornecedor = FornecedorFactory.createFromNotaFiscal(nota);
 
     nota.transportadora = await this.fornecedorRepository.getByCodigo(nota.transportadora.codigo, input.tenant_id);

@@ -128,12 +128,12 @@ export class FornecedorRepositoryPG implements FornecedorRepository {
   }
 
   async getByCNPJCPF(cnpjcpf: string, tenant_id: number): Promise<Fornecedor> {
-    const res = await DatabaseConnection.query("select * from fornecedors where cnpjcpf = $1 and tenant_id = $2", [cnpjcpf, tenant_id]);
+    const res = await DatabaseConnection.queryFirst("select * from fornecedors where cnpjcpf = $1 and tenant_id = $2", [cnpjcpf, tenant_id]);
     if (!res) return null;
     return new Fornecedor(res.codigo, res.cnpjcpf, res.nome, res.fantasia, res.ierg, res.uf, res.im, res.telefone, res.telefone2, res.celular, res.email, res.observacao, res.cep, res.logradouro, res.cidade, res.bairro, res.complemento, res.codigoibge);
   }
   async getByCodigo(codigo: string, tenant_id: number): Promise<Fornecedor> {
-    const res = await DatabaseConnection.query("select * from fornecedors where codigo = $1 and tenant_id = $2", [codigo, tenant_id]);
+    const res = await DatabaseConnection.queryFirst("select * from fornecedors where codigo = $1 and tenant_id = $2", [codigo, tenant_id]);
     if (!res) return null;
     return new Fornecedor(res.codigo, res.cnpjcpf, res.nome, res.fantasia, res.ierg, res.uf, res.im, res.telefone, res.telefone2, res.celular, res.email, res.observacao, res.cep, res.logradouro, res.cidade, res.bairro, res.complemento, res.codigoibge);
   }

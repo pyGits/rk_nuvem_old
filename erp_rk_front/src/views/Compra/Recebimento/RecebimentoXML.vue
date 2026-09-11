@@ -400,14 +400,36 @@ export default {
       if (this.estado === "MANUAL") {
         this.nota_fiscal.fornecedor = new Fornecedor();
       }
+
+      // O fornecedor da nota pode já estar cadastrado e só não estar vinculado.
+      // Nesse caso vincula e segue - antes o cadastro abria e terminava em
+      // "Fornecedor já cadastrado com o mesmo CNPJ/CPF", deixando a nota sem
+      // fornecedor.
+      const jaCadastrado = await this.buscarFornecedorPorDocumento(this.nota_fiscal.fornecedor.cnpjcpf);
+      if (jaCadastrado) {
+        this.nota_fiscal.fornecedor = jaCadastrado;
+        ToastService.showSuccess("Fornecedor já cadastrado, vinculado à nota !");
+        return;
+      }
+
       const gravado = await this.$refs.dialogFornecedor.abrir(this.nota_fiscal.fornecedor);
 
       // Cancelou o modal: não há fornecedor para procurar. Antes a busca
       // acontecia de qualquer jeito e o cancelamento terminava em erro.
       if (!gravado) return;
 
-      const fornecedor = await FornecedorService.getByCNPJCPF(this.nota_fiscal.fornecedor.cnpjcpf);
-      this.nota_fiscal.fornecedor.codigo = fornecedor.codigo;
+      const fornecedor = await this.buscarFornecedorPorDocumento(this.nota_fiscal.fornecedor.cnpjcpf);
+      if (fornecedor) this.nota_fiscal.fornecedor = fornecedor;
+    },
+    // O backend responde erro quando não encontra o fornecedor; aqui isso
+    // significa "ainda não cadastrado", não falha.
+    async buscarFornecedorPorDocumento(cnpjcpf) {
+      if (!String(cnpjcpf || "").trim()) return null;
+      try {
+        return await FornecedorService.getByCNPJCPF(cnpjcpf);
+      } catch (erro) {
+        return null;
+      }
     },
     async gravarFornecedor() {
       await this.nota_fiscal.fornecedorController.insert({ fornecedor: this.nota_fiscal.fornecedor });
