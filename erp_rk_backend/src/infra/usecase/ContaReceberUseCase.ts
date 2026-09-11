@@ -1,5 +1,4 @@
 import moment from "moment";
-import { v4 as uuidv4 } from "uuid";
 import ContaReceberTitulo from "../entity/ContaReceberTitulo";
 import ContaReceberFactory from "../entity/Factory.ts/ContaReceberFactory";
 import RecebimentoTituloFactory from "../entity/Factory.ts/RecebimentoTituloFactory";
@@ -85,10 +84,10 @@ export default class ContaReceberUseCase {
     // recebido que nao aparece como recebido em lugar nenhum.
     //
     // O recibo e alocado uma vez e repetido em todas as linhas: e ele que torna
-    // a operacao inteira reimprimivel depois.
+    // a operacao inteira reimprimivel depois. A alocacao acontece dentro da
+    // transacao, que e o que serializa duas baixas simultaneas do mesmo tenant.
     const recibo = await DatabaseConnection.transaction(async (tx) => {
-      const numero = await this.contaReceberRecebimentoRepository.proximoNumeroRecibo(input.tenant_id, tx);
-      const identidade = { id: uuidv4(), numero };
+      const identidade = await this.contaReceberReciboRepository.alocar(input.tenant_id, tx);
 
       for (const titulo of titulos.items) {
         await this.contaReceberRecebimentoRepository.insertByTitulo(titulo, input.tenant_id, tx, identidade);

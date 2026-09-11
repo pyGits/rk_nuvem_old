@@ -1,8 +1,14 @@
+import { v4 as uuidv4 } from "uuid";
 import DatabaseConnection, { Queryable } from "./DatabaseConnection";
 
-// Um recibo e derivado, nao armazenado: as linhas de conta_receber_recebimento
-// que compartilham recibo_id sao a operacao inteira. Tudo que o comprovante
-// precisa sai de um GROUP BY, e por isso nao existe tabela de cabecalho.
+// O conteudo de um recibo e derivado, nao armazenado: as linhas de
+// conta_receber_recebimento que compartilham recibo_id sao a operacao inteira,
+// e tudo que o comprovante precisa sai de um GROUP BY.
+//
+// A tabela conta_receber_recibo guarda so a identidade - id e numero -, porque
+// numero unico por tenant e garantia que precisa estar em uma linha por recibo.
+// Enquanto ela morava nas linhas filhas, a unique proibia a baixa de varios
+// titulos de uma vez.
 export type ReciboTitulo = {
   id: string;
   codigo: string;
@@ -35,13 +41,38 @@ export type Recibo = {
   titulos: ReciboTitulo[];
 };
 
+// Identidade da operacao de recebimento: as N linhas geradas por uma mesma
+// baixa compartilham as duas.
+export type ReciboIdentidade = { id: string; numero: number };
+
 export default interface ContaReceberReciboRepository {
+  alocar(tenant_id: number, db?: Queryable): Promise<ReciboIdentidade>;
   getAll(filtros: any, tenant_id: number): Promise<Recibo[]>;
   getById(reciboId: string, tenant_id: number): Promise<Recibo | null>;
   estornar(reciboId: string, tenant_id: number, db?: Queryable): Promise<string[]>;
 }
 
 export class ContaReceberReciboRepositoryPG implements ContaReceberReciboRepository {
+  // Reserva o proximo numero do tenant. Deve ser chamado dentro da transacao do
+  // recebimento: o lock e por transacao e serializa duas baixas simultaneas do
+  // mesmo tenant, que e quando max+1 leria o mesmo valor duas vezes. A unique
+  // da tabela fica como rede, nao como mecanismo.
+  async alocar(tenant_id: number, db: Queryable = DatabaseConnection): Promise<ReciboIdentidade> {
+    await db.query("select pg_advisory_xact_lock(hashtext('conta_receber_recibo'), $1)", [tenant_id]);
+
+    const id = uuidv4();
+    const row = await db.queryFirst(
+      `insert into conta_receber_recibo (id, tenant_id, numero)
+       select $1, $2, coalesce(max(numero), 0) + 1
+         from conta_receber_recibo
+        where tenant_id = $2
+       returning numero`,
+      [id, tenant_id]
+    );
+
+    return { id, numero: Number(row?.numero || 1) };
+  }
+
   async getAll(filtros: any, tenant_id: number): Promise<Recibo[]> {
     let sql = `
       select r.recibo_id,
