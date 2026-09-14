@@ -18,7 +18,7 @@
     <v-divider></v-divider>
 
     <v-list nav dense>
-      <v-list-item to="/">
+      <v-list-item v-if="$podeAcessar('inicio')" to="/">
         <v-list-item-icon>
           <v-icon>mdi-home</v-icon>
         </v-list-item-icon>
@@ -53,7 +53,10 @@
           <v-list-item-title>{{ subItems.name }}</v-list-item-title>
         </v-list-item>
       </v-list-group>
-      <v-list-item to="/configuracoes">
+      <!-- A tela inteira e do dono: logo da empresa e senha do login
+           principal. Para um usuario web comum os dois botoes de la devolvem
+           403, entao o item nem aparece. -->
+      <v-list-item v-if="souPrincipal" to="/configuracoes">
         <v-list-item-icon>
           <v-icon>mdi-cog</v-icon>
         </v-list-item-icon>
@@ -128,6 +131,10 @@ export default {
     // Folha SEM o campo "tela" continua visivel de proposito: um id digitado
     // errado no Menu.json nao pode fazer a tela sumir do menu de todo mundo em
     // silencio. Quem barra de verdade e o backend.
+    souPrincipal() {
+      return this.$store.getters.souPrincipal;
+    },
+
     filterMenu() {
       const pode = (item) => !item.tela || this.$store.getters.podeAcessar(item.tela);
 

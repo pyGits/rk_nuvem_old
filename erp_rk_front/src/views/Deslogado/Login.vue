@@ -101,7 +101,9 @@ export default {
                 });
 
               this.$store.commit("setLogado", true);
-              this.$router.push("/");
+              // Nem todo usuario tem acesso ao Inicio: entra na primeira tela
+              // liberada, ou na tela neutra se nao houver nenhuma.
+              this.$router.push(this.$store.getters.rotaInicial());
             }
           })
           .catch((err) => {

@@ -12,9 +12,10 @@
 //
 // Tela nova entra em TRES lugares: aqui, no Menu.json e no meta.tela da rota.
 //
-// Fora do catalogo de proposito: "/" (Inicio) e "/configuracoes" (troca da
-// propria senha). As duas ficam sempre liberadas, senao um usuario sem nenhum
-// acesso cairia numa tela em branco sem saida nenhuma.
+// Fora do catalogo de proposito: "/configuracoes", que e so do dono do
+// inquilino (logo da empresa e senha do login principal) e por isso e barrada
+// por somentePrincipal, nao por acesso de tela; e "/sem-acesso", a tela neutra
+// onde cai quem nao tem nenhuma das outras.
 
 export interface Tela {
   id: string;
@@ -29,6 +30,11 @@ export interface Tela {
 export const TELA_ACESSO_TOTAL = "*";
 
 export const CATALOGO_TELAS: Tela[] = [
+  // Inicio                                              /
+  // A tela de boas-vindas, com os atalhos e os avisos do sininho. Quem nao
+  // tem acesso a ela cai, ao entrar, na primeira tela que puder abrir.
+  { id: "inicio", grupo: "Início", rotulo: "Página inicial" },
+
   // Cadastro                                            /cadastro/*
   { id: "cadastro.produto", grupo: "Cadastro", rotulo: "Produto" },
   { id: "cadastro.loja", grupo: "Cadastro", rotulo: "Loja" },

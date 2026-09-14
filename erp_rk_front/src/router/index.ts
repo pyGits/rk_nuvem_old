@@ -22,6 +22,7 @@ import CadastroImpFderal from "@/views/Fiscal/Federais/CadastroImpFederal.vue";
 import CargaLoja from "@/views/Carga/Loja.vue";
 import Downloads from "@/views/Downloads/Downloads.vue";
 import Inicio from "@/views/Home/Inicio.vue";
+import SemAcesso from "@/views/Home/SemAcesso.vue";
 import ListaFinalizadora from "@/views/Finalizadora/ListaFinalizadora.vue";
 import CadastroFinalizadora from "@/views/Finalizadora/CadastroFinalizadora.vue";
 import PainelVendas from "@/views/Relatorio/Caixa/Painel/Painel.vue";
@@ -157,7 +158,16 @@ const routes: Array<RouteConfig> = [
     component: Inicio,
     meta: {
       requiresAuth: true,
+      tela: "inicio",
     },
+  },
+  {
+    // Sempre acessivel a quem esta logado: e o destino de quem nao tem nenhuma
+    // tela liberada.
+    path: "/sem-acesso",
+    name: "sem-acesso",
+    component: SemAcesso,
+    meta: { requiresAuth: true },
   },
 
   // Produto
@@ -402,7 +412,9 @@ const routes: Array<RouteConfig> = [
     path: "/configuracoes",
     name: "configuracoes",
     component: Configuracoes,
-    meta: { requiresAuth: true },
+    // A tela inteira e do dono do inquilino: logo da empresa e senha do login
+    // principal. As duas rotas de API por tras dela ja exigem somentePrincipal.
+    meta: { requiresAuth: true, somentePrincipal: true },
   },
 ];
 
@@ -454,14 +466,21 @@ router.beforeEach(async (to, from, next) => {
     }
   }
 
+  // Telas do dono do inquilino: o item nem aparece no menu, mas a URL digitada
+  // chegaria aqui.
+  if (to.meta && to.meta.somentePrincipal && !store.getters.souPrincipal) {
+    store.dispatch("showToastMessage", "Somente o login principal acessa esta tela.");
+    return next(from.name ? false : store.getters.rotaInicial());
+  }
+
   // A tela pedida esta liberada para este usuario? Sem isto, digitar a URL na
   // barra de enderecos abriria uma tela que nem aparece no menu dele.
   const tela = to.meta && to.meta.tela;
   if (tela && !store.getters.podeAcessar(tela)) {
     store.dispatch("showToastMessage", "Você não tem acesso a esta tela.");
     // Vindo de outra tela, cancela a navegacao e fica onde esta; vindo de fora
-    // (URL digitada, F5), manda para o inicio, que e sempre liberado.
-    return next(from.name ? false : "/");
+    // (URL digitada, F5), manda para a primeira tela que a pessoa pode abrir.
+    return next(from.name ? false : store.getters.rotaInicial());
   }
 
   return next();

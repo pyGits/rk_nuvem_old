@@ -131,6 +131,14 @@ function filtrosVenda(query: any, tenant_id: number, alias: string): string {
  * cupom já filtrado e o item cancelado aparece marcado na tela, ela vale no
  * nível do cupom (situacaoNoCupom).
  */
+// Identifica o cupom para casar a venda com as formas de pagamento dela. A
+// data pode chegar como Date ou como string, dependendo do driver - por isso a
+// normalizacao antes de montar a chave.
+function chaveDoCupom(data: any, caixa: any, codigo: any, loja: any): string {
+  const dia = data instanceof Date ? data.toISOString().slice(0, 10) : String(data).slice(0, 10);
+  return `${dia}_${caixa}_${codigo}_${loja}`;
+}
+
 function filtrosVendaFilho(query: any, tenant_id: number, alias: string, opcoes: { situacaoNoCupom?: boolean } = {}): string {
   const doCupom =
     condicoesVenda(query, "vfil") +
@@ -458,7 +466,50 @@ GROUP BY p.descricao, v.codigo_produto, p.codigo_barras;
     ${filtroLoja}
     ${filtros}
     `);
-    res.status(200).json(result[0]);
+
+    // As formas de pagamento de cada cupom vao junto: no sintetico a tela
+    // mostra a finalizadora na propria linha quando ha uma so, e abre uma
+    // linha por finalizadora quando ha mais de uma.
+    //
+    // Consulta separada, e nao join, porque um cupom pago em duas formas
+    // duplicaria a linha do cupom - e com ela o valor total, que e somado no
+    // rodape. Mesma consulta que o analitico ja faz.
+    const filtroLojaFormas = loja ? `and vf.loja = ${loja}` : "";
+    const filtrosFormas = filtrosVendaFilho(req.query, tenant_id, "vf", { situacaoNoCupom: true });
+
+    const formas = await sequelize.query(`select vf.data, vf.codigo_cupom, vf.caixa, vf.loja,
+    vf.finalizadora as codigo_finalizadora, f.nome as descricao,
+    vf.valor, vf.valor_troco, vf.prestacao, vf.cancelado
+    from venda_formas vf
+    left join finalizadoras f on f.codigo = vf.finalizadora and f.tenant_id = vf.tenant_id
+    where vf.tenant_id = ${tenant_id}
+    and vf.data >= '${dtInicio}'
+    and vf.data <= '${dtFim}'
+    ${filtroLojaFormas}
+    ${filtrosFormas}
+    order by vf.data, vf.caixa, vf.codigo_cupom, vf.prestacao
+    `);
+
+    const formasPorCupom = new Map<string, any[]>();
+    (formas[0] as any[]).forEach((forma) => {
+      const chave = chaveDoCupom(forma.data, forma.caixa, forma.codigo_cupom, forma.loja);
+      if (!formasPorCupom.has(chave)) formasPorCupom.set(chave, []);
+      formasPorCupom.get(chave).push({
+        codigo_finalizadora: forma.codigo_finalizadora,
+        descricao: forma.descricao,
+        valor: forma.valor,
+        valor_troco: forma.valor_troco,
+        prestacao: forma.prestacao,
+        cancelado: forma.cancelado,
+      });
+    });
+
+    const cupons = (result[0] as any[]).map((cupom) => ({
+      ...cupom,
+      finalizadoras: formasPorCupom.get(chaveDoCupom(cupom.data, cupom.caixa, cupom.codigo, cupom.loja)) || [],
+    }));
+
+    res.status(200).json(cupons);
   },
 
   // Relatório analítico: itens e formas de pagamento de todos os cupons do

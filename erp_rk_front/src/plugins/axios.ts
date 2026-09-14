@@ -42,7 +42,8 @@ axios.interceptors.response.use(
       store.dispatch("carregarSessao").catch(() => undefined);
       store.dispatch("showToastMessage", "Você não tem acesso a esta tela.");
 
-      if (router.currentRoute.path !== "/") router.push("/").catch(() => undefined);
+      const destino = store.getters.rotaInicial();
+      if (router.currentRoute.path !== destino) router.push(destino).catch(() => undefined);
     }
 
     return Promise.reject(error);

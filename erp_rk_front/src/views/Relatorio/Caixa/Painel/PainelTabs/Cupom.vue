@@ -17,17 +17,22 @@
       <v-data-table
         v-if="tipoRelatorio === 'sintetico'"
         :headers="headers"
-        :items="cupons"
+        :items="linhasSintetico"
         :items-per-page="10"
         class="elevation-1 linha-clicavel"
         style="margin-top: 20px"
         :sort-by.sync="sortBy"
         :sort-desc.sync="sortDesc"
+        :custom-sort="ordenarMantendoFinalizadoras"
         :item-class="rowClass"
         @click:row="carregarCupom"
       >
         <template v-slot:item.data="{ item }">
-          {{ formatDateBR(item.data) }}
+          {{ item.data ? formatDateBR(item.data) : "" }}
+        </template>
+        <template v-slot:item.finalizadora_descricao="{ item }">
+          <span v-if="item.ehLinhaFinalizadora" class="pl-4">&rsaquo; {{ item.finalizadora_descricao }}</span>
+          <span v-else>{{ item.finalizadora_descricao }}</span>
         </template>
         <template v-slot:item.cliente_nome="{ item }">
           <span v-if="item.cliente_nome">{{ descricaoCliente(item) }}</span>
@@ -49,6 +54,9 @@
             <th class="title"></th>
             <th class="title"></th>
             <th class="title">{{ sumField("valor_total_original") }}</th>
+            <th class="title"></th>
+            <th class="title">{{ sumFinalizadoras("valor") }}</th>
+            <th class="title">{{ sumFinalizadoras("valor_troco") }}</th>
             <th class="title"></th>
             <th class="title"></th>
             <th class="title">{{ sumField("qtde_item_original") }}</th>
@@ -256,6 +264,7 @@
 
 <script>
 import { maskMoney, maskQtd, maskDateBR } from "@/utils/masks";
+import { montarLinhasSinteticas, ordenarMantendoFilhas } from "@/utils/cupomSintetico";
 
 export default {
   data() {
@@ -289,6 +298,13 @@ export default {
         { text: "Hora", value: "hora" },
         { text: "Caixa", value: "caixa" },
         { text: "Valor Total", value: "valor_total_original" },
+        // Cupom pago numa forma so mostra tudo na propria linha; com duas ou
+        // mais, cada forma vira uma linha logo abaixo. Nao sao ordenaveis: a
+        // ordenacao e sempre pelo cupom, senao as linhas de forma se soltariam
+        // do cupom a que pertencem.
+        { text: "Finalizadora", value: "finalizadora_descricao", sortable: false },
+        { text: "Vlr. Pago", value: "finalizadora_valor", sortable: false },
+        { text: "Troco", value: "finalizadora_troco", sortable: false },
         { text: "CPF Consumidor", value: "cpf_consumidor" },
         { text: "Cliente", value: "cliente_nome" },
         { text: "Qtd. Item", value: "qtde_item_original" },
@@ -325,6 +341,15 @@ export default {
         valor_total_format: maskMoney(item.valor_total),
         qtde_item_format: maskQtd(item.qtde_item),
       }));
+    },
+    // O que a tabela do sintetico realmente mostra: a linha do cupom e, quando
+    // ele foi pago em mais de uma forma, uma linha por forma logo abaixo.
+    //
+    // Com uma forma so nao ha linha extra - os dados dela cabem na propria
+    // linha do cupom, e criar uma filha para cada cupom dobraria a altura da
+    // tabela sem informacao nova.
+    linhasSintetico() {
+      return montarLinhasSinteticas(this.cupons, this.chaveCupom, maskMoney);
     },
     cupomUnico() {
       return this.$store.state.relatorio.relatorioCupomUnico || { itens: [], formasPagamento: [] };
@@ -409,7 +434,29 @@ export default {
       return `${cupom.cliente_codigo} - ${cupom.cliente_nome}`.trim();
     },
     rowClass(item) {
-      return item.cancelado == 1 ? "cupom-cancelado-row" : "";
+      const classes = [];
+      if (item.cancelado == 1) classes.push("cupom-cancelado-row");
+      if (item.ehLinhaFinalizadora) classes.push("linha-finalizadora");
+      return classes.join(" ");
+    },
+    // A ordenacao e sempre pelo cupom: ordena so as linhas de cupom e reinsere
+    // as formas de pagamento logo abaixo da sua. Sem isto, ordenar por Valor
+    // Total espalharia as linhas de forma pela tabela, longe do cupom delas.
+    ordenarMantendoFinalizadoras(items, sortBy, sortDesc) {
+      const campo = sortBy && sortBy.length ? sortBy[0] : null;
+      const desc = sortDesc && sortDesc.length ? sortDesc[0] : false;
+
+      return ordenarMantendoFilhas(items, campo, desc, this.chaveCupom);
+    },
+    // Soma o que veio das formas de pagamento, nao das linhas da tabela: o
+    // valor pago de um cupom de uma forma so fica na linha do proprio cupom, e
+    // o dos demais nas filhas.
+    sumFinalizadoras(campo) {
+      const total = this.cupons.reduce((acc, cupom) => {
+        return acc + (cupom.finalizadoras || []).reduce((soma, forma) => soma + Number(forma[campo] || 0), 0);
+      }, 0);
+
+      return maskMoney(total);
     },
     chaveCupom(item) {
       return `${item.data}_${item.caixa}_${item.codigo_cupom || item.codigo}_${item.loja}`;
@@ -426,7 +473,10 @@ export default {
         this.carregandoAnalitico = false;
       });
     },
-    carregarCupom(cupom) {
+    carregarCupom(linha) {
+      // Clicar na linha de uma forma de pagamento abre o detalhe do cupom dela.
+      const cupom = linha.ehLinhaFinalizadora ? linha.cupomPai : linha;
+
       this.selectedCupom = cupom;
       this.dialogCupom = true;
       this.carregandoCupom = true;
@@ -464,12 +514,44 @@ export default {
         ],
       };
     },
+    // No Excel sai o mesmo que a tela mostra: a linha do cupom e, quando ele
+    // foi pago em mais de uma forma, uma linha por forma logo abaixo dela.
     cuponsParaExportar() {
-      const camposTela = ["valor_total_original", "qtde_item_original", "valor_total_format", "qtde_item_format"];
-      return this.cupons.map((item) => {
-        const cupom = { ...item };
-        camposTela.forEach((campo) => delete cupom[campo]);
-        return cupom;
+      const camposTela = [
+        "valor_total_original",
+        "qtde_item_original",
+        "valor_total_format",
+        "qtde_item_format",
+        "finalizadoras",
+        "ehLinhaFinalizadora",
+        "chavePai",
+        "cupomPai",
+        "indiceForma",
+      ];
+
+      return this.linhasSintetico.map((linha) => {
+        const exportada = { ...linha };
+        camposTela.forEach((campo) => delete exportada[campo]);
+
+        // Os valores vao como numero, para somar e filtrar no Excel. Na linha
+        // do cupom eles so aparecem quando ha uma forma de pagamento so - com
+        // duas ou mais, o valor esta nas linhas de baixo, e repeti-lo aqui
+        // faria a coluna somar duas vezes.
+        const formas = linha.finalizadoras || [];
+
+        if (linha.ehLinhaFinalizadora) {
+          const original = (linha.cupomPai.finalizadoras || [])[linha.indiceForma] || {};
+          exportada.finalizadora_valor = Number(original.valor || 0);
+          exportada.finalizadora_troco = Number(original.valor_troco || 0);
+        } else if (formas.length === 1) {
+          exportada.finalizadora_valor = Number(formas[0].valor || 0);
+          exportada.finalizadora_troco = Number(formas[0].valor_troco || 0);
+        } else {
+          exportada.finalizadora_valor = "";
+          exportada.finalizadora_troco = "";
+        }
+
+        return exportada;
       });
     },
     // Um bloco por cupom, cada trecho com o seu próprio cabeçalho. Os valores
@@ -573,6 +655,10 @@ export default {
 }
 .linha-clicavel >>> .cupom-cancelado-row:hover {
   background-color: #ffcdd2 !important;
+}
+.linha-clicavel >>> .linha-finalizadora {
+  background-color: #fafafa;
+  font-size: 0.85rem;
 }
 .chave-xml-text {
   font-family: monospace;

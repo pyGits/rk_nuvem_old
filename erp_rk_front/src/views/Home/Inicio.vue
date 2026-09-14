@@ -15,7 +15,7 @@
       </div>
     </v-card>
 
-    <v-card flat>
+    <v-card flat v-if="atalhos.length">
       <v-card-title class="text-subtitle-1">Acesso rápido</v-card-title>
       <v-divider></v-divider>
       <v-row class="pa-4" dense>
@@ -58,16 +58,18 @@ export default {
   name: "Inicio",
   data() {
     return {
-      atalhos: [
-        { name: "Produtos", to: "/cadastro/produto", icon: "mdi-package-variant-closed" },
-        { name: "Clientes", to: "/cadastro/cliente", icon: "mdi-account-multiple" },
-        { name: "Painel de Vendas", to: "/relatorio/caixa/painel", icon: "mdi-chart-bar" },
-        { name: "Painel de Estoque", to: "/relatorio/estoque/painel", icon: "mdi-warehouse" },
-        { name: "Contas a Pagar", to: "/financeiro/contas-a-pagar", icon: "mdi-credit-card-outline" },
-        { name: "Contas a Receber", to: "/financeiro/contas-a-receber", icon: "mdi-cash-multiple" },
-        { name: "Carga", to: "/carga/loja", icon: "mdi-cloud-upload-outline" },
-        { name: "Fornecedores", to: "/cadastro/fornecedor", icon: "mdi-truck-outline" },
-        { name: "Downloads", to: "/downloads", icon: "mdi-cloud-download-outline" },
+      // Cada atalho carrega o id da tela no catalogo para ser escondido de
+      // quem nao tem acesso - senao a pessoa clica e leva "sem acesso".
+      todosAtalhos: [
+        { name: "Produtos", to: "/cadastro/produto", tela: "cadastro.produto", icon: "mdi-package-variant-closed" },
+        { name: "Clientes", to: "/cadastro/cliente", tela: "cadastro.cliente", icon: "mdi-account-multiple" },
+        { name: "Painel de Vendas", to: "/relatorio/caixa/painel", tela: "relatorio.caixa.painel", icon: "mdi-chart-bar" },
+        { name: "Painel de Estoque", to: "/relatorio/estoque/painel", tela: "relatorio.estoque.painel", icon: "mdi-warehouse" },
+        { name: "Contas a Pagar", to: "/financeiro/contas-a-pagar", tela: "financeiro.contas_pagar", icon: "mdi-credit-card-outline" },
+        { name: "Contas a Receber", to: "/financeiro/contas-a-receber", tela: "financeiro.contas_receber", icon: "mdi-cash-multiple" },
+        { name: "Carga", to: "/carga/loja", tela: "carga.loja", icon: "mdi-cloud-upload-outline" },
+        { name: "Fornecedores", to: "/cadastro/fornecedor", tela: "cadastro.fornecedor", icon: "mdi-truck-outline" },
+        { name: "Downloads", to: "/downloads", tela: "downloads", icon: "mdi-cloud-download-outline" },
       ],
     };
   },
@@ -75,6 +77,9 @@ export default {
     await this.$store.dispatch("getNotificacoes");
   },
   computed: {
+    atalhos() {
+      return this.todosAtalhos.filter((atalho) => this.$podeAcessar(atalho.tela));
+    },
     tenant() {
       return this.$store.state.tenant.tenant;
     },

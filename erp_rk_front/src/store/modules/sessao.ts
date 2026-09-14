@@ -1,4 +1,5 @@
 import Vue from "vue";
+import menuItems from "@/components/Menu/Menu.json";
 
 // Quem esta logado e a que telas essa pessoa tem acesso.
 //
@@ -93,5 +94,28 @@ export default {
     },
 
     catalogoTelas: (state: EstadoSessao) => state.catalogo,
+
+    // Para onde mandar a pessoa ao entrar, e sempre que uma tela for recusada.
+    //
+    // O Inicio e uma tela como as outras: quem nao tem acesso a ela vai para a
+    // primeira do menu que puder abrir. Quem nao tem nenhuma vai para a tela
+    // neutra - sem isso o login mandaria para "/" , que ela tambem nao pode
+    // abrir, e a navegacao entraria em loop.
+    rotaInicial: (state: EstadoSessao, getters: any) => (): string => {
+      if (getters.podeAcessar("inicio")) return "/";
+
+      const folhas: any[] = [];
+      const percorrer = (itens: any[]) => {
+        itens.forEach((item) => {
+          if (item.to) folhas.push(item);
+          if (item.subItems) percorrer(item.subItems);
+          if (item.subSubItems) percorrer(item.subSubItems);
+        });
+      };
+      percorrer(menuItems as any[]);
+
+      const liberada = folhas.find((folha) => getters.podeAcessar(folha.tela));
+      return liberada ? liberada.to : "/sem-acesso";
+    },
   },
 };

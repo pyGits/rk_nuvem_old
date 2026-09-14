@@ -1,5 +1,6 @@
 import { QueryTypes } from "sequelize";
 import sequelize from "../database/config";
+import { podeAcessar } from "../permissao/PermissaoService";
 
 // Alertas do próprio negócio do tenant, mostrados no sininho do front:
 // contas a pagar vencendo/vencidas e produtos com estoque baixo/zerado.
@@ -7,42 +8,57 @@ import sequelize from "../database/config";
 const DIAS_ANTECEDENCIA_VENCIMENTO = 7;
 const LIMITE_POR_TIPO = 15;
 
+// Cada consulta fica numa funcao propria para o filtro de acesso acima ficar
+// legivel - e para as duas continuarem indo ao banco em paralelo.
+function consultarContasAVencer(tenant_id: number) {
+  return sequelize.query(
+    `
+    SELECT id, descricao_conta, numero_documento_conta, vencimento, valor, valor_pago
+    FROM conta_pagar_titulo
+    WHERE tenant_id = :tenant_id
+      AND status = 'ABERTO'
+      AND vencimento <= (CURRENT_DATE + make_interval(days => :dias))
+    ORDER BY vencimento ASC
+    LIMIT :limite
+    `,
+    {
+      replacements: { tenant_id, dias: DIAS_ANTECEDENCIA_VENCIMENTO, limite: LIMITE_POR_TIPO },
+      type: QueryTypes.SELECT,
+    }
+  );
+}
+
+function consultarEstoqueBaixo(tenant_id: number) {
+  return sequelize.query(
+    `
+    SELECT p.codigo, p.descricao, e.loja, e.estoque, e.estoque_minimo
+    FROM estoques e
+    JOIN produtos p ON p.codigo = e.codigo_produto AND p.tenant_id = e.tenant_id
+    WHERE e.tenant_id = :tenant_id
+      AND (e.estoque <= 0 OR (e.estoque_minimo > 0 AND e.estoque < e.estoque_minimo))
+    ORDER BY e.estoque ASC
+    LIMIT :limite
+    `,
+    { replacements: { tenant_id, limite: LIMITE_POR_TIPO }, type: QueryTypes.SELECT }
+  );
+}
+
 export default {
   async listar(req: any, res: any) {
     const { tenant_id } = req;
 
     try {
+      // O alerta carrega o dado, nao so o aviso: o de conta a pagar mostra
+      // descricao e valor em aberto, e o de estoque mostra o saldo por loja.
+      // Quem nao tem acesso a tela nao pode ve-los pelo sininho.
+      const [verContas, verEstoque] = await Promise.all([
+        podeAcessar(req, "financeiro.contas_pagar"),
+        podeAcessar(req, "relatorio.estoque.painel"),
+      ]);
+
       const [contas, estoques] = await Promise.all([
-        sequelize.query(
-          `
-          SELECT id, descricao_conta, numero_documento_conta, vencimento, valor, valor_pago
-          FROM conta_pagar_titulo
-          WHERE tenant_id = :tenant_id
-            AND status = 'ABERTO'
-            AND vencimento <= (CURRENT_DATE + make_interval(days => :dias))
-          ORDER BY vencimento ASC
-          LIMIT :limite
-          `,
-          {
-            replacements: { tenant_id, dias: DIAS_ANTECEDENCIA_VENCIMENTO, limite: LIMITE_POR_TIPO },
-            type: QueryTypes.SELECT,
-          }
-        ),
-        sequelize.query(
-          `
-          SELECT p.codigo, p.descricao, e.loja, e.estoque, e.estoque_minimo
-          FROM estoques e
-          JOIN produtos p ON p.codigo = e.codigo_produto AND p.tenant_id = e.tenant_id
-          WHERE e.tenant_id = :tenant_id
-            AND (e.estoque <= 0 OR (e.estoque_minimo > 0 AND e.estoque < e.estoque_minimo))
-          ORDER BY e.estoque ASC
-          LIMIT :limite
-          `,
-          {
-            replacements: { tenant_id, limite: LIMITE_POR_TIPO },
-            type: QueryTypes.SELECT,
-          }
-        ),
+        verContas ? consultarContasAVencer(tenant_id) : Promise.resolve([]),
+        verEstoque ? consultarEstoqueBaixo(tenant_id) : Promise.resolve([]),
       ]);
 
       const hoje = new Date();
