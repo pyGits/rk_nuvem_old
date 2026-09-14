@@ -19,10 +19,7 @@ export default {
   async mounted() {
     if (this.logado) {
       await this.$store
-        .dispatch("getTenant")
-        .then((res) => {
-          this.$store.commit("setTenant", res.data);
-        })
+        .dispatch("carregarSessao")
         .catch((erro) => {
           // Só o servidor pode dizer que a sessão acabou. Este catch era cego:
           // qualquer falha apagava o token e mandava para o login — e durante um

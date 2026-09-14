@@ -12,28 +12,28 @@ class V2CategoriaFinanceiraRoutes {
     httpServer.register("get", "/v2/categoria-financeira", async (params: any) => {
       const output = await this.categoriaFinanceiraUseCase.getAll({ tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.categoria", "financeiro.contas_pagar", "financeiro.contas_receber", "relatorio.financeiro.balancete");
     httpServer.register("post", "/v2/categoria-financeira", async (params: any, body: any) => {
       const output = await this.categoriaFinanceiraUseCase.insert({ body: body, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.categoria");
     httpServer.register("put", "/v2/categoria-financeira", async (params: any, body: any) => {
       const output = await this.categoriaFinanceiraUseCase.update({ body: body, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.categoria");
     httpServer.register("delete", "/v2/categoria-financeira/:codigo", async (params: any, body: any) => {
       const output = await this.categoriaFinanceiraUseCase.delete({ codigo: params.codigo, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.categoria");
     httpServer.register("get", "/v2/categoria-financeira/sub-categorias", async (params: any) => {
       const output = await this.categoriaFinanceiraUseCase.getAllWithSubCategorias({ tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.categoria", "financeiro.contas_pagar", "financeiro.contas_receber", "relatorio.financeiro.balancete");
 
     httpServer.register("get", "/v2/categoria-financeira/relatorio/balancete", async (params: any, body: any, query: any) => {
       const output = await this.categoriaFinanceiraUseCase.getBalancete({ tenant_id: params.tenant_id, filtros: query });
       return output.data;
-    });
+    }, "relatorio.financeiro.balancete");
   }
 }
 

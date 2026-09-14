@@ -18,49 +18,49 @@ export class V2CompraRoutes {
     httpServer.register("get", "/v2/compra/notas/sefaz", async (params: any) => {
       const output = await this.compraUseCase.getAllSefaz({ tenant_id: params.tenant_id });
       return output;
-    });
+    }, "compra.recebimento");
     httpServer.register("get", "/v2/compra/notas/:chave/capturar", async (params: any) => {
       const output = await this.compraUseCase.capturaXml(params.chave, params.tenant_id);
       return output;
-    });
+    }, "compra.recebimento");
     httpServer.register("get", "/v2/compra/notas/:chave/romaneio", async (params: any) => {
       const output = await this.compraUseCase.gerarRomaneio({ chave: params.chave, tenant_id: params.tenant_id });
       return output;
-    });
+    }, "compra.recebimento");
     httpServer.register("put", "/v2/compra/notas/:chave/etapa/:etapa", async (params: any, body: any) => {
       const output = await this.compraUseCase.atualizarEtapa({ chave: params.chave, etapa: params.etapa, tenant_id: params.tenant_id });
       return output;
-    });
+    }, "compra.recebimento");
     httpServer.register("post", "/v2/compra/notas/desfazer", async (params: any, body: any) => {
       const output = await this.compraUseCase.desfazerNota({ body: body, tenant_id: params.tenant_id });
       return output;
-    });
+    }, "compra.recebimento");
     httpServer.register("post", "/v2/compra/notas/atualizarTransportadora", async (params: any, body: any) => {
       const output = await this.compraUseCase.atualizarTransportadora({ body: body, tenant_id: params.tenant_id });
       return output;
-    });
+    }, "compra.recebimento");
     httpServer.register("post", "/v2/compra/notas/efetivar", async (params: any, body: any) => {
       const output = await this.compraUseCase.efetivarNota({ body: body, tenant_id: params.tenant_id });
       return output;
-    });
+    }, "compra.recebimento");
     httpServer.register("get", "/v2/compra/notas/:chave_xml", async (params: any) => {
       const output = await this.compraUseCase.getNota({ chave_nota: params.chave_xml, tenant_id: params.tenant_id });
       return output;
-    });
+    }, "compra.recebimento");
 
     httpServer.register("get", "/v2/compra/notas", async (params: any) => {
       const output = await this.compraUseCase.getAll({ tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "compra.recebimento");
 
     httpServer.registerFiles("post", "/v2/compra/uploadLoteXML", async (params: any, body: any) => {
       const output = await this.compraUseCase.uploadLoteXML(params.files, params.tenant_id);
       return { message: output.message, status: output.status };
-    });
+    }, "compra.recebimento");
     httpServer.registerFiles("post", "/v2/compra/uploadXML", async (params: any, body: any) => {
       const output = await this.compraUseCase.uploadXML(params.files, params.tenant_id);
       return { message: output.message, status: output.status, chave_xml: output.chave_xml };
-    });
+    }, "compra.recebimento");
   }
 }
 

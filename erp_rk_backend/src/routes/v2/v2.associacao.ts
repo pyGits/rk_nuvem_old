@@ -11,7 +11,7 @@ class V2AssociacaoRoutes {
     httpServer.register("post", "/v2/associacao", async (params: any, body: any) => {
       const output = await this.associacaoUseCase.insert({ body: body, tenant_id: params.tenant_id });
       return output;
-    });
+    }, "compra.recebimento");
     // httpServer.register("get", "/v2/associacao/nota", async (params: any, body: any) => {
     //   const output = await this.associacaoUseCase.getByNota({ body: body, tenant_id: params.tenant_id });
     //   return output;

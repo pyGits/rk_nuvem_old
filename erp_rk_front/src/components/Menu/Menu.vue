@@ -119,10 +119,27 @@ export default {
       return (this.tenantNome || "?").trim().charAt(0).toUpperCase();
     },
 
+    // Monta o menu com o que este usuario pode abrir. Antes isto era inerte
+    // (olhava um campo "rule" que nenhum item tinha) e so filtrava o primeiro
+    // nivel; agora percorre os tres: some a folha sem acesso, some o subgrupo
+    // que ficou sem folha e some o grupo que ficou sem subgrupo - senao a
+    // barra lateral fica cheia de grupos vazios que nao abrem nada.
+    //
+    // Folha SEM o campo "tela" continua visivel de proposito: um id digitado
+    // errado no Menu.json nao pode fazer a tela sumir do menu de todo mundo em
+    // silencio. Quem barra de verdade e o backend.
     filterMenu() {
-      return this.menuItems.filter((item) => {
-        if (!item.rule) return true;
-      });
+      const pode = (item) => !item.tela || this.$store.getters.podeAcessar(item.tela);
+
+      return this.menuItems
+        .map((grupo) => {
+          const subItems = (grupo.subItems || [])
+            .map((sub) => (sub.subSubItems ? { ...sub, subSubItems: sub.subSubItems.filter(pode) } : sub))
+            .filter((sub) => (sub.subSubItems ? sub.subSubItems.length > 0 : pode(sub)));
+
+          return { ...grupo, subItems };
+        })
+        .filter((grupo) => grupo.subItems.length > 0);
     },
   },
   data() {

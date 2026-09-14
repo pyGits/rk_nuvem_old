@@ -89,10 +89,7 @@ export default {
                 res.data.token;
 
               await this.$store
-                .dispatch("getTenant")
-                .then((res) => {
-                  this.$store.commit("setTenant", res.data);
-                })
+                .dispatch("carregarSessao")
                 .catch(() => {
                   Vue.prototype.$http.defaults.headers.common[
                     "x-access-token"

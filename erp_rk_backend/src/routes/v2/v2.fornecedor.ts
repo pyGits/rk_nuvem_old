@@ -15,7 +15,7 @@ export class V2FornecedorRoutes {
     httpServer.register("post", "/v2/fornecedor", async (params: any, body: any) => {
       const output = await this.fornecedorUseCase.insert({ body: body, tenant_id: params.tenant_id });
       return { message: output.message, fornecedor_id: output.data };
-    });
+    }, "cadastro.fornecedor", "compra.recebimento");
     httpServer.register("get", "/v2/fornecedor", async (params: any) => {
       const output = await this.fornecedorUseCase.getAll({ tenant_id: params.tenant_id });
       return output.data;
@@ -35,7 +35,7 @@ export class V2FornecedorRoutes {
     httpServer.register("put", "/v2/fornecedor", async (params: any, body: any) => {
       const output = await this.fornecedorUseCase.update({ body: body, tenant_id: params.tenant_id });
       return { message: output.message };
-    });
+    }, "cadastro.fornecedor", "compra.recebimento");
   }
 }
 

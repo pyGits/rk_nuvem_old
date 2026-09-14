@@ -1,6 +1,7 @@
 import Vue from "vue";
 import axios from "axios";
 import router from "@/router";
+import store from "@/store";
 // Em produção o nginx serve o front e faz proxy de /api para o backend, então a
 // chamada é na mesma origem. Em desenvolvimento o devServer do vue-cli faz o
 // mesmo proxy para http://localhost:3000 (ver vue.config.js).
@@ -29,6 +30,21 @@ axios.interceptors.response.use(
       localStorage.removeItem("access_token");
       irParaLogin();
     }
+
+    // Sem acesso a tela. NAO e sessao expirada: o token continua valido, entao
+    // nao se apaga nada - apagar aqui jogaria o usuario para fora do sistema so
+    // por ele ter clicado numa tela que nao e dele.
+    //
+    // Acontece de verdade quando o dono tira um acesso enquanto a pessoa esta
+    // logada: o menu dela ainda mostra a tela antiga. Recarregar a sessao aqui
+    // reajusta o menu na hora, sem esperar o proximo F5.
+    if (error?.response?.status === 403 && error?.response?.data?.codigo === "SEM_PERMISSAO") {
+      store.dispatch("carregarSessao").catch(() => undefined);
+      store.dispatch("showToastMessage", "Você não tem acesso a esta tela.");
+
+      if (router.currentRoute.path !== "/") router.push("/").catch(() => undefined);
+    }
+
     return Promise.reject(error);
   }
 );

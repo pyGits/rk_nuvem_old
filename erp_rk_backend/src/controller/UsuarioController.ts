@@ -2,8 +2,63 @@ import { msgComercial } from "./messages";
 import Tenant from "../models/Tenant";
 import Usuario from "../models/Usuario";
 import { getNextSequencial } from "./UtilsController";
+import PermissaoRepository from "../permissao/PermissaoRepository";
+import { invalidarCache } from "../permissao/PermissaoService";
+import { apenasTelasConhecidas, TELA_ACESSO_TOTAL } from "../permissao/CatalogoTelas";
 
 export default {
+  // As telas que este usuario pode abrir. Fica fora do getUsuario de proposito:
+  // o cadastro grava pelo model Sequelize, cujo hook beforeSave re-hasheia a
+  // senha, e o GET nao devolve `password` - juntar as duas coisas faria mexer
+  // num acesso exigir redigitar a senha do sujeito.
+  async getAcessos(req: any, res: any) {
+    const { tenant_id } = req;
+    const codigo = String(req.params.codigo);
+
+    const usuario = await Usuario.findOne({ where: { codigo, tenant_id } });
+    if (!usuario) {
+      return res.status(404).json({ message: "Usuario não encontrado !" });
+    }
+
+    const telas = await PermissaoRepository.listarTelas(tenant_id, codigo);
+
+    return res.status(200).json({
+      acessoTotal: telas.includes(TELA_ACESSO_TOTAL),
+      telas: telas.filter((tela) => tela !== TELA_ACESSO_TOTAL),
+    });
+  },
+
+  // Troca o conjunto de telas de uma vez. Body:
+  //   { acessoTotal: false, telas: ["cadastro.produto", ...] }
+  //
+  // Com acessoTotal, grava so a marca '*' - que vale inclusive para as telas
+  // que ainda nao existem. E o estado em que ficaram os usuarios que ja
+  // existiam quando esta feature subiu.
+  async updateAcessos(req: any, res: any) {
+    const { tenant_id } = req;
+    const codigo = String(req.params.codigo);
+    const { acessoTotal } = req.body;
+    const telasRecebidas: string[] = Array.isArray(req.body.telas) ? req.body.telas : [];
+
+    const usuario = await Usuario.findOne({ where: { codigo, tenant_id } });
+    if (!usuario) {
+      return res.status(404).json({ message: "Usuario não encontrado !" });
+    }
+
+    // Id fora do catalogo viraria permissao fantasma: gravada no banco, sem
+    // checkbox na tela para alguem enxergar ou tirar depois.
+    const telas = acessoTotal ? [TELA_ACESSO_TOTAL] : apenasTelasConhecidas(telasRecebidas);
+
+    try {
+      await PermissaoRepository.substituirTelas(tenant_id, codigo, telas);
+      invalidarCache(tenant_id, codigo);
+
+      return res.status(200).json({ message: "Acessos gravados com sucesso !" });
+    } catch (error) {
+      console.log("[permissao] falha ao gravar acessos", error);
+      return res.status(400).json({ message: "Erro ao gravar os acessos do usuário" });
+    }
+  },
   async getUsuario(req: any, res: any) {
     const { tenant_id } = req;
     const codigo = req.params.codigo;

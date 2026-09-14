@@ -63,6 +63,15 @@ object frmPrincipal: TfrmPrincipal
       TabOrder = 2
       OnClick = btnReenviarClick
     end
+    object btnCaixas: TButton
+      Left = 478
+      Top = 4
+      Width = 143
+      Height = 23
+      Caption = 'Caixas'
+      TabOrder = 3
+      OnClick = btnCaixasClick
+    end
   end
   object memLog: TMemo
     Left = 0
@@ -109,6 +118,10 @@ object frmPrincipal: TfrmPrincipal
   object PopupMenu1: TPopupMenu
     Left = 192
     Top = 280
+    object Caixas1: TMenuItem
+      Caption = 'Caixas...'
+      OnClick = btnCaixasClick
+    end
     object S1: TMenuItem
       Caption = 'Sair'
       OnClick = S1Click

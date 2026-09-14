@@ -29,7 +29,7 @@
         </template>
       </v-autocomplete>
       <v-spacer></v-spacer>
-      <v-btn icon to="/carga/loja" title="Enviar carga para as lojas">
+      <v-btn v-if="$podeAcessar('carga.loja')" icon to="/carga/loja" title="Enviar carga para as lojas">
         <v-icon>mdi-cloud-upload-outline</v-icon>
       </v-btn>
       <v-menu offset-y left :close-on-content-click="false" max-width="380">
@@ -186,6 +186,7 @@ export default {
     logout() {
       Vue.prototype.$http.defaults.headers.common["x-access-token"] = null;
       localStorage.removeItem("access_token");
+      this.$store.commit("resetSessao");
       this.$router.push("/login");
     },
     // Alem do "nome" (item-text padrao), busca tambem pelo caminho
@@ -217,7 +218,7 @@ export default {
       const itens = [];
       menuItems.forEach((secao) => {
         (secao.subItems || []).forEach((sub) => {
-          if (sub.to) {
+          if (sub.to && this.$podeAcessar(sub.tela)) {
             itens.push({
               nome: sub.name,
               caminho: `${secao.text} › ${sub.name}`,
@@ -226,6 +227,8 @@ export default {
             });
           }
           (sub.subSubItems || []).forEach((subSub) => {
+            if (!this.$podeAcessar(subSub.tela)) return;
+
             itens.push({
               nome: subSub.name,
               caminho: `${secao.text} › ${sub.name} › ${subSub.name}`,

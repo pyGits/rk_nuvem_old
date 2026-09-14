@@ -7,6 +7,12 @@ interface Usuario {
   password: string;
   endereco: Endereco;
   pessoa: Pessoa;
+  // Telas que este usuario pode abrir. Nao vao junto no POST/PUT de
+  // /usuarios: sao gravadas por /usuarios/:codigo/acessos, endpoint separado
+  // porque o cadastro passa pelo model que re-hasheia a senha (e porque o GET
+  // nao devolve a senha, entao gravar o cadastro obriga a redigita-la).
+  acessoTotal: boolean;
+  telas: string[];
 }
 
 const initialUsuario: Usuario = {
@@ -15,6 +21,8 @@ const initialUsuario: Usuario = {
   password: "",
   endereco: new Endereco(),
   pessoa: new Pessoa(),
+  acessoTotal: false,
+  telas: [],
 };
 
 export default {
@@ -54,6 +62,10 @@ export default {
     },
     resetUsuario(state: any) {
       state.usuario = Object.assign({}, initialUsuario);
+      // Array novo: o Object.assign acima e raso e todos os usuarios passariam
+      // a compartilhar a MESMA lista de telas.
+      state.usuario.telas = [];
+      state.usuario.acessoTotal = false;
     },
     setUsuarios(state: any, payload: any) {
       state.usuarioList = payload;
@@ -109,6 +121,16 @@ export default {
     setUsuarioPassword(state: any, payload: string) {
       state.usuario.password = payload;
     },
+    setUsuarioAcessos(state: any, payload: any) {
+      state.usuario.acessoTotal = !!payload.acessoTotal;
+      state.usuario.telas = payload.telas ? [...payload.telas] : [];
+    },
+    setUsuarioAcessoTotal(state: any, payload: boolean) {
+      state.usuario.acessoTotal = payload;
+    },
+    setUsuarioTelas(state: any, payload: string[]) {
+      state.usuario.telas = [...payload];
+    },
   },
 
   actions: {
@@ -140,6 +162,23 @@ export default {
         .catch((err: any) => {
           dispatch("showToastMessage", err.response.data.message);
         });
+    },
+    async getAcessosUsuario({ commit, dispatch }: any, payload: string) {
+      return await Vue.prototype.$http
+        .get(`/usuarios/${payload}/acessos`)
+        .then((res: any) => {
+          commit("setUsuarioAcessos", res.data);
+        })
+        .catch((err: any) => {
+          dispatch("showToastMessage", err.response.data.message);
+          return err;
+        });
+    },
+    async gravarAcessosUsuario({ state }: any, payload: string) {
+      return await Vue.prototype.$http.put(`/usuarios/${payload}/acessos`, {
+        acessoTotal: state.usuario.acessoTotal,
+        telas: state.usuario.telas,
+      });
     },
     async gravarUsuario({ state, commit, dispatch }: any, payload: string) {
       if (payload === "novo") {

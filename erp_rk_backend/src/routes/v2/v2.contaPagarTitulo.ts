@@ -11,7 +11,7 @@ class V2ContaPagarTituloRoutes {
     httpServer.register("put", "/v2/contaPagar/titulo", async (params: any, body: any) => {
       const output = await this.ContaPagarTituloUseCase.update({ body: body, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.contas_pagar");
   }
 }
 

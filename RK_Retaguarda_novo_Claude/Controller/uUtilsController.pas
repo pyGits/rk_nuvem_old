@@ -11,6 +11,7 @@ type TUtilsController = class
   destructor destroy;override;
   function GravarConfiguracoesBD(oConfiguracoes:TConfiguracoes):Boolean;
   function CarregarConfiguracoesBD(oConfiguracoes:TConfiguracoes):Boolean;
+  function ModoNuvemAtivoBD:Boolean;
   function RetornaSequencial(Tabela:string;Coluna:string):string;
   function RetornaSequencialFin(Tabela:string;Coluna:string;cupom:string):string;
   function ExisteCadastro(Tabela:string;Coluna:string;Valor:string):boolean;
@@ -54,6 +55,11 @@ function TUtilsController.AtualizarNivelAcessoRetaguarda(
   oAcessoRetaguarda: TAcessoRetaguarda): Boolean;
 begin
 result := dmCaixaAcesso.AtualizarNivelAcessoRetaguarda(oAcessoRetaguarda);
+end;
+
+function TUtilsController.ModoNuvemAtivoBD: Boolean;
+begin
+result := dmUtils.ModoNuvemAtivoBD;
 end;
 
 function TUtilsController.CarregarConfiguracoesBD(

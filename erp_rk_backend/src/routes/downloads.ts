@@ -1,8 +1,12 @@
 import { Router } from "express";
 import { verifyJWT } from "./auth.middleware";
+import { exigeAcesso } from "../permissao/permissao.middleware";
 import { verifyJWTADMIN } from "./auth.middleware.admin";
 import DownloadController from "../controller/DownloadController";
 
+// Nivel de acesso: a anotacao exigeAcesso(...) diz a que tela(s) do catalogo
+// (src/permissao/CatalogoTelas.ts) esta rota pertence. Quando a rota serve mais
+// de uma tela, basta ter acesso a qualquer uma delas.
 const router = Router();
 
 // Precisa vir antes de qualquer rota com parametro: o token do link ja carrega
@@ -10,8 +14,8 @@ const router = Router();
 router.get("/downloads/arquivo/:token", DownloadController.baixar);
 
 // Clientes logados
-router.get("/downloads", verifyJWT, DownloadController.listarPublicados);
-router.post("/downloads/:id/link", verifyJWT, DownloadController.gerarLink);
+router.get("/downloads", verifyJWT, exigeAcesso("downloads"), DownloadController.listarPublicados);
+router.post("/downloads/:id/link", verifyJWT, exigeAcesso("downloads"), DownloadController.gerarLink);
 
 // Página pública (sem login), para compartilhar por link. A lista de
 // downloads nunca foi por tenant (ver model Download), então não há dado

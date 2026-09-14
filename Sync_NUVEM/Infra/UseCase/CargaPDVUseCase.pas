@@ -1,7 +1,7 @@
 unit CargaPDVUseCase;
 
 interface
-uses CaixaRepository,CaixaModel,System.Generics.Collections,ClienteAPIRepository,ClienteModel,ClientePDVRepository;
+uses CaixaRepository,CaixaIniRepository,CaixaModel,System.Generics.Collections,ClienteAPIRepository,ClienteModel,ClientePDVRepository;
 type TCargaPDVUseCase = class
   private
   FCaixaRepository:ICaixaRepository;
@@ -20,7 +20,9 @@ uses System.SysUtils, uLogErro;
 
 constructor TCargaPDVUseCase.create;
 begin
-FCaixaRepository := TCaixaRepository.create;
+// Os caixas vem do cadastro do agente, e nao mais da tabela CAIXA do banco:
+// com a nuvem esse cadastro deixou de ser feito na retaguarda.
+FCaixaRepository := TCaixaIniRepository.create;
 FClienteApiRepository := TClienteApiRepository.create;
 FClientePDVRepository := TClientePdvRepository.create;
 end;

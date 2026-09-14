@@ -15,6 +15,7 @@ uses
   Classe.Funcoes in 'Classes\Classe.Funcoes.pas',
   Classe.Grupo in 'Classes\Classe.Grupo.pas',
   Classe.Marca in 'Classes\Classe.Marca.pas',
+  Classe.ModoNuvem in 'Classes\Classe.ModoNuvem.pas',
   Classe.NCM in 'Classes\Classe.NCM.pas',
   Classe.Produto in 'Classes\Classe.Produto.pas',
   Classe.Relatorio in 'Classes\Classe.Relatorio.pas',

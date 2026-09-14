@@ -1,7 +1,11 @@
 import { Router } from "express";
 import { verifyJWT } from "./auth.middleware";
+import { exigeAcesso } from "../permissao/permissao.middleware";
 import RelatorioController from "../controller/RelatorioController";
 
+// Nivel de acesso: a anotacao exigeAcesso(...) diz a que tela(s) do catalogo
+// (src/permissao/CatalogoTelas.ts) esta rota pertence. Quando a rota serve mais
+// de uma tela, basta ter acesso a qualquer uma delas.
 const router = Router();
 
 /**
@@ -23,17 +27,17 @@ function rota(handler: (req: any, res: any) => any) {
   };
 }
 
-router.get("/relatorios/painel/lojas", verifyJWT, rota(RelatorioController.relPainelLoja));
-router.get("/relatorios/painel/produtos", verifyJWT, rota(RelatorioController.relPainelProduto));
-router.get("/relatorios/painel/caixas", verifyJWT, rota(RelatorioController.relPainelCaixa));
-router.get("/relatorios/painel/finalizadoras", verifyJWT, rota(RelatorioController.relPainelFinalizadora));
-router.get("/relatorios/painel/secoes", verifyJWT, rota(RelatorioController.relPainelSecoes));
-router.get("/relatorios/painel/cupom", verifyJWT, rota(RelatorioController.relPainelCupom));
-router.get("/relatorios/painel/cupom/analitico", verifyJWT, rota(RelatorioController.relPainelCupomAnalitico));
-router.get("/relatorios/estoque/saldo", verifyJWT, rota(RelatorioController.relPainelSaldoEstoque));
+router.get("/relatorios/painel/lojas", verifyJWT, exigeAcesso("relatorio.caixa.painel"), rota(RelatorioController.relPainelLoja));
+router.get("/relatorios/painel/produtos", verifyJWT, exigeAcesso("relatorio.caixa.painel"), rota(RelatorioController.relPainelProduto));
+router.get("/relatorios/painel/caixas", verifyJWT, exigeAcesso("relatorio.caixa.painel"), rota(RelatorioController.relPainelCaixa));
+router.get("/relatorios/painel/finalizadoras", verifyJWT, exigeAcesso("relatorio.caixa.painel"), rota(RelatorioController.relPainelFinalizadora));
+router.get("/relatorios/painel/secoes", verifyJWT, exigeAcesso("relatorio.caixa.painel"), rota(RelatorioController.relPainelSecoes));
+router.get("/relatorios/painel/cupom", verifyJWT, exigeAcesso("relatorio.caixa.painel", "relatorio.caixa.controle"), rota(RelatorioController.relPainelCupom));
+router.get("/relatorios/painel/cupom/analitico", verifyJWT, exigeAcesso("relatorio.caixa.painel", "relatorio.caixa.controle"), rota(RelatorioController.relPainelCupomAnalitico));
+router.get("/relatorios/estoque/saldo", verifyJWT, exigeAcesso("relatorio.estoque.painel"), rota(RelatorioController.relPainelSaldoEstoque));
 
-router.get("/relatorios/cupom", verifyJWT, rota(RelatorioController.relCupomUnico));
+router.get("/relatorios/cupom", verifyJWT, exigeAcesso("relatorio.caixa.painel", "relatorio.caixa.controle"), rota(RelatorioController.relCupomUnico));
 
-router.get("/relatorios/produtos/listagem", verifyJWT, rota(RelatorioController.relProdutoListagem));
+router.get("/relatorios/produtos/listagem", verifyJWT, exigeAcesso("relatorio.produto.listagem"), rota(RelatorioController.relProdutoListagem));
 
 export default router;

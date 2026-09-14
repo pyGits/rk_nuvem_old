@@ -55,7 +55,10 @@ uses
   SubidaContaReceberUseCase in 'Infra\UseCase\SubidaContaReceberUseCase.pas',
   SubidaErroPDVUseCase in 'Infra\UseCase\SubidaErroPDVUseCase.pas',
   ReenvioPeriodoUseCase in 'Infra\UseCase\ReenvioPeriodoUseCase.pas',
-  IndicesNuvemRepository in 'Infra\Repository\Retaguarda\IndicesNuvemRepository.pas';
+  IndicesNuvemRepository in 'Infra\Repository\Retaguarda\IndicesNuvemRepository.pas',
+  ModoNuvemRepository in 'Infra\Repository\Retaguarda\ModoNuvemRepository.pas',
+  CaixaIniRepository in 'Infra\Repository\Config\CaixaIniRepository.pas',
+  CadastroCaixas in 'CadastroCaixas.pas' {frmCadastroCaixas};
 
 {$R *.res}
  var

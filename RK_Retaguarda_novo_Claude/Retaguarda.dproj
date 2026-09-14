@@ -103,6 +103,7 @@
         <DCCReference Include="Classes\Classe.Funcoes.pas"/>
         <DCCReference Include="Classes\Classe.Grupo.pas"/>
         <DCCReference Include="Classes\Classe.Marca.pas"/>
+        <DCCReference Include="Classes\Classe.ModoNuvem.pas"/>
         <DCCReference Include="Classes\Classe.NCM.pas"/>
         <DCCReference Include="Classes\Classe.Produto.pas"/>
         <DCCReference Include="Classes\Classe.Relatorio.pas"/>

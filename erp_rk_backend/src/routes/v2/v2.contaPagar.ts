@@ -14,31 +14,31 @@ class V2ContaPagarRoutes {
     httpServer.register("get", "/v2/contaPagar/titulos", async (params: any, body: any, query: any) => {
       const output = await this.contaPagarUseCase.getAllTitulos({ tenant_id: params.tenant_id, filter: query });
       return output.data;
-    });
+    }, "financeiro.contas_pagar");
     httpServer.register("get", "/v2/contaPagar", async (params: any) => {
       const output = await this.contaPagarUseCase.getAll({ tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.contas_pagar");
     httpServer.register("get", "/v2/contaPagar/:codigo", async (params: any) => {
       const output = await this.contaPagarUseCase.getByCodigo({ codigo: params.codigo, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.contas_pagar");
     httpServer.register("post", "/v2/contaPagar", async (params: any, body: any) => {
       const output = await this.contaPagarUseCase.insert({ body: body, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.contas_pagar");
     httpServer.register("post", "/v2/contaPagar/liquidar", async (params: any, body: any) => {
       const output = await this.contaPagarUseCase.liquidar({ body: body, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.contas_pagar");
     httpServer.register("post", "/v2/contaPagar/estornar", async (params: any, body: any) => {
       const output = await this.contaPagarUseCase.estornar({ body: body, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.contas_pagar");
     httpServer.register("post", "/v2/contaPagar/cancelar", async (params: any, body: any) => {
       const output = await this.contaPagarUseCase.cancelar({ body: body, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.contas_pagar");
   }
 }
 

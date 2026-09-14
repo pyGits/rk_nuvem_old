@@ -25,6 +25,7 @@ uses
     FNFCe: TConfNFce;
     FSYSPDV_IP: string;
     FETIQUETA_MODO_IMPORTACAO: Integer;
+    FUtilizaNuvem: Boolean;
     procedure SetterminalNumero(const Value: string);
     procedure SetEtiqueta(const Value: TConfEtiqueta);
     procedure SetProduto(const Value: TConfProduto);
@@ -35,6 +36,7 @@ uses
     procedure SetNFCe(const Value: TConfNFce);
     procedure SetETIQUETA_MODO_IMPORTACAO(const Value: Integer);
     procedure SetSYSPDV_IP(const Value: string);
+    procedure SetUtilizaNuvem(const Value: Boolean);
     public
     property terminalNumero : string read FterminalNumero write SetterminalNumero;
     property Etiqueta:TConfEtiqueta read FEtiqueta write SetEtiqueta;
@@ -48,6 +50,10 @@ uses
 
     property ETIQUETA_MODO_IMPORTACAO:Integer read FETIQUETA_MODO_IMPORTACAO write SetETIQUETA_MODO_IMPORTACAO;
     property SYSPDV_IP:string read FSYSPDV_IP write SetSYSPDV_IP;
+
+    // Loja que usa o sistema em nuvem: os cadastros passam a ser feitos no site
+    // e descem pela carga do RK_Sync. Ver Classe.ModoNuvem.
+    property UtilizaNuvem:Boolean read FUtilizaNuvem write SetUtilizaNuvem;
     constructor Create;
     destructor Destroy;override;
 
@@ -191,6 +197,11 @@ begin
   terminal := zeroEsquerda(Value,3);
 
   FterminalNumero := terminal;
+end;
+
+procedure TConfiguracoes.SetUtilizaNuvem(const Value: Boolean);
+begin
+  FUtilizaNuvem := Value;
 end;
 
 procedure TConfiguracoes.SetValidade(const Value: TConfValidade);

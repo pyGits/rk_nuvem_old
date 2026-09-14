@@ -4,6 +4,7 @@ import router from "./router";
 import store from "./store";
 import vuetify from "./plugins/vuetify";
 import "./plugins/axios";
+import "./plugins/permissao";
 import Toast from "vue-toastification";
 import "vue-toastification/dist/index.css";
 import ToastService from "./infra/service/ToastService";

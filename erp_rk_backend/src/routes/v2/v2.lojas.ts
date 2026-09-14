@@ -19,10 +19,10 @@ class V2LojaRoutes {
     httpServer.registerFile("post", "/v2/loja/:lojaId/certificado", async (params: any) => {
       const output = await this.lojaUseCase.uploadCertificado({ file: params.file, senha: params.body?.senha, lojaId: params.params.lojaId, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "cadastro.loja");
     httpServer.register("post", "/v2/loja/:lojaId/certificado/senha", async (params: any, body: any) => {
       await this.lojaUseCase.atualizarSenhaCertificado({ senha: body.senha, lojaId: params.lojaId, tenant_id: params.tenant_id });
-    });
+    }, "cadastro.loja");
   }
 }
 

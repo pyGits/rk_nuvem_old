@@ -5,8 +5,9 @@ interface
 uses
   Winapi.Windows, Winapi.Messages, System.SysUtils, System.Variants, System.Classes, Vcl.Graphics,
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.StdCtrls,uAPIRequest, Vcl.ExtCtrls,SelecionarLoja,Utils,Login,Produto,uDmProduto,Preco,uDmPreco,uDmTributacao,
-  tributacao,uDmCaixa,ConexaoPDV,uDmProdutoPDV,uDmPrecoPDV,uDmTributacaoPDV,uDmVenda,Finalizadora,uDmFinalizadora,uDmFinalizadoraPDV,Funcionario,uDmFuncionario,uDmFuncionarioPDV,system.Generics.collections,
-  Vcl.Menus,Cliente,uDmCliente,Global,uLogErro,System.DateUtils,Vcl.ComCtrls;
+  tributacao,ConexaoPDV,uDmProdutoPDV,uDmPrecoPDV,uDmTributacaoPDV,uDmVenda,Finalizadora,uDmFinalizadora,uDmFinalizadoraPDV,Funcionario,uDmFuncionario,uDmFuncionarioPDV,system.Generics.collections,
+  Vcl.Menus,Cliente,uDmCliente,Global,uLogErro,System.DateUtils,Vcl.ComCtrls,
+  CadastroCaixas,CaixaModel;
 
 type
   TfrmPrincipal = class(TForm)
@@ -18,12 +19,14 @@ type
     TrayIcon1: TTrayIcon;
     PopupMenu1: TPopupMenu;
     S1: TMenuItem;
+    Caixas1: TMenuItem;
     pnlReenvio: TPanel;
     lblReenvioDe: TLabel;
     lblReenvioAte: TLabel;
     dtpReenvioInicio: TDateTimePicker;
     dtpReenvioFim: TDateTimePicker;
     btnReenviar: TButton;
+    btnCaixas: TButton;
     procedure btnReenviarClick(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure tmInicializaTimer(Sender: TObject);
@@ -32,7 +35,11 @@ type
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure TrayIcon1DblClick(Sender: TObject);
     procedure S1Click(Sender: TObject);
+    procedure btnCaixasClick(Sender: TObject);
   private
+    // Le do config.ini a lista de caixas que recebem a carga.
+    procedure recarregarCaixas;
+
     // Registra a falha no memo da tela e no arquivo Logs\sync_erros_<data>.txt
     procedure LogFalha(const contexto, mensagem: string); overload;
     procedure LogFalha(const contexto: string; E: Exception); overload;
@@ -661,6 +668,59 @@ begin
 Application.Terminate;
 end;
 
+// A lista de IPs usada pelos lacos de carga. Vem do cadastro do agente
+// (config.ini): antes vinha da tabela CAIXA do banco da retaguarda, que na
+// nuvem deixou de ser cadastrada localmente.
+procedure TfrmPrincipal.recarregarCaixas;
+var
+  caixas:TObjectList<TCaixaModel>;
+  caixa:TCaixaModel;
+begin
+  if not Assigned(caixaList) then
+    caixaList := TStringList.Create;
+
+  caixas := Global.Caixas.getAll;
+  try
+    caixaList.Clear;
+    for caixa in caixas do
+      caixaList.Add(caixa.ip);
+  finally
+    caixas.Free;
+  end;
+end;
+
+procedure TfrmPrincipal.btnCaixasClick(Sender: TObject);
+var
+  frm:TfrmCadastroCaixas;
+begin
+  // Os lacos de carga estao percorrendo a lista neste momento: trocar os
+  // caixas no meio do ciclo deixaria o indice apontando para quem nao existe
+  // mais. Os timers continuam disparando mesmo com a tela modal aberta, entao
+  // nao basta esperar o ShowModal.
+  if carregando or subindoVenda then
+  begin
+    ShowMessage('Aguarde o ciclo atual terminar para mexer nos caixas.');
+    Exit;
+  end;
+
+  tmCarga.Enabled := false;
+  tmSubidaVenda.Enabled := false;
+  try
+    frm := TfrmCadastroCaixas.Create(nil);
+    try
+      frm.ShowModal;
+    finally
+      frm.Free;
+    end;
+
+    recarregarCaixas;
+    MostrarProgresso(Format('%d caixa(s) cadastrado(s).', [caixaList.Count]));
+  finally
+    tmCarga.Enabled := true;
+    tmSubidaVenda.Enabled := true;
+  end;
+end;
+
 procedure TfrmPrincipal.tmCargaTimer(Sender: TObject);
 var
   solicitacao:string;
@@ -691,9 +751,21 @@ try
 try
   solicitacao := uAPIRequest.verificaCargaPendente;
 
+  // A retaguarda so vira "sistema em nuvem" quando a primeira carga chega:
+  // e a carga que substitui o cadastro local pelo que veio do site. Enquanto
+  // isso nao acontece a loja continua cadastrando normalmente.
+  if (solicitacao = 'CARGA_COMPLETA') or (solicitacao = 'CARGA_ALTERADOS') then
+  begin
+    // O Clear fica aqui, e nao dentro de cada bloco como era antes, senao
+    // apagaria a linha da marcacao logo depois de escreve-la.
+    memLog.Lines.Clear;
+
+    if Global.ModoNuvem.marcarModoNuvem then
+      memLog.Lines.Add('Retaguarda marcada como sistema em nuvem.');
+  end;
+
   if solicitacao = 'CARGA_COMPLETA' then
   begin
-    memLog.Lines.Clear;
     memLog.Lines.Add('CARGA COMPLETA SOLICITADA !');
 
     informaProgressoCarga('PDV', 1, TOTAL_ETAPAS_CARGA);
@@ -730,7 +802,6 @@ try
 
   if solicitacao = 'CARGA_ALTERADOS' then
   begin
-    memLog.Lines.Clear;
     memLog.Lines.Add('CARGA ALTERADOS SOLICITADA !');
 
     informaProgressoCarga('PDV', 1, TOTAL_ETAPAS_CARGA);
@@ -780,7 +851,6 @@ var
   ufrmLogin : TFrmLogin;
 
   diretorioConfig:string;
-  dmCaixa :TdmCaixa;
 
 
 
@@ -823,8 +893,8 @@ begin
   memLog.Lines.Add('Carregando lista de caixas ...');
 
   try
-    dmCaixa := TdmCaixa.Create(nil);
-    caixaList := dmCaixa.retornaIPCaixas();
+    recarregarCaixas;
+    memLog.Lines.Add(Format('%d caixa(s) cadastrado(s).', [caixaList.Count]));
   except
   on E:Exception do
   begin

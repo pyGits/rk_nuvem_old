@@ -1,7 +1,7 @@
 unit SubidaErroPDVUseCase;
 
 interface
-uses CaixaRepository, CaixaModel, System.Generics.Collections,
+uses CaixaRepository, CaixaIniRepository, CaixaModel, System.Generics.Collections,
      ErroPDVRepository, ErroPDV;
 
 type TSubidaErroPDVUseCase = class
@@ -23,7 +23,8 @@ uses System.SysUtils, uAPIRequest, uLogErro;
 
 constructor TSubidaErroPDVUseCase.create;
 begin
-  FCaixaRepository := TCaixaRepository.create;
+  // Mesma lista da carga: os caixas cadastrados no agente (config.ini).
+  FCaixaRepository := TCaixaIniRepository.create;
   FErroPDVRepository := TErroPDVRepository.create;
 end;
 

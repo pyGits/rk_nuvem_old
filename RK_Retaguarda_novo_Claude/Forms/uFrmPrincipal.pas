@@ -7,7 +7,7 @@ uses
   Vcl.Controls, Vcl.Forms, Vcl.Dialogs, uFrmProduto, Vcl.Menus,Classe.Variaveis,uFrmGrupo,uFrmSubGrupo,uFrmTributacao,uFrmFinalizadora,
   Vcl.ExtCtrls, Vcl.Buttons, Vcl.StdCtrls, acPNG,Conversao,uFrmFornecedor,uFrmCliente,uFrmFuncionario,uFrmPDVCarga,uFrmProprio,uFrmBalanca,uFrmRelPainel,uFrmRelCupom,uFrmRelProduto,uFrmRelPagamento,uFrmConfiguracoes,uFrmEtiqueta,uFrmLogin,
   LockApplication,uFrmCaixaAcesso,uFrmRelSaldoEstoque,uFrmContasreceber,uFrmAuditoria,uFrmPreVenda,
-  ACBrBase, ACBrLCB, frxClass, frxExportXLS, vcl.gtxXport, vcl.gtFRXport,uFrmRelFuncComissao,uFrmRetaguardaAcesso,Classe.AcessoRetaguarda,
+  ACBrBase, ACBrLCB, frxClass, frxExportXLS, vcl.gtxXport, vcl.gtFRXport,uFrmRelFuncComissao,uFrmRetaguardaAcesso,Classe.AcessoRetaguarda,Classe.ModoNuvem,
   uFrmValidade,uFrmRelExtratoEstoque,uFrmRelPerformanceProduto,uFrmRelFechamento,uFrmImportar,
   System.Notification,System.Generics.collections,uFrmImportarPersonalizado,ConfiguracaoController,uFrmNFCePendente,Global
 
@@ -396,6 +396,15 @@ begin
 
     if VariaveisSrv.oUtilsController.preencherNivelAcessoRetaguarda(oAcesso) then
     begin
+      // Em modo nuvem o cadastro e feito no site e desce pela carga do RK_Sync:
+      // o que fosse digitado aqui a proxima carga sobrescreveria.
+      if BloqueadoPeloModoNuvem(oAcesso.Categoria, oAcesso.Codigo) then
+      begin
+        ShowMessage(MSG_MODO_NUVEM);
+        Result := false;
+        Exit;
+      end;
+
       // checar nivel usuario com acesso
       flagResult := false;
       // senha validada, validar nivel de acesso

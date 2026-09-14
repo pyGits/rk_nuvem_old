@@ -17,6 +17,7 @@ type
       // CONFIGURACOES BD
       function GravarConfiguracoesBD(oConfiguracoes:TConfiguracoes):Boolean;
       function CarregarConfiguracoesBD(oConfiguracoes:TConfiguracoes):Boolean;
+      function ModoNuvemAtivoBD:Boolean;
       function ZerarBancoDeDados:boolean;
 
       // SEQUENCIAL
@@ -85,11 +86,38 @@ begin
   oConfiguracoes.NFCe.senha:=  FieldByName('NFCE_SENHA').AsString;
 
   oConfiguracoes.ETIQUETA_MODO_IMPORTACAO := FieldByName('ETIQUETA_MODO_IMPORTACAO').asinteger;
-  oConfiguracoes.SYSPDV_IP := FieldByName('SYSPDV_IP').AsString
+  oConfiguracoes.SYSPDV_IP := FieldByName('SYSPDV_IP').AsString;
+
+  // Quem grava e o RK_Sync, quando a carga da nuvem chega. FindField porque a
+  // coluna so existe depois da atualizacao do banco: sem ele, retaguarda novo
+  // em banco ainda nao atualizado nao carregaria configuracao nenhuma.
+  oConfiguracoes.UtilizaNuvem := Assigned(FindField('UTILIZA_NUVEM')) and
+                                 (FieldByName('UTILIZA_NUVEM').AsInteger = 1);
   end;
 end;
 end;
 
+
+// Le so a flag, fora do carregamento da configuracao inteira: quem chama e o
+// menu, a cada abertura de tela, enquanto a loja ainda nao virou nuvem. Assim
+// o bloqueio vale na mesma sessao em que o RK_Sync recebe a primeira carga,
+// sem esperar o usuario reabrir o retaguarda.
+//
+// SELECT * e nao SELECT UTILIZA_NUVEM porque em banco ainda nao atualizado a
+// coluna nao existe - por isso tambem o FindField.
+function TdmUtils.ModoNuvemAtivoBD: Boolean;
+begin
+  with qrUtilsPesq do
+  begin
+    Close;
+    SQL.Clear;
+    SQL.Add('SELECT * FROM CONFIGURACOES WHERE ID = '+Chr(39)+'000001'+Chr(39));
+    Open;
+
+    Result := Assigned(FindField('UTILIZA_NUVEM')) and
+              (FieldByName('UTILIZA_NUVEM').AsInteger = 1);
+  end;
+end;
 
 function TdmUtils.carregarEtiqueta(etiqueta: array of string): TArray<string>;
 begin

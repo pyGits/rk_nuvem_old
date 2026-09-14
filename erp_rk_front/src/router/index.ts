@@ -165,13 +165,13 @@ const routes: Array<RouteConfig> = [
     path: "/cadastro/produto",
     name: "produto-lista",
     component: ListaProduto,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "cadastro.produto" },
   },
   {
     path: "/cadastro/produto/:codigo",
     name: "produto-edicao",
     component: CadastroProduto,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "cadastro.produto" },
   },
 
   // Loja
@@ -179,13 +179,13 @@ const routes: Array<RouteConfig> = [
     path: "/cadastro/loja",
     name: "loja-lista",
     component: ListaLoja,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "cadastro.loja" },
   },
   {
     path: "/cadastro/loja/:codigo",
     name: "loja-edicao",
     component: CadastroLoja,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "cadastro.loja" },
   },
 
   // Cliente
@@ -193,13 +193,13 @@ const routes: Array<RouteConfig> = [
     path: "/cadastro/cliente",
     name: "cliente-lista",
     component: ListaCliente,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "cadastro.cliente" },
   },
   {
     path: "/cadastro/cliente/:codigo",
     name: "cliente-edicao",
     component: CadastroCliente,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "cadastro.cliente" },
   },
 
   // Usuários WEB
@@ -207,13 +207,13 @@ const routes: Array<RouteConfig> = [
     path: "/usuarios/usuariosweb",
     name: "usuario-web-lista",
     component: ListaUsuario,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "usuarios.web" },
   },
   {
     path: "/usuarios/usuariosweb/:codigo",
     name: "usuario-web-edicao",
     component: CadastroUsuario,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "usuarios.web" },
   },
 
   // Funcionários
@@ -221,13 +221,13 @@ const routes: Array<RouteConfig> = [
     path: "/usuarios/funcionario",
     name: "funcionario-lista",
     component: ListaFuncionario,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "usuarios.funcionario" },
   },
   {
     path: "/usuarios/funcionario/:codigo",
     name: "funcionario-edicao",
     component: CadastroFuncionario,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "usuarios.funcionario" },
   },
 
   // Fornecedor
@@ -235,13 +235,13 @@ const routes: Array<RouteConfig> = [
     path: "/cadastro/fornecedor",
     name: "fornecedor-lista",
     component: ListaFornecedor,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "cadastro.fornecedor" },
   },
   {
     path: "/cadastro/fornecedor/:codigo",
     name: "fornecedor-edicao",
     component: CadastroFornecedor,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "cadastro.fornecedor" },
   },
 
   // Seções
@@ -249,7 +249,7 @@ const routes: Array<RouteConfig> = [
     path: "/cadastro/secoes",
     name: "secao-cadastro",
     component: CadastroSecao,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "cadastro.secao" },
   },
 
   // Tributação
@@ -257,13 +257,13 @@ const routes: Array<RouteConfig> = [
     path: "/fiscal/tributacao",
     name: "tributacao-lista",
     component: ListaTributacao,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "fiscal.tributacao" },
   },
   {
     path: "/fiscal/tributacao/:codigo",
     name: "tributacao-edicao",
     component: CadastroTributacao,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "fiscal.tributacao" },
   },
 
   // Impostos Federais
@@ -271,13 +271,13 @@ const routes: Array<RouteConfig> = [
     path: "/fiscal/impfederal",
     name: "impfederal-lista",
     component: ListaImpFederal,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "fiscal.impfederal" },
   },
   {
     path: "/fiscal/impfederal/:codigo",
     name: "impfederal-edicao",
     component: CadastroImpFderal,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "fiscal.impfederal" },
   },
 
   // Contas a Pagar
@@ -285,31 +285,31 @@ const routes: Array<RouteConfig> = [
     path: "/financeiro/contas-a-pagar",
     name: "contas-pagar-lista",
     component: ListarContasPagar,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "financeiro.contas_pagar" },
   },
   {
     path: "/financeiro/contas-a-receber",
     name: "contas-receber-lista",
     component: ListarContasReceber,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "financeiro.contas_receber" },
   },
   {
     path: "/financeiro/categoria",
-    name: "contas-pagar-lista",
+    name: "categoria-financeira-lista",
     component: ListarCategoriaFinanceira,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "financeiro.categoria" },
   },
   {
     path: "/financeiro/forma-pagamento",
     name: "contas-forma-pagamento",
     component: CadastrarFormaPagamento,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "financeiro.forma_pagamento" },
   },
   {
     path: "/financeiro/contas-a-pagar/:id",
     name: "contas-pagar-edicao",
     component: EditarContasAPagar,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "financeiro.contas_pagar" },
   },
 
   // Recebimento Compra
@@ -317,13 +317,13 @@ const routes: Array<RouteConfig> = [
     path: "/compra/recebimento",
     name: "recebimento",
     component: InicioWizardEntradaNota,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "compra.recebimento" },
   },
   {
     path: "/compra/recebimento/:chave",
     name: "recebimento_chave",
     component: WizardEntradaNota,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "compra.recebimento" },
   },
 
   // Carga
@@ -331,7 +331,7 @@ const routes: Array<RouteConfig> = [
     path: "/carga/loja",
     name: "carga-loja",
     component: CargaLoja,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "carga.loja" },
   },
 
   // Login
@@ -348,7 +348,7 @@ const routes: Array<RouteConfig> = [
     path: "/downloads",
     name: "downloads",
     component: Downloads,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "downloads" },
   },
 
   // Finalizadora
@@ -356,13 +356,13 @@ const routes: Array<RouteConfig> = [
     path: "/cadastro/finalizadora",
     name: "finalizadora-lista",
     component: ListaFinalizadora,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "cadastro.finalizadora" },
   },
   {
     path: "/cadastro/finalizadora/:codigo",
     name: "finalizadora-edicao",
     component: CadastroFinalizadora,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "cadastro.finalizadora" },
   },
 
   // Relatórios
@@ -370,31 +370,31 @@ const routes: Array<RouteConfig> = [
     path: "/relatorio/caixa/painel",
     name: "relatorio-caixa-painel",
     component: PainelVendas,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "relatorio.caixa.painel" },
   },
   {
     path: "/relatorio/caixa/controle",
     name: "relatorio-caixa-controle",
     component: PainelControle,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "relatorio.caixa.controle" },
   },
   {
     path: "/relatorio/estoque/painel",
     name: "relatorio-estoque-painel",
     component: PainelEstoque,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "relatorio.estoque.painel" },
   },
   {
     path: "/relatorio/financeiro/balancete",
     name: "relatorio-financeiro-balancete",
     component: ListarBalancete,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "relatorio.financeiro.balancete" },
   },
   {
     path: "/relatorio/produto/listagem",
     name: "relatorio-produto-listagem",
     component: RelatorioProdutoListagem,
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true, tela: "relatorio.produto.listagem" },
   },
 
   // Configurações
@@ -411,7 +411,7 @@ const router = new VueRouter({
   routes,
 });
 
-router.beforeEach((to, from, next) => {
+router.beforeEach(async (to, from, next) => {
   const isTokenExists = localStorage.getItem("access_token");
   const isTokenAdminExists = localStorage.getItem("access_token_admin");
   Vue.prototype.$http.defaults.headers.common["x-access-token"] = isTokenExists;
@@ -428,14 +428,43 @@ router.beforeEach((to, from, next) => {
   }
 
   if (requiresAuth && !isTokenExists) {
-    next("/login");
-  } else if (isTokenExists) {
-    store.commit("setLogado", true);
-    next();
-  } else {
-    store.commit("setLogado", false);
-    next();
+    return next("/login");
   }
+
+  if (!isTokenExists) {
+    store.commit("setLogado", false);
+    return next();
+  }
+
+  store.commit("setLogado", true);
+
+  // Quem esta logado e a que telas tem acesso. Carrega uma vez por sessao;
+  // daqui para frente a navegacao ja decide pelo que esta no store.
+  //
+  // Falha de rede aqui nao pode impedir a navegacao: o backend recusa as
+  // requisicoes de qualquer forma, e travar o app por causa de um /me que nao
+  // respondeu seria pior do que deixar o menu incompleto por um instante.
+  // O state da raiz nao e tipado com os modulos (store/index.ts declara so
+  // errorsx), por isso o cast.
+  if (requiresAuth && !(store.state as any).sessao.carregada) {
+    try {
+      await store.dispatch("carregarSessao");
+    } catch (erro) {
+      if ((erro as any)?.response?.status === 401) return next("/login");
+    }
+  }
+
+  // A tela pedida esta liberada para este usuario? Sem isto, digitar a URL na
+  // barra de enderecos abriria uma tela que nem aparece no menu dele.
+  const tela = to.meta && to.meta.tela;
+  if (tela && !store.getters.podeAcessar(tela)) {
+    store.dispatch("showToastMessage", "Você não tem acesso a esta tela.");
+    // Vindo de outra tela, cancela a navegacao e fica onde esta; vindo de fora
+    // (URL digitada, F5), manda para o inicio, que e sempre liberado.
+    return next(from.name ? false : "/");
+  }
+
+  return next();
 });
 
 export default router;

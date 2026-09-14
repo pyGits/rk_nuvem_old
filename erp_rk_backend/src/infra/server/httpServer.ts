@@ -4,6 +4,7 @@ import router from "../../../routes";
 import cors from "cors";
 import path from "path";
 import { verifyJWT } from "../../routes/auth.middleware";
+import { exigeAcesso } from "../../permissao/permissao.middleware";
 import upload from "../middleware/uploadMiddleware";
 import fs from "fs";
 import https from "https";
@@ -19,9 +20,9 @@ dotenv.config({
 const LIMITE_REQUISICAO_LENTA_MS = 1000;
 
 export interface HttpServer {
-  register(method: string, url: string, callback: Function): void;
-  registerFile(method: string, url: string, callback: Function): void;
-  registerFiles(method: string, url: string, callback: Function): void;
+  register(method: string, url: string, callback: Function, ...telas: string[]): void;
+  registerFile(method: string, url: string, callback: Function, ...telas: string[]): void;
+  registerFiles(method: string, url: string, callback: Function, ...telas: string[]): void;
   listen(port: number): void;
 }
 
@@ -87,8 +88,17 @@ export class ExpressAdapter implements HttpServer {
     }
   }
 
-  register(method: string, url: string, callback: Function): void {
-    this.app[method]("/api" + url, verifyJWT, async (req: Request, res: Response) => {
+  // `telas` sao os ids do catalogo (src/permissao/CatalogoTelas.ts) das telas a
+  // que esta rota pertence - mais de um porque varias telas reaproveitam o
+  // mesmo endpoint, e basta ter acesso a uma delas.
+  //
+  // Rota registrada sem tela nenhuma continua como sempre foi: basta estar
+  // logado. E o caso das leituras transversais (produto, preco, loja, secao),
+  // que a entrada de nota, os relatorios e a carga tambem consomem.
+  register(method: string, url: string, callback: Function, ...telas: string[]): void {
+    const middlewares = telas.length ? [verifyJWT, exigeAcesso(...telas)] : [verifyJWT];
+
+    this.app[method]("/api" + url, ...middlewares, async (req: Request, res: Response) => {
       try {
         const output = await callback(req.params, req.body, req.query);
         res.json(output);
@@ -118,8 +128,10 @@ export class ExpressAdapter implements HttpServer {
     });
   }
 
-  registerFile(method: string, url: string, callback: Function): void {
-    this.app[method]("/api" + url, verifyJWT, upload.single("arquivo"), async (req: Request, res: Response) => {
+  registerFile(method: string, url: string, callback: Function, ...telas: string[]): void {
+    const middlewares = telas.length ? [verifyJWT, exigeAcesso(...telas)] : [verifyJWT];
+
+    this.app[method]("/api" + url, ...middlewares, upload.single("arquivo"), async (req: Request, res: Response) => {
       try {
         const output = await callback(req, req.body);
         res.json(output);
@@ -129,8 +141,10 @@ export class ExpressAdapter implements HttpServer {
     });
   }
 
-  registerFiles(method: string, url: string, callback: Function): void {
-    this.app[method]("/api" + url, verifyJWT, upload.array("arquivo"), async (req: Request, res: Response) => {
+  registerFiles(method: string, url: string, callback: Function, ...telas: string[]): void {
+    const middlewares = telas.length ? [verifyJWT, exigeAcesso(...telas)] : [verifyJWT];
+
+    this.app[method]("/api" + url, ...middlewares, upload.array("arquivo"), async (req: Request, res: Response) => {
       try {
         const output = await callback(req, req.body);
         res.json(output);

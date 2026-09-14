@@ -18,11 +18,11 @@ class V2ProdutoRoutes {
     httpServer.register("put", "/v2/produtos/precos", async (params: any, body: any) => {
       const output = await this.produtoUseCase.updatePrecosByProdutos({ body: body, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "cadastro.produto", "compra.recebimento");
     httpServer.register("post", "/v2/produto", async (params: any, body: any) => {
       const output = await this.produtoUseCase.insert({ body: body, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "cadastro.produto", "compra.recebimento");
     httpServer.register("get", "/v2/produto", async (params: any) => {
       const output = await this.produtoUseCase.getAll({ tenant_id: params.tenant_id });
       return output.data;

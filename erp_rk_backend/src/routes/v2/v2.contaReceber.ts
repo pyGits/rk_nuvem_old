@@ -22,11 +22,11 @@ class V2ContaReceberRoutes {
     httpServer.register("get", "/v2/contaReceber/titulos", async (params: any, body: any, query: any) => {
       const output = await this.contaReceberUseCase.getAllTitulos({ tenant_id: params.tenant_id, filter: query });
       return output.data;
-    });
+    }, "financeiro.contas_receber");
     httpServer.register("get", "/v2/contaReceber/saldoClientes", async (params: any, body: any, query: any) => {
       const output = await this.contaReceberUseCase.getSaldoClientes({ tenant_id: params.tenant_id, filter: query });
       return output.data;
-    });
+    }, "financeiro.contas_receber");
 
     // Recibos: a lista do que ja foi liquidado e a 2a via em PDF. E por aqui
     // que se confere um recebimento depois de feito - o titulo liquidado sai da
@@ -34,39 +34,39 @@ class V2ContaReceberRoutes {
     httpServer.register("get", "/v2/contaReceber/recibos", async (params: any, body: any, query: any) => {
       const output = await this.contaReceberUseCase.getRecibos({ tenant_id: params.tenant_id, filter: query });
       return output.data;
-    });
+    }, "financeiro.contas_receber");
     httpServer.register("get", "/v2/contaReceber/recibo", async (params: any, body: any, query: any) => {
       const output = await this.contaReceberUseCase.gerarRecibo({ tenant_id: params.tenant_id, filter: query });
       return output.data;
-    });
+    }, "financeiro.contas_receber");
     httpServer.register("post", "/v2/contaReceber/estornarRecibo", async (params: any, body: any) => {
       const output = await this.contaReceberUseCase.estornarRecibo({ body: body, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.contas_receber");
     httpServer.register("get", "/v2/contaReceber/extrato", async (params: any, body: any, query: any) => {
       const output = await this.contaReceberUseCase.getExtrato({ tenant_id: params.tenant_id, filter: query });
       return output.data;
-    });
+    }, "financeiro.contas_receber");
     httpServer.register("post", "/v2/contaReceber", async (params: any, body: any) => {
       const output = await this.contaReceberUseCase.insert({ body: body, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.contas_receber");
     httpServer.register("post", "/v2/contaReceber/receber", async (params: any, body: any) => {
       const output = await this.contaReceberUseCase.receber({ body: body, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.contas_receber");
     httpServer.register("post", "/v2/contaReceber/estornar", async (params: any, body: any) => {
       const output = await this.contaReceberUseCase.estornar({ body: body, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.contas_receber");
     httpServer.register("post", "/v2/contaReceber/cancelar", async (params: any, body: any) => {
       const output = await this.contaReceberUseCase.cancelar({ body: body, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.contas_receber");
     httpServer.register("put", "/v2/contaReceber/titulo", async (params: any, body: any) => {
       const output = await this.contaReceberUseCase.update({ body: body, tenant_id: params.tenant_id });
       return output.data;
-    });
+    }, "financeiro.contas_receber");
   }
 }
 

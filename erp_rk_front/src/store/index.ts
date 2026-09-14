@@ -25,6 +25,7 @@ import ibpt from "./modules/ibpt";
 import erroPdv from "./modules/erroPdv";
 import cargaAdmin from "./modules/cargaAdmin";
 import notificacao from "./modules/notificacao";
+import sessao from "./modules/sessao";
 Vue.use(Vuex);
 
 export default new Vuex.Store({
@@ -54,6 +55,7 @@ export default new Vuex.Store({
     erroPdv,
     cargaAdmin,
     notificacao,
+    sessao,
   },
   state: {
     errorsx: {} as Record<string, string>,

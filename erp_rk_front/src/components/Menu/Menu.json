@@ -5,28 +5,28 @@
     "subItems": [
       {
         "name": "Produto",
-        "to": "/cadastro/produto",
+        "to": "/cadastro/produto", "tela": "cadastro.produto",
         "icon": "mdi-chart-bar"
       },
       {
         "name": "Loja",
-        "to": "/cadastro/loja"
+        "to": "/cadastro/loja", "tela": "cadastro.loja"
       },
       {
         "name": "Mercadológico",
-        "to": "/cadastro/secoes"
+        "to": "/cadastro/secoes", "tela": "cadastro.secao"
       },
       {
         "name": "Cliente",
-        "to": "/cadastro/cliente"
+        "to": "/cadastro/cliente", "tela": "cadastro.cliente"
       },
       {
         "name": "Fornecedor",
-        "to": "/cadastro/fornecedor"
+        "to": "/cadastro/fornecedor", "tela": "cadastro.fornecedor"
       },
       {
         "name": "Finalizadora - PDV",
-        "to": "/cadastro/finalizadora"
+        "to": "/cadastro/finalizadora", "tela": "cadastro.finalizadora"
       }
     ]
   },
@@ -37,21 +37,21 @@
       {
         "name": "Caixa",
         "subSubItems": [
-          { "name": "Painel de Vendas", "to": "/relatorio/caixa/painel" },
-          { "name": "Controle De Caixa", "to": "/relatorio/caixa/controle" }
+          { "name": "Painel de Vendas", "to": "/relatorio/caixa/painel", "tela": "relatorio.caixa.painel" },
+          { "name": "Controle De Caixa", "to": "/relatorio/caixa/controle", "tela": "relatorio.caixa.controle" }
         ]
       },
       {
         "name": "Estoque",
-        "subSubItems": [{ "name": "Painel de Estoque", "to": "/relatorio/estoque/painel" }]
+        "subSubItems": [{ "name": "Painel de Estoque", "to": "/relatorio/estoque/painel", "tela": "relatorio.estoque.painel" }]
       },
       {
         "name": "Produto",
-        "subSubItems": [{ "name": "Listagem", "to": "/relatorio/produto/listagem" }]
+        "subSubItems": [{ "name": "Listagem", "to": "/relatorio/produto/listagem", "tela": "relatorio.produto.listagem" }]
       },
       {
         "name": "Financeiro",
-        "subSubItems": [{ "name": "Balancete", "to": "/relatorio/financeiro/balancete" }]
+        "subSubItems": [{ "name": "Balancete", "to": "/relatorio/financeiro/balancete", "tela": "relatorio.financeiro.balancete" }]
       }
     ]
   },
@@ -61,19 +61,19 @@
     "subItems": [
       {
         "name": "Contas a Pagar",
-        "to": "/financeiro/contas-a-pagar"
+        "to": "/financeiro/contas-a-pagar", "tela": "financeiro.contas_pagar"
       },
       {
         "name": "Contas a Receber",
-        "to": "/financeiro/contas-a-receber"
+        "to": "/financeiro/contas-a-receber", "tela": "financeiro.contas_receber"
       },
       {
         "name": "Categoria Financeira",
-        "to": "/financeiro/categoria"
+        "to": "/financeiro/categoria", "tela": "financeiro.categoria"
       },
       {
         "name": "Formas de Pagamento",
-        "to": "/financeiro/forma-pagamento"
+        "to": "/financeiro/forma-pagamento", "tela": "financeiro.forma_pagamento"
       }
     ]
   },
@@ -83,7 +83,7 @@
     "subItems": [
       {
         "name": "Nota Fiscal - Entrada",
-        "to": "/compra/recebimento"
+        "to": "/compra/recebimento", "tela": "compra.recebimento"
       }
     ]
   },
@@ -93,11 +93,11 @@
     "subItems": [
       {
         "name": "Usuários WEB",
-        "to": "/usuarios/usuariosweb"
+        "to": "/usuarios/usuariosweb", "tela": "usuarios.web"
       },
       {
         "name": "Funcionários",
-        "to": "/usuarios/funcionario"
+        "to": "/usuarios/funcionario", "tela": "usuarios.funcionario"
       }
     ]
   },
@@ -107,7 +107,7 @@
     "subItems": [
       {
         "name": "Loja",
-        "to": "/carga/loja"
+        "to": "/carga/loja", "tela": "carga.loja"
       }
     ]
   },
@@ -117,11 +117,11 @@
     "subItems": [
       {
         "name": "Tributação",
-        "to": "/fiscal/tributacao"
+        "to": "/fiscal/tributacao", "tela": "fiscal.tributacao"
       },
       {
         "name": "Impostos Federais",
-        "to": "/fiscal/impfederal"
+        "to": "/fiscal/impfederal", "tela": "fiscal.impfederal"
       }
     ]
   },
@@ -131,7 +131,7 @@
     "subItems": [
       {
         "name": "Downloads",
-        "to": "/downloads"
+        "to": "/downloads", "tela": "downloads"
       }
     ]
   }

@@ -720,6 +720,12 @@ result.Add(AlterColumnLength('FECHAMENTO','OPERADOR',70),453);
 // versao >= a versao gravada. Junto das outras migrations da FINALIZADORA
 // (N=195..199) esta linha nunca rodaria num banco que ja passou de 199.
 result.Add(CreateColumn('FINALIZADORA','TECLA','VARCHAR(10)',''),454);
+
+// Flag de sistema em nuvem. Quem liga e o RK_Sync, na primeira carga que desce
+// da nuvem (ModoNuvemRepository, no Sync_NUVEM): instalacao local nunca recebe
+// carga, entao fica no default 0 e nada muda para ela.
+// Mesma regra do TECLA acima - entra no FIM da lista, com N maior que todos.
+result.Add(CreateColumn('CONFIGURACOES','UTILIZA_NUVEM','INTEGER DEFAULT 0',''),455);
 end;
 
 
