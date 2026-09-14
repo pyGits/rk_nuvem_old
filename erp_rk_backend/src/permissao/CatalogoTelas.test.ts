@@ -13,7 +13,11 @@ function arquivosDeRota(diretorio: string): string[] {
   return fs.readdirSync(diretorio, { withFileTypes: true }).flatMap((item) => {
     const completo = path.join(diretorio, item.name);
     if (item.isDirectory()) return arquivosDeRota(completo);
-    if (!item.name.endsWith(".ts") || item.name.endsWith(".test.ts")) return [];
+    // Aceita .js tambem para o caso de rodar a partir de uma copia compilada.
+    const ehFonte = item.name.endsWith(".ts") || item.name.endsWith(".js");
+    const ehTeste = /\.test\.(ts|js)$/.test(item.name) || item.name.endsWith(".d.ts");
+
+    if (!ehFonte || ehTeste) return [];
     return [completo];
   });
 }
@@ -26,11 +30,14 @@ function telasUsadas(): { arquivo: string; tela: string }[] {
 
     // exigeAcesso("a", "b") nas rotas legadas e o 4o argumento em diante do
     // httpServer.register nas v2/v3.
-    const chamadas = conteudo.match(/exigeAcesso\(([^)]*)\)/g) || [];
-    const registros = conteudo.match(/\}, ("[^"]+"(?:, "[^"]+")*)\);/g) || [];
+    // Os tipos vao explicitos: sem eles, `match(...) || []` infere never[] em
+    // algumas versoes do TypeScript e o build de producao (npx tsc no
+    // Dockerfile) para com "Property 'replace' does not exist on type never".
+    const chamadas: string[] = conteudo.match(/exigeAcesso\(([^)]*)\)/g) || [];
+    const registros: string[] = conteudo.match(/\}, ("[^"]+"(?:, "[^"]+")*)\);/g) || [];
 
     for (const trecho of [...chamadas, ...registros]) {
-      const ids = trecho.match(/"([^"]+)"/g) || [];
+      const ids: string[] = trecho.match(/"([^"]+)"/g) || [];
       ids.forEach((id) => usos.push({ arquivo: path.basename(arquivo), tela: id.replace(/"/g, "") }));
     }
   }
