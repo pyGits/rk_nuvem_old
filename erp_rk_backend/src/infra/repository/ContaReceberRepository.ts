@@ -286,14 +286,6 @@ export class ContaReceberRepositoryPG implements ContaReceberRepository {
       sql += ` and c.data_vencimento <= $${index++}`;
       params.push(filtros.dataVencimentoAte);
     }
-    // O cupom do recibo precisa do saldo de UM cliente. clienteFiltro nao serve
-    // para isso: e ILIKE '%x%' e o codigo "1" casaria "10", "21", "100". Aqui a
-    // comparacao e exata, contra as variantes de padding - que e o que mantem o
-    // indice em pe (ver codigoCliente.ts).
-    if (filtros.clienteCodigo) {
-      sql += ` and c.cliente_codigo = ANY($${index++})`;
-      params.push(variantesDeCodigoCliente(filtros.clienteCodigo));
-    }
     if (filtros.clienteFiltro) {
       sql += ` and (c.cliente_codigo ILIKE $${index} or cl.nome ILIKE $${index})`;
       params.push(`%${filtros.clienteFiltro}%`);

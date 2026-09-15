@@ -18,7 +18,13 @@ export type ReciboTitulo = {
   valorTitulo: number;
   valorRecebimento: number;
   descontoRecebimento: number;
+  // Saldo de HOJE: é o que a tela mostra, porque ali a pergunta é "quanto ainda
+  // falta desse título".
   saldoTitulo: number;
+  // Saldo como ficou no momento deste recebimento, ignorando o que veio depois.
+  // É o que o comprovante imprime: a 2ª via de um recibo tem que repetir os
+  // mesmos números da 1ª, mesmo que o cliente tenha pago mais desde então.
+  saldoNoRecibo: number;
 };
 
 export type Recibo = {
@@ -213,7 +219,15 @@ async function carregarTitulos(recibos: Recibo[], tenant_id: number): Promise<vo
             c.id, c.codigo, c.prestacao, c.data_vencimento, c.valor as valor_titulo,
             coalesce((select sum(v.valor) + sum(v.valor_desconto)
                         from conta_receber_recebimento v
-                       where v.conta_receber_id = c.id and v.tenant_id = c.tenant_id and v.estornado = 0), 0) as abatido
+                       where v.conta_receber_id = c.id and v.tenant_id = c.tenant_id and v.estornado = 0), 0) as abatido,
+            -- Mesmo cálculo, cortado no instante deste recebimento: é o que
+            -- congela o saldo impresso no comprovante. created_at e não
+            -- data_pagamento porque a data é só o dia, e dois pagamentos do
+            -- mesmo título no mesmo dia se anulariam no corte.
+            coalesce((select sum(v.valor) + sum(v.valor_desconto)
+                        from conta_receber_recebimento v
+                       where v.conta_receber_id = c.id and v.tenant_id = c.tenant_id and v.estornado = 0
+                         and v.created_at <= r.created_at), 0) as abatido_ate
        from conta_receber_recebimento r
        join conta_receber c on c.id = r.conta_receber_id and c.tenant_id = r.tenant_id
       where r.tenant_id = $1 and r.recibo_id = ANY($2)
@@ -237,6 +251,7 @@ async function carregarTitulos(recibos: Recibo[], tenant_id: number): Promise<vo
       // Saldo atual do titulo, com o piso em zero - mesma regra de
       // ContaReceberTitulo.valorAReceber().
       saldoTitulo: Math.max(valorTitulo - numero(row.abatido), 0),
+      saldoNoRecibo: Math.max(valorTitulo - numero(row.abatido_ate), 0),
     });
   });
 

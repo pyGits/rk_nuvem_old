@@ -49,13 +49,6 @@ type Bloco =
   | { tipo: "separador" }
   | { tipo: "espaco"; altura: number };
 
-// Posição do convênio do cliente no momento da impressão. Não sai do recibo:
-// vem da mesma consulta que alimenta a posição consolidada da tela.
-export type ConvenioDoCliente = {
-  saldo: number;
-  vencimentoEmAberto: string | null;
-};
-
 // @types/pdfkit nao expoe o namespace PDFKit neste projeto; o tipo da instancia
 // sai do proprio construtor.
 type Documento = InstanceType<typeof PDFDocument>;
@@ -128,19 +121,31 @@ function desenharBloco(doc: Documento, bloco: Bloco, y: number): void {
   doc.text(bloco.valor, MARGEM + LARGURA_ROTULO, y, { width: LARGURA_VALOR, align: "right" });
 }
 
-function montarBlocos(recibo: Recibo, loja: Loja | null, emitidoEm: Date, convenio: ConvenioDoCliente): Bloco[] {
+function montarBlocos(recibo: Recibo, loja: Loja | null): Bloco[] {
   const blocos: Bloco[] = [];
   const estornado = recibo.estornado === 1 || recibo.estornadoParcial;
 
-  // O que o recebimento abateu do convênio. Em operação normal é o próprio
-  // valor pago - a loja não trabalha com juros, multa nem desconto, e as linhas
-  // correspondentes ficam fora do cupom. As duas exceções abaixo existem para o
-  // caso de um recebimento antigo ou importado trazer esses valores gravados:
-  // sem elas o cupom mostraria "anterior - pago" que não fecha com o saldo.
+  // Tudo que o resumo imprime sai dos títulos do próprio recibo, com o saldo
+  // congelado no momento do recebimento (saldoNoRecibo). É o que faz a 2ª via
+  // repetir a 1ª mesmo que o cliente tenha pago ou comprado mais desde então.
+  const saldoDepois = recibo.titulos.reduce((total, titulo) => total + titulo.saldoNoRecibo, 0);
+
+  // O que o recebimento abateu. Em operação normal é o próprio valor pago - a
+  // loja não trabalha com juros, multa nem desconto, e as linhas correspondentes
+  // ficam fora do cupom. As duas exceções abaixo existem para o caso de um
+  // recebimento antigo ou importado trazer esses valores gravados: sem elas o
+  // cupom mostraria "anterior - pago" que não fecha com o saldo.
   const abatimento = recibo.valor + recibo.desconto;
   const acrescimo = recibo.juros + recibo.multa;
-  const quitado = convenio.saldo < 0.005;
+  const quitado = saldoDepois < 0.005;
   const nomeLoja = (loja?.nome || loja?.fantasia || "").toUpperCase();
+
+  // Próxima cobrança: o vencimento mais antigo que continuou em aberto depois
+  // deste pagamento. É o que faz o mesmo cupom servir a quem paga por semana,
+  // por mês ou sem periodicidade nenhuma - em vez de supor a cadência, imprime
+  // a data concreta que o cliente reconhece.
+  const emAberto = recibo.titulos.filter((titulo) => titulo.saldoNoRecibo > 0.005).map((titulo) => titulo.dataVencimento);
+  const proximoVencimento = emAberto.length ? emAberto.reduce((menor, atual) => (new Date(atual) < new Date(menor) ? atual : menor)) : null;
 
   blocos.push({ tipo: "espaco", altura: 2 });
   if (nomeLoja) blocos.push({ tipo: "texto", texto: nomeLoja, alinhamento: "center", negrito: true, tamanho: 10 });
@@ -189,9 +194,9 @@ function montarBlocos(recibo: Recibo, loja: Loja | null, emitidoEm: Date, conven
   blocos.push({ tipo: "texto", texto: "RESUMO DO CONVÊNIO", negrito: true });
 
   // Recibo estornado não tem "saldo anterior" que se possa reconstruir: o
-  // estorno já devolveu o abatimento ao saldo de hoje, e somar de novo
-  // imprimiria uma dívida que o cliente nunca teve.
-  if (!estornado) blocos.push({ tipo: "par", rotulo: "Saldo anterior:", valor: maskMoney(convenio.saldo + abatimento) });
+  // estorno tirou este recebimento da conta do saldo, e somar o abatimento de
+  // volta imprimiria uma dívida que o cliente nunca teve.
+  if (!estornado) blocos.push({ tipo: "par", rotulo: "Saldo anterior:", valor: maskMoney(saldoDepois + abatimento) });
 
   blocos.push({ tipo: "par", rotulo: "Valor pago:", valor: maskMoney(recibo.valorEmCaixa) });
   if (acrescimo) blocos.push({ tipo: "par", rotulo: " (+) Juros/multa:", valor: maskMoney(acrescimo), tamanho: MIUDO });
@@ -199,26 +204,20 @@ function montarBlocos(recibo: Recibo, loja: Loja | null, emitidoEm: Date, conven
   blocos.push({ tipo: "par", rotulo: "Forma de pagamento:", valor: recibo.formaPagamentoNome || recibo.formaPagamento || "-" });
 
   blocos.push({ tipo: "separador" });
-  blocos.push({ tipo: "par", rotulo: estornado ? "SALDO DO CONVÊNIO:" : "SALDO APÓS PAGAMENTO:", valor: maskMoney(convenio.saldo), negrito: true });
-
-  // O saldo é o de agora, não o do dia do pagamento: numa 2ª via tirada depois
-  // de novas compras ele já mudou. A data ao lado é o que impede o cupom de
-  // mentir sobre a que momento aquele número se refere.
-  blocos.push({ tipo: "texto", texto: `(saldo apurado em ${formatarData(emitidoEm)})`, alinhamento: "center", tamanho: MIUDO });
+  blocos.push({ tipo: "par", rotulo: estornado ? "SALDO DOS TÍTULOS:" : "SALDO APÓS PAGAMENTO:", valor: maskMoney(saldoDepois), negrito: true });
   blocos.push({ tipo: "separador" });
 
   if (!estornado) {
     blocos.push({ tipo: "espaco", altura: 8 });
     blocos.push({ tipo: "texto", texto: quitado ? "CONVÊNIO QUITADO" : "PAGAMENTO PARCIAL", alinhamento: "center", negrito: true, tamanho: 10 });
 
-    // Quem ficou devendo leva no papel a data da próxima cobrança - a mesma
-    // linha serve para o semanal, para o mensal e para quem paga quando dá.
-    if (!quitado && convenio.vencimentoEmAberto) {
+    // Quem ficou devendo leva no papel a data da próxima cobrança.
+    if (!quitado && proximoVencimento) {
       blocos.push({ tipo: "espaco", altura: 4 });
       blocos.push({
         tipo: "par",
-        rotulo: ehPassado(convenio.vencimentoEmAberto) ? "Em atraso desde:" : "Próx. vencimento:",
-        valor: formatarData(convenio.vencimentoEmAberto),
+        rotulo: ehPassado(proximoVencimento) ? "Em atraso desde:" : "Próx. vencimento:",
+        valor: formatarData(proximoVencimento),
         tamanho: MIUDO,
       });
     }
@@ -252,9 +251,9 @@ function montarBlocos(recibo: Recibo, loja: Loja | null, emitidoEm: Date, conven
   return blocos;
 }
 
-export default function gerarReciboPDF(recibo: Recibo, loja: Loja | null, emitidoEm: Date, convenio: ConvenioDoCliente = { saldo: 0, vencimentoEmAberto: null }): Promise<string> {
+export default function gerarReciboPDF(recibo: Recibo, loja: Loja | null): Promise<string> {
   return new Promise((resolve, reject) => {
-    const blocos = montarBlocos(recibo, loja, emitidoEm, convenio);
+    const blocos = montarBlocos(recibo, loja);
 
     // Documento só para medir: mesmas fontes e mesmas larguras, então a altura
     // que ele calcula é a que o conteúdo vai ocupar de verdade. Nunca recebe
