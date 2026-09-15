@@ -16,17 +16,16 @@
         <template v-slot:acoes-filtro>
           <v-chip small outlined class="mr-2 mb-1" :color="semPeriodo ? 'primary' : ''" @click="limparPeriodo">Tudo (sem período)</v-chip>
         </template>
-        <v-col cols="12" md="5">
-          <v-text-field :value="clienteDescricao" label="Cliente" readonly outlined dense hide-details prepend-inner-icon="mdi-account-outline" placeholder="Selecione o cliente">
-            <template v-slot:append-outer>
-              <v-btn icon small @click="dialogCliente = true">
-                <v-icon>mdi-magnify</v-icon>
-              </v-btn>
-              <v-btn v-if="filtro.selectedCliente" icon small title="Ver todos os clientes" @click="voltarParaTodos">
-                <v-icon>mdi-close</v-icon>
-              </v-btn>
-            </template>
-          </v-text-field>
+        <!-- O cliente vem do filtro do topo da tela, que vale para todas as
+             abas: ter uma segunda busca de cliente aqui dentro dava dois
+             campos para a mesma coisa, e dois lugares para olhar quando o
+             resultado nao era o esperado. O que sobra e o atalho de voltar
+             para a lista de todos. -->
+        <v-col v-if="filtro.selectedCliente" cols="12" md="5" class="d-flex align-center">
+          <v-chip close close-icon="mdi-close" color="primary" outlined @click:close="voltarParaTodos">
+            <v-icon left small>mdi-account-outline</v-icon>
+            {{ clienteDescricao }}
+          </v-chip>
         </v-col>
         <v-col cols="12" md="3">
           <v-select v-model="filtro.selectedStatus" :items="situacoes" item-text="texto" item-value="valor" label="Situação" outlined dense hide-details @change="gerar"></v-select>
@@ -64,7 +63,7 @@
 
         <v-data-table v-else :headers="headersClientes" :items="clientes" :loading="carregando" :items-per-page="20" class="elevation-1" @click:row="abrirCliente">
           <template v-slot:item.cliente="{ item }">
-            {{ item.clienteCodigo }}{{ item.clienteNome ? ` - ${item.clienteNome}` : "" }}
+            {{ semZerosEsquerda(item.clienteCodigo) }}{{ item.clienteNome ? ` - ${item.clienteNome}` : "" }}
           </template>
           <template v-slot:item.saldo="{ item }">
             {{ maskMoney(item.saldo) }}
@@ -112,6 +111,12 @@
         <EstadoVazio v-if="!carregando && !titulos.items.length" mensagem="Nenhum título no período selecionado." />
 
         <v-data-table v-else :headers="headers" :items="titulos.items" :items-per-page="20" show-expand item-key="id" class="elevation-1" @click:row="verCupom">
+          <template v-slot:item.codigo="{ item }">
+            {{ semZerosEsquerda(item.codigo) }}
+          </template>
+          <template v-slot:item.cliente="{ item }">
+            {{ nomeCliente(item) }}
+          </template>
           <template v-slot:item.dataEmissao="{ item }">
             {{ formatarData(item.dataEmissao) }}
           </template>
@@ -131,8 +136,8 @@
             <v-chip x-small :color="corStatus(item)" dark>{{ item.status }}</v-chip>
           </template>
           <template v-slot:item.numero="{ item }">
-            <a v-if="temCupom(item)" href="#" @click.stop.prevent="verCupom(item)">{{ item.numero }}</a>
-            <span v-else>{{ item.numero }}</span>
+            <a v-if="temCupom(item)" href="#" @click.stop.prevent="verCupom(item)">{{ semZerosEsquerda(item.numero) }}</a>
+            <span v-else>{{ semZerosEsquerda(item.numero) }}</span>
           </template>
 
           <template v-slot:expanded-item="{ headers: colunas, item }">
@@ -205,10 +210,6 @@
         </v-card-text>
       </v-card>
     </v-dialog>
-
-    <v-dialog v-model="dialogCliente" max-width="900">
-      <LocalizarCliente @selecionar="selecionarCliente" @fechar="dialogCliente = false" />
-    </v-dialog>
   </div>
 </template>
 
@@ -216,21 +217,40 @@
 import CabecalhoRelatorio from "@/components/Relatorio/CabecalhoRelatorio.vue";
 import EstadoVazio from "@/components/Relatorio/EstadoVazio.vue";
 import FiltroPeriodo from "@/components/Relatorio/FiltroPeriodo.vue";
-import LocalizarCliente from "@/views/Cliente/LocalizarCliente.vue";
 import ContaReceberTituloList from "@/infra/entity/ContaReceberTituloList";
 import ContaReceberService from "@/infra/service/ContaReceberService";
 import { gerarExcel } from "@/utils/exports";
-import { maskMoney, maskDateBR } from "@/utils/masks";
+import { maskMoney, maskDateBR, semZerosEsquerda } from "@/utils/masks";
 
 // Extrato por cliente: os títulos do período, os recebimentos de cada um e o
 // saldo devedor total (que considera também títulos fora do período filtrado).
 export default {
   name: "ExtratoCliente",
-  components: { CabecalhoRelatorio, EstadoVazio, FiltroPeriodo, LocalizarCliente },
+  components: { CabecalhoRelatorio, EstadoVazio, FiltroPeriodo },
+  // O cliente e escolhido uma vez so, no filtro do topo da tela, e vale para
+  // todas as abas.
+  props: {
+    clienteCodigo: { type: String, default: "" },
+    clienteNomeSelecionado: { type: String, default: "" },
+  },
+  watch: {
+    clienteCodigo: {
+      immediate: true,
+      handler(codigo) {
+        this.filtro.selectedCliente = codigo || "";
+        this.clienteNome = this.clienteNomeSelecionado || "";
+        // immediate dispara antes do mounted; sem isto a aba faria duas
+        // consultas iguais ao abrir.
+        if (this._montado) this.gerar();
+      },
+    },
+    clienteNomeSelecionado(nome) {
+      this.clienteNome = nome || "";
+    },
+  },
   data() {
     return {
       carregando: false,
-      dialogCliente: false,
       dialogCupom: false,
       carregandoCupom: false,
       cupomSelecionado: {},
@@ -267,6 +287,7 @@ export default {
       ],
       headers: [
         { text: "Título", value: "codigo" },
+        { text: "Cliente", value: "cliente", sortable: false },
         { text: "Cupom", value: "numero" },
         { text: "Parc.", value: "prestacao" },
         { text: "Emissão", value: "dataEmissao" },
@@ -315,7 +336,7 @@ export default {
   computed: {
     clienteDescricao() {
       if (!this.filtro.selectedCliente) return "";
-      return `${this.filtro.selectedCliente} - ${this.clienteNome}`.trim();
+      return `${semZerosEsquerda(this.filtro.selectedCliente)} - ${this.clienteNome}`.trim();
     },
     semPeriodo() {
       return !this.filtro.dataVencimentoDe && !this.filtro.dataVencimentoAte;
@@ -327,10 +348,14 @@ export default {
     },
   },
   mounted() {
+    // Marca depois do primeiro gerar(): o watch da prop clienteCodigo roda com
+    // immediate, antes daqui, e nao pode disparar a mesma consulta duas vezes.
+    this._montado = true;
     this.gerar();
   },
   methods: {
     maskMoney,
+    semZerosEsquerda,
     formatarData(data) {
       if (!data) return "";
       return maskDateBR(String(data).substring(0, 10));
@@ -343,12 +368,6 @@ export default {
     limparPeriodo() {
       this.filtro.dataVencimentoDe = "";
       this.filtro.dataVencimentoAte = "";
-      this.gerar();
-    },
-    selecionarCliente(cliente) {
-      this.filtro.selectedCliente = cliente.codigo;
-      this.clienteNome = cliente.nome;
-      this.dialogCliente = false;
       this.gerar();
     },
     async gerar() {
@@ -391,23 +410,32 @@ export default {
         this.carregandoCupom = false;
       }
     },
-    // Do consolidado para o extrato individual, sem passar pela busca.
+    // Do consolidado para o extrato individual, sem passar pela busca. Quem
+    // guarda o cliente escolhido e o filtro do topo da tela, entao avisa o pai
+    // em vez de mexer no proprio filtro - senao o campo la em cima continuaria
+    // dizendo "todos os clientes" com um extrato individual na tela.
     abrirCliente(cliente) {
-      this.filtro.selectedCliente = cliente.clienteCodigo;
-      this.clienteNome = cliente.clienteNome;
-      this.gerar();
+      this.$emit("selecionar-cliente", {
+        codigo: cliente.clienteCodigo,
+        nome: cliente.clienteNome,
+      });
     },
     voltarParaTodos() {
-      this.filtro.selectedCliente = "";
-      this.clienteNome = "";
-      this.gerar();
+      this.$emit("selecionar-cliente", { codigo: "", nome: "" });
+    },
+    // O nome vem resolvido do backend; o codigo sozinho e o que sobra para
+    // cliente que so existe no PDV e nunca subiu para a nuvem.
+    nomeCliente(titulo) {
+      if (!titulo.clienteCodigo) return "";
+      const exibido = semZerosEsquerda(titulo.clienteCodigo);
+      return titulo.clienteNome ? `${exibido} - ${titulo.clienteNome}` : exibido;
     },
     exportarExcel() {
       // Exporta o que está na tela: no modo consolidado são os clientes, não
       // os títulos (que nesse modo nem foram carregados).
       if (!this.filtro.selectedCliente) {
         const posicao = this.clientes.map((cliente) => ({
-          codigo: cliente.clienteCodigo,
+          codigo: semZerosEsquerda(cliente.clienteCodigo),
           cliente: cliente.clienteNome,
           titulos: cliente.qtdTitulos,
           titulos_vencidos: cliente.qtdTitulosVencidos,
@@ -423,9 +451,11 @@ export default {
       }
 
       const linhas = this.titulos.items.map((titulo) => ({
-        titulo: titulo.codigo,
+        // Mesmo codigo que a grade mostra: 38 digitos de enchimento viram
+        // notacao cientifica no Excel, e o que sobra nao e o numero do titulo.
+        titulo: semZerosEsquerda(titulo.codigo),
         cliente: this.clienteDescricao,
-        cupom: titulo.numero,
+        cupom: semZerosEsquerda(titulo.numero),
         parcela: titulo.prestacao,
         emissao: this.formatarData(titulo.dataEmissao),
         vencimento: this.formatarData(titulo.dataVencimento),

@@ -11,7 +11,7 @@
       <v-row dense>
         <v-col cols="6" sm="3">
           <span class="text-caption grey--text">Título</span>
-          <input class="form-control" disabled :value="titulo.codigo" />
+          <input class="form-control" disabled :value="semZerosEsquerda(titulo.codigo)" />
         </v-col>
         <v-col cols="6" sm="2">
           <span class="text-caption grey--text">Parcela</span>
@@ -51,6 +51,7 @@
 
 <script>
 import InputMoney from "@/components/Input/InputMoney.vue";
+import { semZerosEsquerda } from "@/utils/masks";
 import InputText from "@/components/Input/InputText.vue";
 import ContaReceberTitulo from "@/infra/entity/ContaReceberTitulo";
 import ContaReceberTituloListFactory from "@/infra/entity/factory/ContaReceberTituloListFactory";
@@ -77,6 +78,7 @@ export default {
     },
   },
   methods: {
+    semZerosEsquerda,
     // Chamado pela listagem via $refs. Recria a entidade para não editar o
     // objeto que está na grid enquanto o usuário digita.
     abrir(titulo) {

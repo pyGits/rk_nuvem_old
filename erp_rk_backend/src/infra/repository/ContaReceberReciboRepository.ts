@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import DatabaseConnection, { Queryable } from "./DatabaseConnection";
+import { sqlCodigoClienteNormalizado, variantesDeCodigoCliente } from "./codigoCliente";
 
 // O conteudo de um recibo e derivado, nao armazenado: as linhas de
 // conta_receber_recebimento que compartilham recibo_id sao a operacao inteira,
@@ -95,7 +96,11 @@ export class ContaReceberReciboRepositoryPG implements ContaReceberReciboReposit
         join conta_receber c on c.id = r.conta_receber_id and c.tenant_id = r.tenant_id
         -- LEFT, nunca INNER: cliente que so existe no PDV e forma sem cadastro
         -- nao podem fazer o recibo desaparecer da lista.
-        left join clientes cl        on cl.tenant_id = c.tenant_id and cl.codigo = c.cliente_codigo
+        -- Codigo normalizado nos dois lados: o titulo guarda "000001" e o
+        -- cadastro, "1" (ver codigoCliente.ts). Com a igualdade crua a coluna
+        -- Cliente da grade de recibos ficava so com o numero.
+        left join clientes cl        on cl.tenant_id = c.tenant_id
+          and ${sqlCodigoClienteNormalizado("cl.codigo")} = ${sqlCodigoClienteNormalizado("c.cliente_codigo")}
         left join forma_pagamento fp on fp.tenant_id = r.tenant_id and fp.codigo = r.forma_pagamento
        where r.tenant_id = $1 and r.recibo_id is not null`;
 
@@ -115,8 +120,10 @@ export class ContaReceberReciboRepositoryPG implements ContaReceberReciboReposit
       params.push(filtros.dataAte);
     }
     if (filtros.selectedCliente) {
-      sql += ` and c.cliente_codigo = $${index++}`;
-      params.push(filtros.selectedCliente);
+      // Mesma razao do getAll dos titulos: o codigo vindo da busca de clientes
+      // nao e escrito igual ao gravado no titulo.
+      sql += ` and c.cliente_codigo = ANY($${index++})`;
+      params.push(variantesDeCodigoCliente(filtros.selectedCliente));
     }
     if (filtros.selectedLoja) {
       sql += ` and c.loja = $${index++}`;

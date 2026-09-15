@@ -11,18 +11,15 @@
             <v-subheader class="pl-0">Até</v-subheader>
             <v-text-field v-model="filtro.dataAte" type="date" outlined dense hide-details></v-text-field>
           </v-col>
-          <v-col cols="12" sm="4">
-            <v-subheader class="pl-0">Cliente</v-subheader>
-            <v-text-field :value="clienteDescricao" readonly outlined dense hide-details placeholder="Todos os clientes">
-              <template v-slot:append-outer>
-                <v-btn icon small @click="dialogCliente = true">
-                  <v-icon>mdi-magnify</v-icon>
-                </v-btn>
-                <v-btn v-if="filtro.selectedCliente" icon small @click="limparCliente">
-                  <v-icon>mdi-close</v-icon>
-                </v-btn>
-              </template>
-            </v-text-field>
+          <!-- O cliente vem do filtro do topo da tela, que vale para todas as
+               abas. Uma segunda busca de cliente aqui dentro deixava dois
+               campos para a mesma coisa, com respostas diferentes conforme
+               qual dos dois a pessoa usasse. -->
+          <v-col v-if="filtro.selectedCliente" cols="12" sm="4" class="d-flex align-center">
+            <v-chip color="primary" outlined>
+              <v-icon left small>mdi-account-outline</v-icon>
+              {{ clienteDescricao }}
+            </v-chip>
           </v-col>
           <v-col cols="12" sm="2">
             <v-checkbox v-model="filtro.incluirEstornados" true-value="1" false-value="0" label="Incluir estornados" hide-details dense class="mt-6"></v-checkbox>
@@ -47,7 +44,7 @@
           {{ formatarData(item.dataPagamento) }}
         </template>
         <template v-slot:item.cliente="{ item }">
-          {{ item.clienteCodigo }}{{ item.clienteNome ? ` - ${item.clienteNome}` : "" }}
+          {{ semZerosEsquerda(item.clienteCodigo) }}{{ item.clienteNome ? ` - ${item.clienteNome}` : "" }}
         </template>
         <template v-slot:item.formaPagamentoNome="{ item }">
           {{ item.formaPagamentoNome || item.formaPagamento || "-" }}
@@ -88,7 +85,7 @@
               </thead>
               <tbody>
                 <tr v-for="titulo in item.titulos" :key="titulo.id">
-                  <td>{{ titulo.codigo }}</td>
+                  <td>{{ semZerosEsquerda(titulo.codigo) }}</td>
                   <td class="text-right">{{ titulo.prestacao }}</td>
                   <td class="text-right">{{ formatarData(titulo.dataVencimento) }}</td>
                   <td class="text-right">{{ maskMoney(titulo.valorTitulo) }}</td>
@@ -106,10 +103,6 @@
       </v-data-table>
     </v-card-text>
 
-    <v-dialog v-model="dialogCliente" max-width="900">
-      <LocalizarCliente @selecionar="selecionarCliente" @fechar="dialogCliente = false" />
-    </v-dialog>
-
     <ConfirmDialog ref="confirmDialog"></ConfirmDialog>
   </div>
 </template>
@@ -117,21 +110,37 @@
 <script>
 import ConfirmDialog from "@/components/ConfirmDialog/ConfirmDialog.vue";
 import EstadoVazio from "@/components/Relatorio/EstadoVazio.vue";
-import LocalizarCliente from "@/views/Cliente/LocalizarCliente.vue";
 import ContaReceberService from "@/infra/service/ContaReceberService";
 import PDFService from "@/infra/service/PDFService";
-import { maskMoney, maskDateBR } from "@/utils/masks";
+import { maskMoney, maskDateBR, semZerosEsquerda } from "@/utils/masks";
 
 // Lista o que já foi recebido. Existe porque o título liquidado sai da grade de
 // títulos (o filtro padrão é "em aberto") e não sobrava nenhum rastro do que
 // tinha sido baixado - nem para conferir, nem para reimprimir o comprovante.
 export default {
   name: "RecibosRecebimento",
-  components: { ConfirmDialog, EstadoVazio, LocalizarCliente },
+  components: { ConfirmDialog, EstadoVazio },
+  // O cliente e escolhido uma vez so, no filtro do topo da tela.
+  props: {
+    clienteCodigo: { type: String, default: "" },
+    clienteNomeSelecionado: { type: String, default: "" },
+  },
+  watch: {
+    clienteCodigo: {
+      immediate: true,
+      handler(codigo) {
+        this.filtro.selectedCliente = codigo || "";
+        this.clienteNome = this.clienteNomeSelecionado || "";
+        if (this._montado) this.carregar();
+      },
+    },
+    clienteNomeSelecionado(nome) {
+      this.clienteNome = nome || "";
+    },
+  },
   data() {
     return {
       carregando: false,
-      dialogCliente: false,
       clienteNome: "",
       recibos: [],
       filtro: {
@@ -156,14 +165,18 @@ export default {
   computed: {
     clienteDescricao() {
       if (!this.filtro.selectedCliente) return "";
-      return `${this.filtro.selectedCliente} - ${this.clienteNome}`.trim();
+      return `${semZerosEsquerda(this.filtro.selectedCliente)} - ${this.clienteNome}`.trim();
     },
   },
   mounted() {
+    // Marcado depois do primeiro carregar(): o watch da prop roda com
+    // immediate, antes daqui, e nao pode repetir a mesma consulta na abertura.
+    this._montado = true;
     this.carregar();
   },
   methods: {
     maskMoney,
+    semZerosEsquerda,
     hoje() {
       return new Date().toISOString().substring(0, 10);
     },
@@ -183,17 +196,6 @@ export default {
       } finally {
         this.carregando = false;
       }
-    },
-    selecionarCliente(cliente) {
-      this.filtro.selectedCliente = cliente.codigo;
-      this.clienteNome = cliente.nome;
-      this.dialogCliente = false;
-      this.carregar();
-    },
-    limparCliente() {
-      this.filtro.selectedCliente = "";
-      this.clienteNome = "";
-      this.carregar();
     },
     async imprimir(recibo) {
       const gerado = await ContaReceberService.gerarRecibo(recibo.reciboId);

@@ -4,6 +4,7 @@ import ContaReceberTitulo from "../entity/ContaReceberTitulo";
 import ContaReceberTituloList from "../entity/ContaReceberTituloList";
 import RecebimentoTitulo from "../entity/RecebimentoTitulo";
 import DatabaseConnection, { Queryable } from "./DatabaseConnection";
+import { chaveCodigoCliente, sqlCodigoClienteNormalizado, variantesDeCodigoCliente } from "./codigoCliente";
 
 export default interface ContaReceberRepository {
   sincronizar(titulo: ContaReceberTitulo, tenant_id: number): Promise<void>;
@@ -84,13 +85,19 @@ async function carregarNomes(titulos: ContaReceberTitulo[], tenant_id: number): 
   const codigos = Array.from(new Set(titulos.map((titulo) => titulo.clienteCodigo).filter((codigo) => !!codigo)));
 
   if (codigos.length > 0) {
+    // Busca por todas as formas em que o codigo pode estar gravado e casa pelo
+    // codigo normalizado: o titulo guarda "000001" e o cadastro, "1" (ver
+    // codigoCliente.ts). Comparar direto deixava a coluna Cliente so com o
+    // numero, sem nome nenhum.
+    const procurados = Array.from(new Set(codigos.flatMap((codigo) => variantesDeCodigoCliente(codigo))));
+
     // Sem nome cadastrado o titulo continua aparecendo com o codigo: cliente
     // que so existe no PDV e nunca subiu para a nuvem nao pode sumir da tela.
-    const clientes = await DatabaseConnection.queryAll("select codigo, nome from clientes where tenant_id = $1 and codigo = ANY($2)", [tenant_id, codigos]);
+    const clientes = await DatabaseConnection.queryAll("select codigo, nome from clientes where tenant_id = $1 and codigo = ANY($2)", [tenant_id, procurados]);
 
-    const nomePorCliente: { [codigo: string]: string } = {};
-    clientes.forEach((row: any) => (nomePorCliente[String(row.codigo)] = row.nome || ""));
-    titulos.forEach((titulo) => (titulo.clienteNome = nomePorCliente[String(titulo.clienteCodigo)] || ""));
+    const nomePorCliente: { [chave: string]: string } = {};
+    clientes.forEach((row: any) => (nomePorCliente[chaveCodigoCliente(row.codigo)] = row.nome || ""));
+    titulos.forEach((titulo) => (titulo.clienteNome = nomePorCliente[chaveCodigoCliente(titulo.clienteCodigo)] || ""));
   }
 
   const formas = await DatabaseConnection.queryAll("select codigo, nome from forma_pagamento where tenant_id = $1", [tenant_id]);
@@ -186,8 +193,11 @@ export class ContaReceberRepositoryPG implements ContaReceberRepository {
       params.push(filtros.dataEmissaoAte);
     }
     if (filtros.selectedCliente) {
-      sql += ` and cliente_codigo = $${index++}`;
-      params.push(filtros.selectedCliente);
+      // ANY das variantes, e nao igualdade: o codigo escolhido na busca de
+      // clientes ("1") e o gravado no titulo ("000001") sao o mesmo cliente.
+      // Ver codigoCliente.ts.
+      sql += ` and cliente_codigo = ANY($${index++})`;
+      params.push(variantesDeCodigoCliente(filtros.selectedCliente));
     }
     if (filtros.selectedLoja) {
       sql += ` and loja = $${index++}`;
@@ -250,7 +260,10 @@ export class ContaReceberRepositoryPG implements ContaReceberRepository {
              min(c.data_vencimento) filter (where t.saldo > 0)                  as vencimento_mais_antigo,
              max(t.ultimo_pagamento)                                            as ultimo_recebimento
         from conta_receber c
-        left join clientes cl on cl.tenant_id = c.tenant_id and cl.codigo = c.cliente_codigo
+        -- Casamento pelo codigo normalizado: o titulo guarda "000001" e o
+        -- cadastro, "1". Com a igualdade crua esta lista saia inteira sem nome.
+        left join clientes cl on cl.tenant_id = c.tenant_id
+          and ${sqlCodigoClienteNormalizado("cl.codigo")} = ${sqlCodigoClienteNormalizado("c.cliente_codigo")}
         -- lateral sobre subconsulta so de agregados: sempre devolve exatamente
         -- uma linha, entao nenhum titulo se perde por falta de recebimento.
         cross join lateral (

@@ -149,6 +149,12 @@
                 {{ formatarData(item.dataVencimento) }}
                 <v-chip v-if="item.diasAtraso() > 0" x-small color="error" dark class="ml-1">{{ item.diasAtraso() }}d</v-chip>
               </template>
+              <template v-slot:item.codigo="{ item }">
+                {{ semZerosEsquerda(item.codigo) }}
+              </template>
+              <template v-slot:item.numero="{ item }">
+                {{ semZerosEsquerda(item.numero) }}
+              </template>
               <template v-slot:item.cliente="{ item }">
                 {{ nomeCliente(item.clienteCodigo, item.clienteNome) }}
               </template>
@@ -190,7 +196,14 @@
         </v-tab-item>
 
         <v-tab-item>
-          <RecibosRecebimento ref="recibos" @estornado="carregar" />
+          <!-- O cliente sai do filtro do topo: as abas nao tem busca propria,
+               para nao existirem dois campos de cliente na mesma tela. -->
+          <RecibosRecebimento
+            ref="recibos"
+            :cliente-codigo="filtro.selectedCliente"
+            :cliente-nome-selecionado="clienteFiltroNome"
+            @estornado="carregar"
+          />
         </v-tab-item>
 
         <v-tab-item>
@@ -198,7 +211,14 @@
         </v-tab-item>
 
         <v-tab-item>
-          <ExtratoCliente />
+          <!-- selecionar-cliente: clicar numa linha da posicao consolidada
+               escolhe aquele cliente no filtro do topo, para a tela inteira
+               ficar falando do mesmo cliente. -->
+          <ExtratoCliente
+            :cliente-codigo="filtro.selectedCliente"
+            :cliente-nome-selecionado="clienteFiltroNome"
+            @selecionar-cliente="aplicarClienteDaAba"
+          />
         </v-tab-item>
       </v-tabs-items>
     </v-card>
@@ -231,7 +251,8 @@ import PDFService from "@/infra/service/PDFService";
 import ContaReceberTituloList from "@/infra/entity/ContaReceberTituloList";
 import ContaReceberService from "@/infra/service/ContaReceberService";
 import { gerarExcel } from "@/utils/exports";
-import { maskMoney, maskDateBR } from "@/utils/masks";
+import { maskMoney, maskDateBR, semZerosEsquerda } from "@/utils/masks";
+import { mesmoCliente } from "@/utils/codigoCliente";
 
 export default {
   name: "ListarContasReceber",
@@ -300,7 +321,7 @@ export default {
     },
     clienteFiltroDescricao() {
       if (!this.filtro.selectedCliente) return "";
-      return `${this.filtro.selectedCliente} - ${this.clienteFiltroNome}`.trim();
+      return `${semZerosEsquerda(this.filtro.selectedCliente)} - ${this.clienteFiltroNome}`.trim();
     },
   },
   async mounted() {
@@ -309,6 +330,7 @@ export default {
   },
   methods: {
     maskMoney,
+    semZerosEsquerda,
     filtroInicial() {
       return {
         selectedStatus: "ABERTO",
@@ -331,9 +353,21 @@ export default {
     // título antigo, gravado antes dessa mudança.
     nomeCliente(codigo, nome) {
       if (!codigo) return "";
-      if (nome) return `${codigo} - ${nome}`;
-      const cliente = this.clienteList.find((item) => String(item.codigo) === String(codigo));
-      return cliente ? `${codigo} - ${cliente.nome}` : codigo;
+      // O codigo gravado no titulo vem preenchido ("000001"); na tela ele e
+      // mostrado como o cadastro da web o escreve.
+      const exibido = semZerosEsquerda(codigo);
+      if (nome) return `${exibido} - ${nome}`;
+      // mesmoCliente, e nao ===: o titulo guarda "000001" e o cadastro, "1".
+      const cliente = this.clienteList.find((item) => mesmoCliente(item.codigo, codigo));
+      return cliente ? `${exibido} - ${cliente.nome}` : exibido;
+    },
+    // Vem da aba de extrato, quando a pessoa clica num cliente da posicao
+    // consolidada. Recarrega a grade de titulos junto, senao as abas ficariam
+    // mostrando clientes diferentes.
+    aplicarClienteDaAba({ codigo, nome }) {
+      this.filtro.selectedCliente = codigo || "";
+      this.clienteFiltroNome = nome || "";
+      this.carregar();
     },
     corStatus(titulo) {
       if (titulo.status === "CANCELADO") return "grey";
@@ -426,11 +460,13 @@ export default {
     // da API.
     exportarExcel() {
       const linhas = this.titulos.items.map((titulo) => ({
-        titulo: titulo.codigo,
+        // Mesmo codigo que a grade mostra: 38 digitos de enchimento viram
+        // notacao cientifica no Excel, e o que sobra nao e o numero do titulo.
+        titulo: semZerosEsquerda(titulo.codigo),
         cliente: this.nomeCliente(titulo.clienteCodigo, titulo.clienteNome),
         cpf: titulo.clienteCpf,
         loja: titulo.lojaId,
-        cupom: titulo.numero,
+        cupom: semZerosEsquerda(titulo.numero),
         parcela: titulo.prestacao,
         emissao: this.formatarData(titulo.dataEmissao),
         vencimento: this.formatarData(titulo.dataVencimento),

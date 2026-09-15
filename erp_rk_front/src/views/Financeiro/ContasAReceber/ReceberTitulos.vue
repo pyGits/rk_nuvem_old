@@ -5,6 +5,9 @@
 
       <v-card-text>
         <v-data-table :headers="headers" :items="contas.items" :items-per-page="5" dense class="elevation-1">
+          <template v-slot:item.codigo="{ item }">
+            {{ semZerosEsquerda(item.codigo) }}
+          </template>
           <template v-slot:item.dataVencimento="{ item }">
             {{ formatarData(item.dataVencimento) }}
           </template>
@@ -126,7 +129,7 @@ import ContaReceberTituloList from "@/infra/entity/ContaReceberTituloList";
 import RecebimentoTitulo from "@/infra/entity/RecebimentoTitulo";
 import ContaReceberService from "@/infra/service/ContaReceberService";
 import FormaPagamentoService from "@/infra/service/FormaPagamentoService";
-import { maskMoney, maskDateBR } from "@/utils/masks";
+import { maskMoney, maskDateBR, semZerosEsquerda } from "@/utils/masks";
 import { getCurrentDate } from "@/utils/date";
 
 export default {
@@ -164,6 +167,7 @@ export default {
     this.formasPagamento = await FormaPagamentoService.getAll();
   },
   methods: {
+    semZerosEsquerda,
     maskMoney,
     formatarData(data) {
       if (!data) return "";
