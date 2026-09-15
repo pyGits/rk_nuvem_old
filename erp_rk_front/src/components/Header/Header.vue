@@ -29,9 +29,7 @@
         </template>
       </v-autocomplete>
       <v-spacer></v-spacer>
-      <v-btn v-if="$podeAcessar('carga.loja')" icon to="/carga/loja" title="Enviar carga para as lojas">
-        <v-icon>mdi-cloud-upload-outline</v-icon>
-      </v-btn>
+      <IndicadorCarga v-if="$podeAcessar('carga.loja')" />
       <v-menu offset-y left :close-on-content-click="false" max-width="380">
         <template v-slot:activator="{ on }">
           <v-btn icon class="mr-2" v-on="on">
@@ -128,8 +126,10 @@
 <script>
 import Vue from "vue";
 import menuItems from "@/components/Menu/Menu.json"; // importa o arquivo com os itens do menu
+import IndicadorCarga from "@/components/Header/IndicadorCarga.vue";
 
 export default {
+  components: { IndicadorCarga },
   data() {
     return {
       // Feature pronta, só desligada a pedido enquanto não é hora de lançar.

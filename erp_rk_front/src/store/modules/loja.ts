@@ -16,9 +16,14 @@ const initialLoja: Loja = {
 };
 
 export default {
-  state: (): { loja: Loja; lojaList: Loja[] } => ({
+  state: (): { loja: Loja; lojaList: Loja[]; cargasEmAndamento: any[] } => ({
     loja: { ...initialLoja },
     lojaList: [],
+    // Resposta crua de /carga/status. Existe separada do lojaList porque o
+    // indicador do cabecalho aparece em qualquer tela, onde a lista de lojas
+    // nunca foi carregada - o setLojaStatus abaixo so sabe pintar lojas que ja
+    // estao no lojaList.
+    cargasEmAndamento: [],
   }),
 
   mutations: {
@@ -101,6 +106,9 @@ export default {
     setLojaComplemento(state: any, payload: string) {
       state.loja.endereco.setComplemento(payload);
     },
+    setCargasEmAndamento(state: any, payload: any) {
+      state.cargasEmAndamento = Array.isArray(payload) ? payload : [];
+    },
     setLojaStatus(state: any, payload: any) {
       const cargas = Array.isArray(payload) ? payload : [];
 
@@ -127,9 +135,12 @@ export default {
     async enviaCargaAlterados({ state }: any, payload: any) {
       await Vue.prototype.$http.post("/cargaAlterados", payload);
     },
+    // Uma chamada alimenta os dois consumidores: a tela de carga (setLojaStatus,
+    // que pinta a linha de cada loja) e o indicador do cabecalho
+    // (setCargasEmAndamento, que nao depende do lojaList).
     async verificaCargaStatus({ commit }: any, payload: any) {
       await Vue.prototype.$http.get("/carga/status").then((res: any) => {
-        // console.log(res.data);
+        commit("setCargasEmAndamento", res.data);
         commit("setLojaStatus", res.data);
       });
     },
