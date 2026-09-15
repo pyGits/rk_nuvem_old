@@ -3,10 +3,62 @@ import Loja from "../entity/Loja";
 import { Recibo } from "../repository/ContaReceberReciboRepository";
 import { maskMoney } from "../../masks/masks";
 
-// Comprovante de recebimento. Gerado sob demanda a partir do que esta gravado,
-// nunca guardado: reimprimir sai de graca e o papel nunca fica defasado do
-// banco. Mesma forma do gerarRomaneio em NotaFiscalRepository - acumula os
-// buffers do pdfkit e resolve base64, que e o que PDFService.exibirPDF espera.
+// Comprovante de recebimento em CUPOM 80mm, para a térmica do caixa (Elgin i9).
+// Gerado sob demanda a partir do que está gravado, nunca guardado: reimprimir
+// sai de graça e o papel nunca fica defasado do banco. Acumula os buffers do
+// pdfkit e resolve base64, que é o que PDFService.exibirPDF espera.
+//
+// O que a i9 impõe ao layout:
+//   - bobina de 80mm = 226.77pt, mas a área imprimível é de 72mm (576 dots a
+//     203dpi). A margem de 12pt deixa a coluna em ~71,5mm; o que passar disso
+//     sai cortado na lateral.
+//   - 203dpi é pouco para corpo miúdo: abaixo de 8pt a térmica come o traço
+//     fino e o texto sai lavado. 8pt é o piso do cupom.
+//   - separador é fileira de "-" e não linha vetorial: traço de meio ponto vira
+//     pontilhado irregular na cabeça térmica, caractere sai sempre igual.
+const LARGURA_PAPEL = 226.77;
+const MARGEM = 12;
+const LARGURA = LARGURA_PAPEL - MARGEM * 2;
+
+// Courier e não Helvetica: em cupom o que se lê são colunas de valores, e a
+// monoespaçada alinha os centavos sozinha. 9pt dá 37 colunas na largura útil.
+const CORPO = 9;
+const MIUDO = 8;
+const FONTE = "Courier";
+const FONTE_NEGRITO = "Courier-Bold";
+const COLUNAS = Math.floor(LARGURA / (0.6 * CORPO));
+const REGUA = "-".repeat(COLUNAS);
+
+// No par rótulo/valor o rótulo fica com 62% da linha e o valor com o resto,
+// alinhado à direita. "SALDO APÓS PAGAMENTO:" é o rótulo mais longo que
+// precisa caber em uma linha só - a divisão sai daí.
+const LARGURA_ROTULO = LARGURA * 0.62;
+const LARGURA_VALOR = LARGURA - LARGURA_ROTULO;
+
+type Alinhamento = "left" | "center" | "right";
+
+// O cupom é papel contínuo: a altura da página é o tamanho do conteúdo, que só
+// se sabe depois de montar tudo. Por isso o comprovante é descrito como uma
+// lista de blocos, medido em um documento descartável e só então desenhado no
+// documento de verdade, já com a altura certa. Sem isso sobraria papel em
+// branco no fim de todo recibo curto - ou o de muitos títulos quebraria em
+// duas páginas no meio do resumo.
+type Bloco =
+  | { tipo: "texto"; texto: string; alinhamento?: Alinhamento; negrito?: boolean; tamanho?: number }
+  | { tipo: "par"; rotulo: string; valor: string; negrito?: boolean; tamanho?: number }
+  | { tipo: "separador" }
+  | { tipo: "espaco"; altura: number };
+
+// Posição do convênio do cliente no momento da impressão. Não sai do recibo:
+// vem da mesma consulta que alimenta a posição consolidada da tela.
+export type ConvenioDoCliente = {
+  saldo: number;
+  vencimentoEmAberto: string | null;
+};
+
+// @types/pdfkit nao expoe o namespace PDFKit neste projeto; o tipo da instancia
+// sai do proprio construtor.
+type Documento = InstanceType<typeof PDFDocument>;
 
 // maskDateBR espera um Date; o pg devolve date ora como Date, ora como string
 // 'YYYY-MM-DD' dependendo do caminho. Formatar errado aqui derruba a rota.
@@ -21,114 +73,208 @@ function formatarData(valor: any): string {
   return dia && mes && ano ? `${dia}/${mes}/${ano}` : String(valor);
 }
 
-// @types/pdfkit nao expoe o namespace PDFKit neste projeto; o tipo da instancia
-// sai do proprio construtor.
-type Documento = InstanceType<typeof PDFDocument>;
-
-const COLUNAS = [
-  { titulo: "Título", x: 40, largura: 130, alinhamento: "left" as const },
-  { titulo: "Parc.", x: 175, largura: 35, alinhamento: "right" as const },
-  { titulo: "Vencim.", x: 215, largura: 70, alinhamento: "right" as const },
-  { titulo: "Valor", x: 290, largura: 75, alinhamento: "right" as const },
-  // "Quitado" e nao "Recebido": a coluna mostra o abatimento (valor + desconto),
-  // ou seja, quanto do titulo deixou de ser devido. A composicao esta nos totais.
-  { titulo: "Quitado", x: 370, largura: 75, alinhamento: "right" as const },
-  { titulo: "Saldo", x: 450, largura: 75, alinhamento: "right" as const },
-];
-
-function linhaDaTabela(doc: Documento, y: number, valores: string[], negrito = false): void {
-  doc.font(negrito ? "Helvetica-Bold" : "Helvetica").fontSize(9);
-  COLUNAS.forEach((coluna, i) => doc.text(valores[i], coluna.x, y, { width: coluna.largura, align: coluna.alinhamento }));
+// Vencimento na linha do título vai abreviado (dd/mm/aa): com o ano cheio a
+// linha "título + parcela + vencimento + valor" não cabe nas 37 colunas.
+function dataCurta(valor: any): string {
+  const completa = formatarData(valor);
+  return completa.length === 10 ? `${completa.substring(0, 6)}${completa.substring(8)}` : completa;
 }
 
-function totalizador(doc: Documento, y: number, rotulo: string, valor: number, negrito = false): void {
-  doc.font(negrito ? "Helvetica-Bold" : "Helvetica").fontSize(negrito ? 11 : 9);
-  doc.text(rotulo, 290, y, { width: 130, align: "right" });
-  doc.text(maskMoney(valor), 425, y, { width: 100, align: "right" });
+function ehPassado(valor: any): boolean {
+  const data = new Date(String(valor).substring(0, 10));
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  return data.getTime() < hoje.getTime();
 }
 
-export default function gerarReciboPDF(recibo: Recibo, loja: Loja | null, emitidoEm: Date): Promise<string> {
+// O título é gravado preenchido ("000123") e o cadastro web usa "123". Na tela
+// o operador vê sem os zeros; o cupom acompanha, senão o número que ele confere
+// de olho não bate com o da grade.
+function semZerosEsquerda(codigo: any): string {
+  const texto = String(codigo ?? "").trim();
+  if (!/^[0-9]+$/.test(texto)) return texto;
+  return texto.replace(/^0+/, "") || "0";
+}
+
+function alturaDoBloco(doc: Documento, bloco: Bloco): number {
+  if (bloco.tipo === "espaco") return bloco.altura;
+  if (bloco.tipo === "separador") return doc.font(FONTE).fontSize(CORPO).heightOfString(REGUA, { width: LARGURA }) + 1;
+
+  doc.font(bloco.negrito ? FONTE_NEGRITO : FONTE).fontSize(bloco.tamanho || CORPO);
+
+  if (bloco.tipo === "texto") return doc.heightOfString(bloco.texto, { width: LARGURA, align: bloco.alinhamento || "left" }) + 1;
+
+  // O par ocupa a maior das duas colunas: rótulo comprido quebra em duas linhas
+  // em vez de escrever por cima do valor.
+  return Math.max(doc.heightOfString(bloco.rotulo, { width: LARGURA_ROTULO }), doc.heightOfString(bloco.valor, { width: LARGURA_VALOR })) + 1;
+}
+
+function desenharBloco(doc: Documento, bloco: Bloco, y: number): void {
+  if (bloco.tipo === "espaco") return;
+
+  if (bloco.tipo === "separador") {
+    doc.font(FONTE).fontSize(CORPO).text(REGUA, MARGEM, y, { width: LARGURA, align: "left" });
+    return;
+  }
+
+  doc.font(bloco.negrito ? FONTE_NEGRITO : FONTE).fontSize(bloco.tamanho || CORPO);
+
+  if (bloco.tipo === "texto") {
+    doc.text(bloco.texto, MARGEM, y, { width: LARGURA, align: bloco.alinhamento || "left" });
+    return;
+  }
+
+  doc.text(bloco.rotulo, MARGEM, y, { width: LARGURA_ROTULO, align: "left" });
+  doc.text(bloco.valor, MARGEM + LARGURA_ROTULO, y, { width: LARGURA_VALOR, align: "right" });
+}
+
+function montarBlocos(recibo: Recibo, loja: Loja | null, emitidoEm: Date, convenio: ConvenioDoCliente): Bloco[] {
+  const blocos: Bloco[] = [];
+  const estornado = recibo.estornado === 1 || recibo.estornadoParcial;
+
+  // O que o recebimento abateu do convênio. Em operação normal é o próprio
+  // valor pago - a loja não trabalha com juros, multa nem desconto, e as linhas
+  // correspondentes ficam fora do cupom. As duas exceções abaixo existem para o
+  // caso de um recebimento antigo ou importado trazer esses valores gravados:
+  // sem elas o cupom mostraria "anterior - pago" que não fecha com o saldo.
+  const abatimento = recibo.valor + recibo.desconto;
+  const acrescimo = recibo.juros + recibo.multa;
+  const quitado = convenio.saldo < 0.005;
+  const nomeLoja = (loja?.nome || loja?.fantasia || "").toUpperCase();
+
+  blocos.push({ tipo: "espaco", altura: 2 });
+  if (nomeLoja) blocos.push({ tipo: "texto", texto: nomeLoja, alinhamento: "center", negrito: true, tamanho: 10 });
+  if (loja?.cnpjcpf) blocos.push({ tipo: "texto", texto: `CNPJ: ${loja.cnpjcpf}`, alinhamento: "center", tamanho: MIUDO });
+
+  blocos.push({ tipo: "espaco", altura: 8 });
+  blocos.push({ tipo: "texto", texto: "RECIBO DE PAGAMENTO", alinhamento: "center", negrito: true, tamanho: 10 });
+  blocos.push({ tipo: "texto", texto: "CONVÊNIO", alinhamento: "center", negrito: true, tamanho: 10 });
+  blocos.push({ tipo: "separador" });
+
+  // Sem esta tarja a reimpressão de um recibo estornado vira comprovante de um
+  // pagamento que não existe mais. Em cupom ela vai no topo, em linha cheia: a
+  // diagonal da via A4 não sobrevive a 80mm de largura.
+  if (estornado) {
+    blocos.push({ tipo: "texto", texto: recibo.estornadoParcial ? "*** ESTORNADO PARCIALMENTE ***" : "*** RECIBO ESTORNADO ***", alinhamento: "center", negrito: true });
+    blocos.push({ tipo: "separador" });
+  }
+
+  blocos.push({ tipo: "par", rotulo: "Recibo nº:", valor: String(recibo.reciboNumero).padStart(6, "0") });
+  blocos.push({ tipo: "par", rotulo: "Data:", valor: formatarData(recibo.dataPagamento) });
+
+  blocos.push({ tipo: "espaco", altura: 6 });
+  blocos.push({ tipo: "texto", texto: "CLIENTE", negrito: true });
+  blocos.push({ tipo: "texto", texto: `${semZerosEsquerda(recibo.clienteCodigo)}${recibo.clienteNome ? ` - ${recibo.clienteNome}` : ""}` });
+  if (recibo.clienteCpf) blocos.push({ tipo: "texto", texto: `CPF/CNPJ: ${recibo.clienteCpf}` });
+  blocos.push({ tipo: "separador" });
+
+  // Os títulos são o que faz o mesmo cupom servir a quem paga por semana, por
+  // mês ou sem cadência nenhuma: em vez de falar em "mensalidade", lista as
+  // datas que o cliente reconhece.
+  if (recibo.titulos.length) {
+    blocos.push({ tipo: "texto", texto: `TÍTULOS QUITADOS (${recibo.titulos.length})`, negrito: true });
+    recibo.titulos.forEach((titulo) => {
+      // "Quitado" e não "recebido": a linha mostra o abatimento (valor +
+      // desconto), ou seja, quanto daquele título deixou de ser devido.
+      blocos.push({
+        tipo: "par",
+        rotulo: `${semZerosEsquerda(titulo.codigo)}/${String(titulo.prestacao).padStart(2, "0")} v.${dataCurta(titulo.dataVencimento)}`,
+        valor: maskMoney(titulo.valorRecebimento + titulo.descontoRecebimento),
+        tamanho: MIUDO,
+      });
+    });
+    blocos.push({ tipo: "separador" });
+  }
+
+  blocos.push({ tipo: "texto", texto: "RESUMO DO CONVÊNIO", negrito: true });
+
+  // Recibo estornado não tem "saldo anterior" que se possa reconstruir: o
+  // estorno já devolveu o abatimento ao saldo de hoje, e somar de novo
+  // imprimiria uma dívida que o cliente nunca teve.
+  if (!estornado) blocos.push({ tipo: "par", rotulo: "Saldo anterior:", valor: maskMoney(convenio.saldo + abatimento) });
+
+  blocos.push({ tipo: "par", rotulo: "Valor pago:", valor: maskMoney(recibo.valorEmCaixa) });
+  if (acrescimo) blocos.push({ tipo: "par", rotulo: " (+) Juros/multa:", valor: maskMoney(acrescimo), tamanho: MIUDO });
+  if (recibo.desconto) blocos.push({ tipo: "par", rotulo: " (-) Desconto:", valor: maskMoney(recibo.desconto), tamanho: MIUDO });
+  blocos.push({ tipo: "par", rotulo: "Forma de pagamento:", valor: recibo.formaPagamentoNome || recibo.formaPagamento || "-" });
+
+  blocos.push({ tipo: "separador" });
+  blocos.push({ tipo: "par", rotulo: estornado ? "SALDO DO CONVÊNIO:" : "SALDO APÓS PAGAMENTO:", valor: maskMoney(convenio.saldo), negrito: true });
+
+  // O saldo é o de agora, não o do dia do pagamento: numa 2ª via tirada depois
+  // de novas compras ele já mudou. A data ao lado é o que impede o cupom de
+  // mentir sobre a que momento aquele número se refere.
+  blocos.push({ tipo: "texto", texto: `(saldo apurado em ${formatarData(emitidoEm)})`, alinhamento: "center", tamanho: MIUDO });
+  blocos.push({ tipo: "separador" });
+
+  if (!estornado) {
+    blocos.push({ tipo: "espaco", altura: 8 });
+    blocos.push({ tipo: "texto", texto: quitado ? "CONVÊNIO QUITADO" : "PAGAMENTO PARCIAL", alinhamento: "center", negrito: true, tamanho: 10 });
+
+    // Quem ficou devendo leva no papel a data da próxima cobrança - a mesma
+    // linha serve para o semanal, para o mensal e para quem paga quando dá.
+    if (!quitado && convenio.vencimentoEmAberto) {
+      blocos.push({ tipo: "espaco", altura: 4 });
+      blocos.push({
+        tipo: "par",
+        rotulo: ehPassado(convenio.vencimentoEmAberto) ? "Em atraso desde:" : "Próx. vencimento:",
+        valor: formatarData(convenio.vencimentoEmAberto),
+        tamanho: MIUDO,
+      });
+    }
+  }
+
+  blocos.push({ tipo: "espaco", altura: 10 });
+  if (estornado) {
+    blocos.push({ tipo: "texto", texto: "Este recebimento foi estornado e não vale como comprovante de pagamento.", alinhamento: "center", tamanho: MIUDO });
+  } else {
+    blocos.push({
+      tipo: "texto",
+      texto: `Recebemos do cliente acima identificado o valor de ${maskMoney(recibo.valorEmCaixa)}, referente ${quitado ? "à quitação de seu convênio" : "ao pagamento parcial de seu convênio"}.`,
+      alinhamento: "center",
+      tamanho: MIUDO,
+    });
+  }
+
+  blocos.push({ tipo: "espaco", altura: 12 });
+  blocos.push({ tipo: "texto", texto: "Obrigado pela preferência!", alinhamento: "center" });
+  if (nomeLoja) {
+    blocos.push({ tipo: "espaco", altura: 6 });
+    blocos.push({ tipo: "texto", texto: nomeLoja, alinhamento: "center", negrito: true, tamanho: MIUDO });
+  }
+
+  blocos.push({ tipo: "espaco", altura: 8 });
+  blocos.push({ tipo: "texto", texto: "Documento sem valor fiscal", alinhamento: "center", tamanho: MIUDO });
+  // Avanço para o corte: a guilhotina da i9 corta acima da borda do papel, e
+  // sem esta sobra a última linha sai na serrilha.
+  blocos.push({ tipo: "espaco", altura: 40 });
+
+  return blocos;
+}
+
+export default function gerarReciboPDF(recibo: Recibo, loja: Loja | null, emitidoEm: Date, convenio: ConvenioDoCliente = { saldo: 0, vencimentoEmAberto: null }): Promise<string> {
   return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ size: "A4", margin: 40 });
+    const blocos = montarBlocos(recibo, loja, emitidoEm, convenio);
+
+    // Documento só para medir: mesmas fontes e mesmas larguras, então a altura
+    // que ele calcula é a que o conteúdo vai ocupar de verdade. Nunca recebe
+    // end(), nada é emitido a partir dele.
+    const medidor = new PDFDocument({ size: [LARGURA_PAPEL, 100], margin: MARGEM });
+    const alturas = blocos.map((bloco) => alturaDoBloco(medidor, bloco));
+    const altura = Math.ceil(alturas.reduce((total, valor) => total + valor, 0)) + MARGEM * 2;
+
+    const doc = new PDFDocument({ size: [LARGURA_PAPEL, altura], margin: MARGEM });
     const buffers: Buffer[] = [];
 
     doc.on("data", (data) => buffers.push(data));
     doc.on("end", () => resolve(Buffer.concat(buffers).toString("base64")));
     doc.on("error", reject);
 
-    // Cabeçalho da loja
-    doc.font("Helvetica-Bold").fontSize(14).text(loja?.nome || loja?.fantasia || "", 40, 40, { width: 380 });
-    doc.font("Helvetica").fontSize(9).text(loja?.cnpjcpf ? `CNPJ/CPF: ${loja.cnpjcpf}` : "", 40, doc.y, { width: 380 });
-
-    doc.font("Helvetica-Bold").fontSize(16).text(`RECIBO Nº ${String(recibo.reciboNumero).padStart(6, "0")}`, 380, 42, { width: 175, align: "right" });
-
-    doc.moveTo(40, 88).lineTo(555, 88).stroke();
-
-    doc.font("Helvetica-Bold").fontSize(12).text("RECIBO DE RECEBIMENTO", 40, 98);
-    doc.font("Helvetica").fontSize(9);
-    doc.text(`Data do recebimento: ${formatarData(recibo.dataPagamento)}          Emitido em: ${formatarData(emitidoEm)}`, 40, 116);
-
-    doc.fontSize(10);
-    doc.text(`Cliente: ${recibo.clienteCodigo}${recibo.clienteNome ? ` - ${recibo.clienteNome}` : ""}`, 40, 136);
-    if (recibo.clienteCpf) doc.text(`CPF/CNPJ: ${recibo.clienteCpf}`, 40, doc.y);
-
-    doc.font("Helvetica-Bold").fontSize(11).text(`Recebemos a importância de ${maskMoney(recibo.valorEmCaixa)}`, 40, doc.y + 8);
-    doc.font("Helvetica").fontSize(9).text("referente aos títulos abaixo:", 40, doc.y + 2);
-
-    // Títulos quitados
-    let y = doc.y + 12;
-    linhaDaTabela(
-      doc,
-      y,
-      COLUNAS.map((coluna) => coluna.titulo),
-      true
-    );
-
-    y += 14;
-    doc.moveTo(40, y - 3).lineTo(555, y - 3).stroke();
-
-    recibo.titulos.forEach((titulo) => {
-      linhaDaTabela(doc, y, [titulo.codigo, String(titulo.prestacao), formatarData(titulo.dataVencimento), maskMoney(titulo.valorTitulo), maskMoney(titulo.valorRecebimento + titulo.descontoRecebimento), maskMoney(titulo.saldoTitulo)]);
-      y += 13;
+    let y = MARGEM;
+    blocos.forEach((bloco, i) => {
+      desenharBloco(doc, bloco, y);
+      y += alturas[i];
     });
-
-    doc.moveTo(40, y + 2).lineTo(555, y + 2).stroke();
-    y += 12;
-
-    // Totais. O negrito fica no total pago - juros e multa entram em caixa mas
-    // nao abatem o titulo, e o desconto abate sem entrar em caixa.
-    totalizador(doc, y, "Valor recebido (abate)", recibo.valor);
-    totalizador(doc, (y += 14), "(+) Juros", recibo.juros);
-    totalizador(doc, (y += 14), "(+) Multa", recibo.multa);
-    totalizador(doc, (y += 14), "(-) Desconto", recibo.desconto);
-    totalizador(doc, (y += 18), "TOTAL PAGO", recibo.valorEmCaixa, true);
-
-    y += 30;
-    doc.font("Helvetica").fontSize(10);
-    doc.text(`Forma de pagamento: ${recibo.formaPagamentoNome || recibo.formaPagamento || "-"}`, 40, y);
-
-    // Dois saldos, ambos rotulados. O do recibo e congelado; o do cliente e de
-    // agora - por isso a data de emissao aparece junto, senao uma 2a via de
-    // meses depois mentiria sobre quanto o cliente deve.
-    const saldoDoRecibo = recibo.titulos.reduce((total, titulo) => total + titulo.saldoTitulo, 0);
-    doc.text(`Saldo dos títulos deste recibo: ${maskMoney(saldoDoRecibo)}`, 40, (y += 16));
-
-    // Tarja de estorno: sem ela a reimpressao de um recibo estornado vira
-    // comprovante de um pagamento que nao existe mais.
-    if (recibo.estornado === 1 || recibo.estornadoParcial) {
-      doc.save();
-      doc.rotate(-20, { origin: [300, 400] });
-      doc.font("Helvetica-Bold").fontSize(recibo.estornadoParcial ? 34 : 52).fillColor("red").opacity(0.35);
-      doc.text(recibo.estornadoParcial ? "ESTORNADO PARCIALMENTE" : "ESTORNADO", 60, 380, { width: 500, align: "center" });
-      doc.restore();
-      doc.opacity(1).fillColor("black");
-    }
-
-    y += 60;
-    doc.font("Helvetica").fontSize(10);
-    doc.text("______________________________________", 40, y);
-    doc.fontSize(9).text("Assinatura do recebedor", 40, (y += 14));
-    doc.fontSize(8).fillColor("gray").text("Documento sem valor fiscal", 40, (y += 20));
 
     doc.end();
   });

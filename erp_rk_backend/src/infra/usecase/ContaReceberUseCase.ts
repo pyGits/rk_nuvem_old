@@ -182,7 +182,28 @@ export default class ContaReceberUseCase {
     if (!recibo) throw new Error("Recibo não encontrado !");
 
     const loja = await this.lojaRepository.getByCodigo(String(recibo.lojaId), input.tenant_id);
-    const arquivo = await gerarReciboPDF(recibo, loja, new Date());
+
+    // Saldo do convenio do cliente, apurado AGORA - e por isso que a data de
+    // emissao vai impressa junto: numa 2a via tirada depois de outras compras o
+    // numero e o de hoje, nao o do dia do pagamento. Sai da mesma consulta da
+    // posicao consolidada de proposito, senao o cupom e a tela que o operador
+    // abre em seguida discordariam sobre quanto o cliente deve.
+    const saldos = await this.contaReceberRepository.getSaldoClientes({ clienteCodigo: recibo.clienteCodigo, somenteComSaldo: "0" }, input.tenant_id);
+
+    // Mais de uma linha só acontece quando o mesmo cliente tem títulos gravados
+    // com códigos de larguras diferentes ("7" e "000007"): é o mesmo convênio,
+    // então soma.
+    const vencimentos = saldos.map((cliente) => cliente.vencimentoMaisAntigo).filter(Boolean);
+
+    const convenio = {
+      saldo: saldos.reduce((total, cliente) => total + cliente.saldo, 0),
+      // O vencimento em aberto mais antigo é o que o cupom precisa para servir a
+      // quem paga por semana, por mês ou sem periodicidade nenhuma: em vez de
+      // supor a cadência, imprime a data concreta da próxima cobrança.
+      vencimentoEmAberto: vencimentos.length ? vencimentos.reduce((menor, atual) => (new Date(atual) < new Date(menor) ? atual : menor)) : null,
+    };
+
+    const arquivo = await gerarReciboPDF(recibo, loja, new Date(), convenio);
 
     return { status: 200, data: { reciboId: recibo.reciboId, reciboNumero: recibo.reciboNumero, arquivo } };
   }
