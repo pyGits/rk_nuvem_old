@@ -14,22 +14,33 @@ import { achaCarga, solicitaCarga } from "./FilaCarga";
 // depois que a requisição de gravação responde 2xx. Nenhum controller precisa
 // saber que isto existe.
 //
-// A SOLICITAÇÃO NÃO SAI NA HORA, de propósito. Salvar 40 produtos seguidos, ou
-// importar uma nota fiscal inteira, são dezenas de gravações em poucos
-// segundos; uma carga por gravação colocaria o sync para correr atrás do rabo.
-// Cada aviso reinicia um contador por cliente e a carga só é enfileirada
-// quando ele para de gravar pela janela configurada (padrão 60s).
+// POR PADRÃO A CARGA É PEDIDA NA HORA (janela 0): gravou, a loja entra na fila
+// e o sync pega no tique seguinte, em até 5 segundos. É o que o usuário espera
+// de "carga automática" — e um lote de gravações seguidas NÃO vira um lote de
+// cargas, porque a segunda gravação encontra a loja já na fila e não enfileira
+// nada (ver solicitaCarga); ela apenas entra na mesma carga que ainda não saiu.
+//
+// O que a gravação durante uma carga JÁ EM ANDAMENTO poderia causar — ser dada
+// como enviada sem ter saído — está resolvido do outro lado, no finalizaCarga
+// (CargaController), que só tira a marca de quem já estava gravado quando a
+// carga começou. Sem aquilo, disparo imediato perderia alteração em silêncio.
+//
+// A janela configurável continua existindo para quem importa milhares de itens
+// de uma vez e prefere uma carga só no fim: com ela, cada aviso reinicia um
+// contador e a carga só é enfileirada quando o cliente para de gravar por esse
+// tempo.
 //
 // SE O PROCESSO REINICIAR com o contador armado, aquela carga não sai — o
 // timer é de memória, como a própria fila. Nada se perde: `carga_pendente`
 // continua true no banco, então a próxima gravação (ou um envio manual) leva
 // tudo o que ficou para trás.
 
-// Limites da janela. O mínimo existe para que a janela continue agrupando algo
-// — 1 segundo seria uma carga por gravação, que é justamente o que ela evita.
+// Zero é o imediato e o padrão. Acima de zero a janela agrupa, e aí o mínimo
+// existe para que ela agrupe algo de fato: 1 ou 2 segundos não seguram lote
+// nenhum e só atrasariam a carga sem nenhum ganho.
 const JANELA_MINIMA_SEGUNDOS = 10;
 const JANELA_MAXIMA_SEGUNDOS = 3600;
-const JANELA_PADRAO_SEGUNDOS = 60;
+const JANELA_PADRAO_SEGUNDOS = 0;
 
 // Quando alguma loja está com carga EM_ANDAMENTO na hora de enfileirar, o
 // pedido novo seria engolido pela fila (ver solicitaCarga). Em vez de perder a
@@ -48,9 +59,30 @@ const cacheConfig = new Map<number, { config: ConfigCarga; lidaEm: number }>();
 const contadores = new Map<number, NodeJS.Timeout>();
 const ultimoAviso = new Map<number, number>();
 
+// No modo imediato o disparo acontece a cada gravação, e a lista de lojas de um
+// cliente muda uma vez por ano. Sem este cache, cadastrar 200 produtos seriam
+// 200 consultas de loja. Loja recém-cadastrada entra na conta no próximo TTL.
+const CACHE_LOJAS_MS = 60 * 1000;
+const cacheLojas = new Map<number, { codigos: string[]; lidaEm: number }>();
+
+async function lojasDoCliente(tenant_id: number): Promise<string[]> {
+  const emCache = cacheLojas.get(tenant_id);
+  if (emCache && Date.now() - emCache.lidaEm < CACHE_LOJAS_MS) {
+    return emCache.codigos;
+  }
+
+  const lojas: any[] = await Loja.findAll({ where: { tenant_id }, attributes: ["codigo"] });
+  const codigos = lojas.map((loja: any) => String(loja.getDataValue("codigo")));
+
+  cacheLojas.set(tenant_id, { codigos, lidaEm: Date.now() });
+  return codigos;
+}
+
 function normalizaSegundos(valor: any): number {
   const segundos = Number(valor);
-  if (!Number.isFinite(segundos) || segundos <= 0) return JANELA_PADRAO_SEGUNDOS;
+  // Vazio, texto ou negativo caem no imediato — nunca num atraso que o cliente
+  // não pediu.
+  if (!Number.isFinite(segundos) || segundos <= 0) return 0;
   return Math.min(JANELA_MAXIMA_SEGUNDOS, Math.max(JANELA_MINIMA_SEGUNDOS, Math.round(segundos)));
 }
 
@@ -78,9 +110,16 @@ async function leConfiguracao(tenant_id: number): Promise<ConfigCarga> {
     }
   } catch (error: any) {
     // Falha de leitura não pode derrubar a gravação que disparou isto (o
-    // usuário já recebeu o "salvo com sucesso"). Fica desligado nesta rodada.
+    // usuário já recebeu o "salvo com sucesso"). Fica desligado.
+    //
+    // O caso real disto é o código subir antes de a migration rodar: a tabela
+    // `configuracoes` não existe e TODA gravação cairia aqui. Por isso o
+    // desligado também vai para o cache e o aviso sai uma vez a cada TTL, em
+    // vez de uma linha por produto salvo enterrando o resto do log.
+    const desligado = { ligada: false, janelaMs: JANELA_PADRAO_SEGUNDOS * 1000 };
     console.log("[CARGA][AUTO] falha ao ler a configuracao", error?.message || error);
-    return { ligada: false, janelaMs: JANELA_PADRAO_SEGUNDOS * 1000 };
+    cacheConfig.set(tenant_id, { config: desligado, lidaEm: Date.now() });
+    return desligado;
   }
 
   cacheConfig.set(tenant_id, { config, lidaEm: Date.now() });
@@ -129,25 +168,26 @@ async function disparaCarga(tenant_id: number) {
 
   ultimoAviso.delete(tenant_id);
 
-  const lojas: any[] = await Loja.findAll({ where: { tenant_id }, attributes: ["codigo"] });
+  const lojas = await lojasDoCliente(tenant_id);
   if (!lojas.length) return;
 
   const livres: { codigo: string }[] = [];
   let ocupadas = 0;
 
-  lojas.forEach((loja: any) => {
-    const codigo = String(loja.getDataValue("codigo"));
+  lojas.forEach((codigo: string) => {
     const naFila = achaCarga(tenant_id, codigo);
 
     // Já PENDENTE: o sync ainda nem começou e vai levar tudo o que estiver
     // marcado, inclusive esta alteração. Nada a fazer.
     if (naFila && naFila.status === "PENDENTE") return;
 
-    // EM_ANDAMENTO: o sync está no meio de uma carga montada ANTES desta
-    // alteração. Enfileirar agora não adiantaria (solicitaCarga ignora), e
-    // pior: o finalizaCarga da carga atual vai limpar `carga_pendente` de
-    // todo mundo, inclusive do que acabou de ser alterado. Por isso tenta de
-    // novo daqui a pouco, quando a loja estiver livre.
+    // EM_ANDAMENTO: o sync está no meio de uma carga que já passou (ou vai
+    // passar) pelas etapas com a lista montada ANTES desta alteração.
+    // Enfileirar agora não adiantaria — solicitaCarga ignora pedido para loja
+    // ocupada. A alteração não se perde (o finalizaCarga preserva a marca de
+    // quem chegou depois do começo da carga), mas ela só sairia na próxima vez
+    // que alguém gravasse. Por isso tenta de novo daqui a pouco: assim ela sai
+    // numa carga própria, sem depender de uma gravação futura.
     if (naFila) {
       ocupadas++;
       return;
@@ -160,7 +200,9 @@ async function disparaCarga(tenant_id: number) {
     console.log(
       `[CARGA][AUTO] alteracao detectada, pedindo ALTERADOS para ${livres.length} loja(s) tenant=${tenant_id}`
     );
-    solicitaCarga(tenant_id, livres, "ALTERADOS");
+    // O `true` marca a carga como automatica: e o que autoriza o
+    // finalizaCarga a preservar o que foi gravado durante ela.
+    solicitaCarga(tenant_id, livres, "ALTERADOS", true);
   }
 
   if (ocupadas) {

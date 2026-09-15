@@ -15,7 +15,9 @@ import { esqueceConfiguracao, normalizaJanelaSegundos } from "../infra/service/C
 // desligado. Devolver o default em vez de 404 deixa o front com um caminho só.
 const PADRAO = {
   carga_automatica: false,
-  carga_automatica_segundos: 60,
+  // 0 = imediato: gravou, pede carga. A janela acima de zero existe para quem
+  // importa lote grande e prefere uma carga só no fim.
+  carga_automatica_segundos: 0,
 };
 
 function paraResposta(registro: any) {

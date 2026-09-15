@@ -15,7 +15,18 @@ export type Carga = {
   codigo: string;
   carga: "COMPLETA" | "ALTERADOS";
   status: "PENDENTE" | "EM_ANDAMENTO";
+  // Ultimo sinal de vida do sync. Serve para expirar carga presa, e por isso
+  // o /carga/progresso o empurra para a frente a cada etapa.
   iniciadaEm: number | null;
+  // Momento em que o sync PEGOU esta carga, que o heartbeat acima nao mexe.
+  // E o corte usado pelo finalizaCarga para nao dar como enviado o que foi
+  // gravado depois que a carga ja tinha comecado. Ver o comentario la.
+  comecouEm: number | null;
+  // Quem pediu: a carga automatica, ou alguem clicando (tela do cliente ou
+  // painel administrativo). O finalizaCarga so aplica o corte acima nas
+  // automaticas - as manuais, que sao as que rodam no parque hoje, continuam
+  // terminando exatamente como sempre terminaram.
+  automatica: boolean;
   // Preenchidos so pelos syncs que reportam progresso. Versao antiga do sync
   // nunca chama /carga/progresso e esses campos ficam nulos — o front entao
   // mostra a barra indeterminada, como antes.
@@ -42,7 +53,12 @@ export function removeCarga(tenant_id: number, codigo: string) {
   }
 }
 
-export function solicitaCarga(tenant_id: number, lojas: any[], carga: "COMPLETA" | "ALTERADOS") {
+export function solicitaCarga(
+  tenant_id: number,
+  lojas: any[],
+  carga: "COMPLETA" | "ALTERADOS",
+  automatica = false
+) {
   lojas.map((l: any) => {
     const codigo = String(l.codigo);
     const pendente = achaCarga(tenant_id, codigo);
@@ -55,6 +71,8 @@ export function solicitaCarga(tenant_id: number, lojas: any[], carga: "COMPLETA"
         carga,
         status: "PENDENTE",
         iniciadaEm: null,
+        comecouEm: null,
+        automatica,
         etapa: null,
         indice: null,
         total: null,
@@ -66,6 +84,10 @@ export function solicitaCarga(tenant_id: number, lojas: any[], carga: "COMPLETA"
     // nao comecou, senao a carga em andamento seria trocada no meio.
     if (pendente.status === "PENDENTE" && carga === "COMPLETA") {
       pendente.carga = "COMPLETA";
+      // Carga completa leva o cadastro inteiro, nao so os alterados: nada fica
+      // de fora por ter sido gravado no meio, entao ela termina como as
+      // manuais sempre terminaram.
+      pendente.automatica = false;
       console.log(`[CARGA] promovida para COMPLETA tenant=${tenant_id} loja="${codigo}"`);
       return;
     }

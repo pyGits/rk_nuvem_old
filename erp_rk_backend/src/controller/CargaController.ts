@@ -1,3 +1,4 @@
+import { Op } from "sequelize";
 import Finalizadora from "../models/Finalizadora";
 import Funcionario from "../models/Funcionario";
 import Loja from "../models/Loja";
@@ -80,16 +81,55 @@ export default {
     res.status(200).json({ message: "PROGRESSO_ATUALIZADO" });
   },
 
+  // O sync avisa que terminou: o que ele levou deixa de estar pendente.
+  //
+  // "O QUE ELE LEVOU" NAO E "TUDO O QUE ESTA MARCADO AGORA". A carga de
+  // alterados busca cada lista no comeco da sua etapa (cargaProdutos,
+  // cargaTributacoes, ... em Principal.pas) e leva minutos ate o fim. Quem
+  // gravar um produto no meio disso marca carga_pendente numa carga que ja
+  // passou da etapa de produtos - e limpar a marca aqui daria esse produto
+  // como enviado sem que ele nunca tenha saido. O defeito e mudo: o preco
+  // novo simplesmente nao esta no PDV, e nada no sistema indica isso.
+  //
+  // Isso sempre existiu, mas era raro porque a carga so saia quando alguem
+  // clicava. Com a carga automatica disparando a cada gravacao, cadastrar em
+  // sequencia cai exatamente neste caso.
+  //
+  // Por isso o corte: so perde a marca quem ja estava gravado quando esta
+  // carga comecou (comecouEm). O que chegou depois continua pendente e sai na
+  // proxima carga - que o proprio CargaAutomatica reagenda ao ver a loja
+  // ocupada. Registro sem updated_at (dado migrado) entra no corte, senao
+  // ficaria pendente para sempre.
+  //
+  // O CORTE VALE SO PARA CARGA AUTOMATICA, de proposito. Esta rota e chamada
+  // pelo agente de todos os clientes em producao, e a carga manual deles nao
+  // pode mudar de comportamento por causa de uma feature que eles nem ligaram:
+  // sem `automatica`, a limpeza continua sendo a de sempre, a mesma consulta,
+  // sem nenhuma condicao nova. Quem liga a carga automatica e que passa a
+  // contar com o corte - e e so nesse caminho que ele precisa existir.
   async finalizaCarga(req: any, res: any) {
     const { tenant_id } = req;
     const loja = req.query.loja;
+
+    const emAndamento = achaCarga(tenant_id, String(loja));
+    // Sem corte tambem quando a entrada ja expirou da fila ou quando o sync nao
+    // passou pelo verificaCarga: nesses casos nao da para saber quando a carga
+    // comecou, e o comportamento antigo e o certo.
+    const corte = emAndamento?.automatica ? emAndamento.comecouEm : null;
+
+    const ateOCorte = corte
+      ? {
+          [Op.or]: [{ updated_at: { [Op.lte]: new Date(corte) } }, { updated_at: null }],
+        }
+      : {};
+
     try {
       await Promise.all([
-        Produto.update({ carga_pendente: false }, { where: { tenant_id }, silent: true }),
-        Preco.update({ carga_pendente: false }, { where: { tenant_id, loja: loja }, silent: true }),
-        Finalizadora.update({ carga_pendente: false }, { where: { tenant_id } }),
-        Funcionario.update({ carga_pendente: false }, { where: { tenant_id } }),
-        Tributacao.update({ carga_pendente: false }, { where: { tenant_id } }),
+        Produto.update({ carga_pendente: false }, { where: { tenant_id, ...ateOCorte }, silent: true }),
+        Preco.update({ carga_pendente: false }, { where: { tenant_id, loja: loja, ...ateOCorte }, silent: true }),
+        Finalizadora.update({ carga_pendente: false }, { where: { tenant_id, ...ateOCorte } }),
+        Funcionario.update({ carga_pendente: false }, { where: { tenant_id, ...ateOCorte } }),
+        Tributacao.update({ carga_pendente: false }, { where: { tenant_id, ...ateOCorte } }),
       ]);
 
       removeCarga(tenant_id, String(loja));
@@ -143,6 +183,9 @@ export default {
     // (finalizaCarga), para o front conseguir mostrar a carga em andamento.
     pendente.status = "EM_ANDAMENTO";
     pendente.iniciadaEm = Date.now();
+    // Marca do inicio real desta carga, que o heartbeat do /carga/progresso nao
+    // altera. O finalizaCarga usa isto como corte (ver la).
+    pendente.comecouEm = Date.now();
 
     res.status(200).json({
       message: pendente.carga === "ALTERADOS" ? "CARGA_ALTERADOS" : "CARGA_COMPLETA",

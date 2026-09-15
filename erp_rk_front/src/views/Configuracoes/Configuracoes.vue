@@ -38,17 +38,16 @@
               :items="opcoesJanela"
               item-text="texto"
               item-value="valor"
-              label="Enviar depois de"
-              hint="Tempo sem novas alterações antes de a carga ser enviada"
+              label="Quando enviar"
+              hint="Agrupar só vale a pena para importação de lote grande"
               persistent-hint
               :disabled="!cargaAutomatica || carregandoConfig"
             ></v-select>
           </v-col>
         </v-row>
 
-        <!-- Salvar 40 produtos seguidos não pode virar 40 cargas: o contador
-             reinicia a cada gravação, e é isso que a espera significa. Sem
-             dizer isso aqui, o número parece um atraso sem motivo. -->
+        <!-- Sem explicar o que cada modo faz, "1 minuto" parece um atraso
+             sem motivo e o imediato parece arriscado para lote grande. -->
         <v-alert
           v-if="cargaAutomatica"
           type="info"
@@ -56,9 +55,16 @@
           dense
           class="mt-4 mb-0"
         >
-          As alterações são agrupadas: a carga sai
-          {{ textoJanelaSelecionada }} depois da última gravação. Um lote de
-          cadastros seguidos gera uma carga só.
+          <template v-if="!cargaAutomaticaSegundos">
+            A carga é pedida assim que o cadastro é gravado — a loja recebe em
+            poucos segundos. Cadastros gravados em sequência entram na mesma
+            carga, não geram uma carga cada.
+          </template>
+          <template v-else>
+            As alterações são agrupadas: a carga sai
+            {{ textoJanelaSelecionada }} depois da última gravação. Útil para
+            importar lote grande de uma vez só.
+          </template>
         </v-alert>
 
         <v-btn
@@ -129,17 +135,17 @@ export default {
       confirmacaoSenha: "",
       salvandoSenha: false,
       cargaAutomatica: false,
-      cargaAutomaticaSegundos: 60,
+      cargaAutomaticaSegundos: 0,
       carregandoConfig: true,
       salvandoConfig: false,
       // Os valores precisam bater com os limites que o backend aceita
-      // (CargaAutomatica.ts: mínimo 10s, máximo 1h).
+      // (CargaAutomatica.ts: 0 = imediato; acima disso, mínimo 10s, máximo 1h).
       opcoesJanela: [
-        { valor: 30, texto: "30 segundos" },
-        { valor: 60, texto: "1 minuto" },
-        { valor: 300, texto: "5 minutos" },
-        { valor: 900, texto: "15 minutos" },
-        { valor: 1800, texto: "30 minutos" },
+        { valor: 0, texto: "Assim que gravar" },
+        { valor: 60, texto: "Agrupar por 1 minuto" },
+        { valor: 300, texto: "Agrupar por 5 minutos" },
+        { valor: 900, texto: "Agrupar por 15 minutos" },
+        { valor: 1800, texto: "Agrupar por 30 minutos" },
       ],
     };
   },

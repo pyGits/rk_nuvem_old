@@ -40,9 +40,9 @@
       dense
       class="mx-4 mt-2 mb-0"
     >
-      Carga automática ligada: alterações nos cadastros são enviadas sozinhas,
-      {{ textoJanelaAutomatica }} depois da última gravação. Os botões acima
-      continuam valendo para enviar na hora.
+      Carga automática ligada: alterações nos cadastros são enviadas sozinhas{{
+        textoJanelaAutomatica
+      }}. Os botões acima continuam valendo para enviar o que quiser, na hora.
     </v-alert>
 
     <EstadoVazio
@@ -227,14 +227,23 @@ export default {
     cargaAutomaticaLigada() {
       return this.$store.state.configuracao.configuracao.carga_automatica;
     },
+    // Completa a frase do aviso. No modo imediato não há espera para explicar,
+    // e dizer "0 segundos depois da última gravação" seria pior que não dizer.
     textoJanelaAutomatica() {
       const segundos = this.$store.state.configuracao.configuracao
         .carga_automatica_segundos;
 
-      if (segundos < 60) return `${segundos} segundos`;
+      if (!segundos) return " assim que o cadastro é gravado";
 
       const minutos = Math.round(segundos / 60);
-      return minutos === 1 ? "1 minuto" : `${minutos} minutos`;
+      const espera =
+        segundos < 60
+          ? `${segundos} segundos`
+          : minutos === 1
+          ? "1 minuto"
+          : `${minutos} minutos`;
+
+      return `, ${espera} depois da última gravação`;
     },
     subtitulo() {
       const emAndamento = this.lojas.filter(
