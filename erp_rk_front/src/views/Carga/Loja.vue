@@ -30,6 +30,21 @@
       </template>
     </CabecalhoRelatorio>
 
+    <!-- Com a carga automática ligada, a carga entra na fila sozinha depois de
+         uma alteração. Sem este aviso, ver "Aguardando sync" sem ninguém ter
+         clicado em nada parece defeito. -->
+    <v-alert
+      v-if="cargaAutomaticaLigada"
+      type="info"
+      text
+      dense
+      class="mx-4 mt-2 mb-0"
+    >
+      Carga automática ligada: alterações nos cadastros são enviadas sozinhas,
+      {{ textoJanelaAutomatica }} depois da última gravação. Os botões acima
+      continuam valendo para enviar na hora.
+    </v-alert>
+
     <EstadoVazio
       v-if="!lojas.length"
       icone="mdi-store-off-outline"
@@ -121,6 +136,13 @@ export default {
     this.$store.commit("setContainerLoading", true);
     await this.$store.dispatch("getLojas");
     this.$store.commit("setContainerLoading", false);
+    // Falha aqui não pode impedir a tela de carga de abrir: o aviso some, o
+    // resto continua.
+    try {
+      await this.$store.dispatch("getConfiguracao");
+    } catch (err) {
+      // Sem configuração, a tela se comporta como antes desta feature.
+    }
     await this.atualizaCargaStatus();
     this.verificaCargaStatus();
   },
@@ -201,6 +223,18 @@ export default {
   computed: {
     lojas() {
       return this.$store.state.loja.lojaList;
+    },
+    cargaAutomaticaLigada() {
+      return this.$store.state.configuracao.configuracao.carga_automatica;
+    },
+    textoJanelaAutomatica() {
+      const segundos = this.$store.state.configuracao.configuracao
+        .carga_automatica_segundos;
+
+      if (segundos < 60) return `${segundos} segundos`;
+
+      const minutos = Math.round(segundos / 60);
+      return minutos === 1 ? "1 minuto" : `${minutos} minutos`;
     },
     subtitulo() {
       const emAndamento = this.lojas.filter(

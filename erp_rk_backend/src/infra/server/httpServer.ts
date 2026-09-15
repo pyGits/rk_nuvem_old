@@ -6,6 +6,7 @@ import path from "path";
 import { verifyJWT } from "../../routes/auth.middleware";
 import { exigeAcesso } from "../../permissao/permissao.middleware";
 import upload from "../middleware/uploadMiddleware";
+import cargaAutomaticaMiddleware from "../middleware/cargaAutomatica.middleware";
 import fs from "fs";
 import https from "https";
 import http from "http";
@@ -56,6 +57,12 @@ export class ExpressAdapter implements HttpServer {
       });
       next();
     });
+
+    // Carga automática: precisa vir ANTES das rotas (aqui e das /v2 e /v3, que
+    // o index.ts registra depois deste listen), senão não enxerga as gravações
+    // delas. Só instala um listener de "finish" nas rotas de gravação que vão
+    // para o PDV — não intercepta nem atrasa requisição nenhuma.
+    this.app.use(cargaAutomaticaMiddleware);
 
     this.app.use("/api", router);
 

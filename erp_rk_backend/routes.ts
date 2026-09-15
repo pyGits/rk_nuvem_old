@@ -24,6 +24,7 @@ import IbptRouter from "./src/routes/ibpt";
 import ErroPdvRouter from "./src/routes/erropdv";
 import NotificacaoRouter from "./src/routes/notificacoes";
 import FeedbackRouter from "./src/routes/feedback";
+import ConfiguracaoRouter from "./src/routes/configuracoes";
 
 const router = Router();
 router.use(ProdutosRouter);
@@ -51,5 +52,6 @@ router.use(IbptRouter);
 router.use(ErroPdvRouter);
 router.use(NotificacaoRouter);
 router.use(FeedbackRouter);
+router.use(ConfiguracaoRouter);
 
 export default router;
