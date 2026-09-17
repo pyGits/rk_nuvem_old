@@ -71,6 +71,27 @@ async function encontrarConflitoCodigos(codigos: string[], codigoProdutoAtual: a
   return null;
 }
 
+// Lê de uma vez todos os códigos auxiliares do tenant e devolve agrupados por
+// código de produto. Evita uma consulta por produto na listagem.
+async function listarAuxiliaresPorProduto(tenant_id: number): Promise<Map<string, string[]>> {
+  const registros: any[] = await ProdutoCodigoBarras.findAll({
+    where: { tenant_id },
+    attributes: ["codigo_produto", "codigo_barras"],
+    order: [["id", "ASC"]],
+  });
+
+  const porProduto = new Map<string, string[]>();
+  for (const registro of registros) {
+    const codigoProduto = String(registro.getDataValue("codigo_produto"));
+    const codigoBarras = registro.getDataValue("codigo_barras");
+    const lista = porProduto.get(codigoProduto);
+    if (lista) lista.push(codigoBarras);
+    else porProduto.set(codigoProduto, [codigoBarras]);
+  }
+
+  return porProduto;
+}
+
 // Regrava (substitui) a lista de códigos auxiliares de um produto dentro de uma
 // transação já aberta.
 async function regravarCodigosAuxiliares(codigoProduto: string, auxiliares: string[], tenant_id: number, transaction: any) {
@@ -102,22 +123,27 @@ export default {
   async getProdutos(req: any, res: any) {
     const { tenant_id } = req;
     const alterados = req.query.alterados;
+    // Os códigos auxiliares só vão no retorno quando pedidos explicitamente: a
+    // carga consome esta mesma rota e o payload dela não muda.
+    const comAuxiliares = req.query.com_auxiliares === "true" || req.query.com_auxiliares === "S";
     try {
-      if (!alterados) {
-        const produtos: any = await Produto.findAll({
-          where: { tenant_id },
-          order: [["codigo", "ASC"]],
-          attributes: { exclude: ["tenant_id"] },
-        });
-        res.status(200).json(produtos);
-      } else {
-        const produtos: any = await Produto.findAll({
-          where: { tenant_id, carga_pendente: true },
-          order: [["codigo", "ASC"]],
-          attributes: { exclude: ["tenant_id"] },
-        });
-        res.status(200).json(produtos);
+      const produtos: any = await Produto.findAll({
+        where: alterados ? { tenant_id, carga_pendente: true } : { tenant_id },
+        order: [["codigo", "ASC"]],
+        attributes: { exclude: ["tenant_id"] },
+      });
+
+      if (!comAuxiliares) {
+        return res.status(200).json(produtos);
       }
+
+      const auxiliaresPorProduto = await listarAuxiliaresPorProduto(tenant_id);
+      const data = produtos.map((produto: any) => ({
+        ...produto.toJSON(),
+        codigos_barras_auxiliares: auxiliaresPorProduto.get(String(produto.getDataValue("codigo"))) || [],
+      }));
+
+      return res.status(200).json(data);
     } catch (error) {
       res.status(400).json({ error: error });
     }

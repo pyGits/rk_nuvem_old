@@ -154,8 +154,10 @@ export default {
     },
   },
   actions: {
+    // com_auxiliares traz junto os códigos de barras auxiliares de cada produto,
+    // usados pela pesquisa da listagem.
     async getProdutos({ commit }: any) {
-      await Vue.prototype.$http.get("/produtos").then((res: any) => {
+      await Vue.prototype.$http.get("/produtos", { params: { com_auxiliares: true } }).then((res: any) => {
         commit("setProdutoList", res.data);
       });
     },

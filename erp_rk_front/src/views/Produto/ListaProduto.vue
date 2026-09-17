@@ -42,6 +42,7 @@
             v-model="search"
             append-icon="mdi-magnify"
             label="Pesquisar"
+            placeholder="Código, descrição ou código de barras (inclusive auxiliares)"
             dense
             outlined
             hide-details
@@ -67,13 +68,21 @@
       id="tableProduto"
       :headers="headers"
       :items="itens"
-      :search="search"
       sort-by="codigo_barras"
       :footer-props="{
         'items-per-page-text': 'Produtos por pág.',
       }"
       @click:row="selecionarProduto"
     >
+      <!-- Quando o produto foi achado por um código auxiliar, mostra qual foi
+           para o usuário entender o porquê de ele estar no resultado. -->
+      <template v-slot:item.codigo_barras="{ item }">
+        <div>{{ item.codigo_barras }}</div>
+        <div v-if="auxiliaresEncontrados(item).length" class="text-caption grey--text text--darken-1">
+          aux: {{ auxiliaresEncontrados(item).join(", ") }}
+        </div>
+      </template>
+
       <template v-slot:no-data>
         <div class="py-6 grey--text">Nenhum produto encontrado para os filtros selecionados.</div>
       </template>
@@ -98,6 +107,19 @@ function ordenarNumerico(a, b) {
   if (aValido) return -1;
   if (bValido) return 1;
   return String(a || "").localeCompare(String(b || ""));
+}
+
+function contem(valor, termo) {
+  return String(valor === null || valor === undefined ? "" : valor)
+    .toLowerCase()
+    .includes(termo);
+}
+
+// Códigos de barras são gravados sem os zeros à esquerda, então um termo só de
+// dígitos é comparado da mesma forma ("0789" acha o código "789").
+function normalizarTermoCodigo(termo) {
+  if (!/^\d+$/.test(termo)) return termo;
+  return termo.replace(/^0+/, "") || termo;
 }
 
 export default {
@@ -156,17 +178,39 @@ export default {
     filtroAtivo() {
       return !!this.secao || !!this.grupo || !!this.search;
     },
+    termo() {
+      return String(this.search || "").trim().toLowerCase();
+    },
+    termoCodigo() {
+      return normalizarTermoCodigo(this.termo);
+    },
     itens() {
       // secao/grupo do produto podem vir como número ou string conforme a origem
       // do cadastro, então a comparação é feita sempre como texto.
       return this.items.filter((produto) => {
         if (this.secao && String(produto.secao) !== String(this.secao)) return false;
         if (this.grupo && String(produto.grupo) !== String(this.grupo)) return false;
+        if (this.termo && !this.casaComPesquisa(produto)) return false;
         return true;
       });
     },
   },
   methods: {
+    // Códigos auxiliares vêm do cadastro do produto (aba Código de Barras).
+    auxiliares(produto) {
+      return Array.isArray(produto.codigos_barras_auxiliares) ? produto.codigos_barras_auxiliares : [];
+    },
+    // Auxiliares que casam com a pesquisa atual, usados só para exibição.
+    auxiliaresEncontrados(produto) {
+      if (!this.termo) return [];
+      return this.auxiliares(produto).filter((codigo) => contem(codigo, this.termoCodigo));
+    },
+    casaComPesquisa(produto) {
+      if (contem(produto.descricao, this.termo)) return true;
+      if (contem(produto.codigo, this.termoCodigo)) return true;
+      if (contem(produto.codigo_barras, this.termoCodigo)) return true;
+      return this.auxiliares(produto).some((codigo) => contem(codigo, this.termoCodigo));
+    },
     selecionarProduto(produto) {
       this.$router.push({ path: "/cadastro/produto/" + produto.codigo });
     },

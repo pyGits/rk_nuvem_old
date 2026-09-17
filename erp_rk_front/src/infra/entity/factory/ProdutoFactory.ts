@@ -34,7 +34,7 @@ export default class ProdutoFactory {
 
   static createFromApiList(data: any[]): Produto[] {
     return data.map((p: Produto) => {
-      return new Produto(p.codigo, p.codigo_barras, p.descricao, p.secao, p.fornecedor, p.grupo, p.subgrupo, p.unidade, p.forma_venda, p.ncm, p.cest, p.tributacao, p.balanca, p.balanca_validade, p.diversos, p.ativo, p.impfederal, p.precos, p.estoques);
+      return new Produto(p.codigo, p.codigo_barras, p.descricao, p.secao, p.fornecedor, p.grupo, p.subgrupo, p.unidade, p.forma_venda, p.ncm, p.cest, p.tributacao, p.balanca, p.balanca_validade, p.diversos, p.ativo, p.impfederal, p.precos, p.estoques, p.codigos_barras_auxiliares);
     });
   }
 }

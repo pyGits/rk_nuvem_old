@@ -10,30 +10,58 @@ export default interface ProdutoRepository {
   getAllByFilter(filter: { codigo_barras: string; nome: string }, tenant_id: number): Promise<Produto[]>;
 }
 
+// Códigos de barras são gravados sem os zeros à esquerda, então um termo só de
+// dígitos é pesquisado da mesma forma ("0789" acha o código "789").
+function normalizarTermoCodigoBarras(termo: string): string {
+  const valor = String(termo || "").trim();
+  if (!/^\d+$/.test(valor)) return valor;
+  return valor.replace(/^0+/, "") || valor;
+}
+
 export class ProdutoRepositoryPG implements ProdutoRepository {
   async getAllByFilter(filter: { codigo_barras: string; nome: string }, tenant_id: number) {
+    // Os códigos auxiliares (aba Código de Barras do cadastro) vêm junto para a
+    // tela poder mostrar por qual deles o produto foi encontrado.
     let sql = `
-      SELECT * FROM produtos
-      WHERE tenant_id = $1
+      SELECT p.*,
+             COALESCE(
+               (SELECT array_agg(aux.codigo_barras ORDER BY aux.id)
+                  FROM produto_codigos_barras aux
+                 WHERE aux.tenant_id = p.tenant_id
+                   AND aux.codigo_produto = p.codigo),
+               '{}'
+             ) AS codigos_barras_auxiliares
+      FROM produtos p
+      WHERE p.tenant_id = $1
     `;
 
     const params: any[] = [tenant_id];
     let index = 2;
 
-    // Filtro por código (busca exata ou parcial)
+    // Filtro por código (busca exata ou parcial), no código principal ou em
+    // qualquer um dos códigos auxiliares do produto.
     if (filter.codigo_barras) {
-      sql += ` AND codigo_barras ILIKE $${index++}`;
-      params.push(`%${filter.codigo_barras}%`);
+      sql += ` AND (
+        p.codigo_barras ILIKE $${index}
+        OR EXISTS (
+          SELECT 1 FROM produto_codigos_barras aux
+           WHERE aux.tenant_id = p.tenant_id
+             AND aux.codigo_produto = p.codigo
+             AND aux.codigo_barras ILIKE $${index}
+        )
+      )`;
+      params.push(`%${normalizarTermoCodigoBarras(filter.codigo_barras)}%`);
+      index++;
     }
 
     // Filtro por nome (busca parcial, case-insensitive)
     if (filter.nome) {
-      sql += ` AND descricao ILIKE $${index++}`;
+      sql += ` AND p.descricao ILIKE $${index++}`;
       params.push(`%${filter.nome}%`);
     }
 
     // Ordenação final (opcional, personalizável)
-    sql += ` ORDER BY codigo_barras asc`;
+    sql += ` ORDER BY p.codigo_barras asc`;
 
     // Executa a consulta
     const data = await DatabaseConnection.queryAll(sql, params);

@@ -3,7 +3,7 @@ import { CustomError } from "./CustomError";
 import Estoque from "./Estoque";
 import { NotaFiscalItem } from "./NotaFiscalItem";
 export default class Produto {
-  constructor(public codigo = "", public codigo_barras = "", public descricao = "", public secao = "", public fornecedor = "", public grupo = "", public subgrupo = "", public unidade = "UN", public forma_venda = "N", public ncm = "", public cest = "", public tributacao = "", public balanca = "", public balanca_validade = 0, public diversos = "", public ativo = "", public impfederal = "", public precos: Preco[] = [], public estoques: Estoque[] = []) {
+  constructor(public codigo = "", public codigo_barras = "", public descricao = "", public secao = "", public fornecedor = "", public grupo = "", public subgrupo = "", public unidade = "UN", public forma_venda = "N", public ncm = "", public cest = "", public tributacao = "", public balanca = "", public balanca_validade = 0, public diversos = "", public ativo = "", public impfederal = "", public precos: Preco[] = [], public estoques: Estoque[] = [], public codigos_barras_auxiliares: string[] = []) {
     this.padronizar();
   }
   private padronizar() {
